@@ -8,112 +8,96 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #1f2937; }
-  .hidden { display: none !important; }
-  .center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg,#dbeafe,#e0e7ff); }
-  .login-card { background: #fff; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 32px; width: 100%; max-width: 380px; text-align: center; }
-  .avatar { width: 56px; height: 56px; border-radius: 999px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px; margin: 0 auto 16px; }
-  .login-card h1 { font-size: 1.25em; margin-bottom: 4px; }
-  .login-card p.sub { color: #6b7280; font-size: 0.85em; margin-bottom: 20px; }
-  .field { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; text-align: left; }
-  .field input { border: none; outline: none; width: 100%; font-size: 0.9em; }
-  .btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95em; cursor: pointer; }
-  .btn-blue { background: #2563eb; color: #fff; }
-  .btn-gray { background: #f3f4f6; color: #374151; }
-  .btn-green { background: #16a34a; color: #fff; }
-  .btn-red { background: #fee2e2; color: #dc2626; }
-  .btn-purple { background: #9333ea; color: #fff; }
-  .btn-dark { background: #1f2937; color: #fff; }
-  .hint { font-size: 0.75em; color: #9ca3af; margin-top: 14px; }
-  .errtext { font-size: 0.75em; color: #dc2626; margin-top: 10px; }
-
-  header.topbar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; }
-  header.topbar h1 { font-size: 1.1em; font-weight: 700; }
-  .userchip { display: flex; align-items: center; gap: 8px; font-size: 0.8em; color: #6b7280; }
-  .userchip .av { width: 32px; height: 32px; border-radius: 999px; background: #ef4444; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8em; }
-  .userchip button { border: none; background: none; color: #9ca3af; font-size: 0.85em; cursor: pointer; }
-
-  nav.tabs { display: flex; overflow-x: auto; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
-  nav.tabs button { padding: 12px 16px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 2px solid transparent; color: #6b7280; cursor: pointer; }
-  nav.tabs button.active { color: #2563eb; border-color: #3b82f6; }
-
-  main { max-width: 640px; margin: 0 auto; padding: 16px; }
-
-  .grade-pills { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
-  .grade-pills button { padding: 6px 16px; border-radius: 999px; font-size: 0.85em; font-weight: 500; white-space: nowrap; border: 1px solid #d1d5db; background: #fff; color: #4b5563; cursor: pointer; }
-  .grade-pills button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
-  .grade-pills.purple button.active { background: #9333ea; border-color: #9333ea; }
-
-  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; }
-  .row-flex { display: flex; gap: 8px; }
-  .row-flex input { flex: 1; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 0.9em; outline: none; }
-
-  .student-row { display: flex; align-items: center; justify-content: space-between; }
-  .student-row .info { flex: 1; cursor: pointer; }
-  .student-row .info p.name { font-weight: 500; font-size: 0.9em; }
-  .student-row .info p.avg { font-size: 0.75em; color: #9ca3af; }
-  .student-row button.del { border: none; background: none; color: #f87171; font-size: 0.75em; cursor: pointer; padding: 0 8px; }
-
-  .edit-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f3f4f6; }
-  .edit-panel input, .edit-panel select { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 0.75em; }
-  .edit-panel .full { grid-column: 1 / -1; }
-  .edit-panel .section-title { grid-column: 1 / -1; font-size: 0.75em; font-weight: 600; color: #4b5563; margin-top: 6px; }
-
-  table.grades-table { width: 100%; font-size: 0.75em; border-collapse: collapse; }
-  table.grades-table th { color: #9ca3af; font-weight: 500; padding: 4px; text-align: center; }
-  table.grades-table th:first-child { text-align: left; }
-  table.grades-table td { padding: 6px 4px; border-top: 1px solid #f3f4f6; text-align: center; }
-  table.grades-table td:first-child { text-align: left; color: #374151; }
-  table.grades-table input.grade-input { width: 44px; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center; padding: 4px; font-size: 0.9em; }
-  .avgcell { font-weight: 600; color: #2563eb; }
-
-  .periodo-pills { display: flex; gap: 4px; margin: 8px 0; }
-  .periodo-pills button { padding: 5px 10px; border-radius: 999px; font-size: 0.7em; font-weight: 500; border: none; background: #f3f4f6; color: #4b5563; cursor: pointer; }
-  .periodo-pills button.active { background: #4f46e5; color: #fff; }
-  .obs-label { font-size: 0.7em; color: #6b7280; margin-bottom: 2px; }
-  textarea.obs-input { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; font-size: 0.75em; resize: none; outline: none; margin-bottom: 8px; }
-
-  .boleta-list-item { display: flex; align-items: center; justify-content: space-between; }
-  .boleta-list-item span.link { color: #3b82f6; font-size: 0.75em; }
-  .grade-group-label { font-size: 0.7em; font-weight: 600; color: #9ca3af; text-transform: uppercase; margin: 10px 0 4px; }
-
-  .boleta-sheet { font-size: 10px; }
-  .boleta-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 10px; }
-  .boleta-header .badge-circle { width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 8px; }
-  .boleta-header .center-text { text-align: center; flex: 1; padding: 0 4px; }
-  .boleta-header .center-text p { line-height: 1.3; }
-  .boleta-sheet table { width: 100%; border-collapse: collapse; font-size: 9px; }
-  .boleta-sheet table th, .boleta-sheet table td { border: 1px solid #d1d5db; padding: 4px; text-align: center; }
-  .boleta-sheet .info-block { margin-bottom: 8px; }
-  .boleta-sheet .info-block p.label { color: #9ca3af; font-size: 9px; }
-  .boleta-sheet .info-block p.value { font-weight: 600; }
-  .side-boxes { width: 90px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
-  .side-boxes .box { border: 1px solid #d1d5db; border-radius: 6px; padding: 4px; text-align: center; background: #fefce8; }
-  .side-boxes .box p.l { font-size: 8px; color: #9ca3af; }
-  .side-boxes .box p.v { font-weight: 700; }
-
-  .diploma-card { border-radius: 18px; padding: 24px; text-align: center; color: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.15); margin-bottom: 20px; }
-  .diploma-card .inner-box { background: rgba(255,255,255,0.2); border-radius: 10px; padding: 16px 12px; margin: 16px 0; backdrop-filter: blur(4px); }
-  .diploma-card button { margin-top: 14px; background: rgba(255,255,255,0.9); color: #1f2937; border: none; font-size: 0.7em; font-weight: 700; padding: 8px 16px; border-radius: 999px; cursor: pointer; }
-
-  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; font-size: 0.85em; padding: 8px 16px; border-radius: 999px; z-index: 100; }
-  .empty-note { text-align: center; color: #9ca3af; font-size: 0.85em; padding: 30px 0; }
-  .info-banner { background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #4338ca; margin-bottom: 12px; }
-  .blue-banner { background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #1d4ed8; }
-
-  @media print {
-    header.topbar, nav.tabs, .no-print { display: none !important; }
-    main { max-width: 100%; padding: 0; }
-    body { background: #fff; }
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #1f2937; }
+.hidden { display: none !important; }
+.center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg,#dbeafe,#e0e7ff); }
+.login-card { background: #fff; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 32px; width: 100%; max-width: 380px; text-align: center; }
+.avatar { width: 56px; height: 56px; border-radius: 999px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px; margin: 0 auto 16px; }
+.login-card h1 { font-size: 1.25em; margin-bottom: 4px; }
+.login-card p.sub { color: #6b7280; font-size: 0.85em; margin-bottom: 20px; }
+.field { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; text-align: left; }
+.field input { border: none; outline: none; width: 100%; font-size: 0.9em; }
+.btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95em; cursor: pointer; }
+.btn-blue { background: #2563eb; color: #fff; }
+.btn-gray { background: #f3f4f6; color: #374151; }
+.btn-green { background: #16a34a; color: #fff; }
+.btn-red { background: #fee2e2; color: #dc2626; }
+.btn-purple { background: #9333ea; color: #fff; }
+.btn-dark { background: #1f2937; color: #fff; }
+.hint { font-size: 0.75em; color: #9ca3af; margin-top: 14px; }
+.errtext { font-size: 0.75em; color: #dc2626; margin-top: 10px; }
+header.topbar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; }
+header.topbar h1 { font-size: 1.1em; font-weight: 700; }
+.userchip { display: flex; align-items: center; gap: 8px; font-size: 0.8em; color: #6b7280; }
+.userchip .av { width: 32px; height: 32px; border-radius: 999px; background: #ef4444; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8em; }
+.userchip button { border: none; background: none; color: #9ca3af; font-size: 0.85em; cursor: pointer; }
+nav.tabs { display: flex; overflow-x: auto; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
+nav.tabs button { padding: 12px 16px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 2px solid transparent; color: #6b7280; cursor: pointer; }
+nav.tabs button.active { color: #2563eb; border-color: #3b82f6; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+.grade-pills { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
+.grade-pills button { padding: 6px 16px; border-radius: 999px; font-size: 0.85em; font-weight: 500; white-space: nowrap; border: 1px solid #d1d5db; background: #fff; color: #4b5563; cursor: pointer; }
+.grade-pills button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.grade-pills.purple button.active { background: #9333ea; border-color: #9333ea; }
+.card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; }
+.row-flex { display: flex; gap: 8px; }
+.row-flex input { flex: 1; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 0.9em; outline: none; }
+.student-row { display: flex; align-items: center; justify-content: space-between; }
+.student-row .info { flex: 1; cursor: pointer; }
+.student-row .info p.name { font-weight: 500; font-size: 0.9em; }
+.student-row .info p.avg { font-size: 0.75em; color: #9ca3af; }
+.student-row button.del { border: none; background: none; color: #f87171; font-size: 0.75em; cursor: pointer; padding: 0 8px; }
+.edit-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f3f4f6; }
+.edit-panel input, .edit-panel select { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 0.75em; }
+.edit-panel .full { grid-column: 1 / -1; }
+.edit-panel .section-title { grid-column: 1 / -1; font-size: 0.75em; font-weight: 600; color: #4b5563; margin-top: 6px; }
+table.grades-table { width: 100%; font-size: 0.75em; border-collapse: collapse; }
+table.grades-table th { color: #9ca3af; font-weight: 500; padding: 4px; text-align: center; }
+table.grades-table th:first-child { text-align: left; }
+table.grades-table td { padding: 6px 4px; border-top: 1px solid #f3f4f6; text-align: center; }
+table.grades-table td:first-child { text-align: left; color: #374151; }
+table.grades-table input.grade-input { width: 44px; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center; padding: 4px; font-size: 0.9em; }
+.avgcell { font-weight: 600; color: #2563eb; }
+.periodo-pills { display: flex; gap: 4px; margin: 8px 0; }
+.periodo-pills button { padding: 5px 10px; border-radius: 999px; font-size: 0.7em; font-weight: 500; border: none; background: #f3f4f6; color: #4b5563; cursor: pointer; }
+.periodo-pills button.active { background: #4f46e5; color: #fff; }
+.obs-label { font-size: 0.7em; color: #6b7280; margin-bottom: 2px; }
+textarea.obs-input { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; font-size: 0.75em; resize: none; outline: none; margin-bottom: 8px; }
+.boleta-list-item { display: flex; align-items: center; justify-content: space-between; }
+.boleta-list-item span.link { color: #3b82f6; font-size: 0.75em; }
+.grade-group-label { font-size: 0.7em; font-weight: 600; color: #9ca3af; text-transform: uppercase; margin: 10px 0 4px; }
+.boleta-sheet { font-size: 10px; }
+.boleta-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 10px; }
+.boleta-header .badge-circle { width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 8px; }
+.boleta-header .center-text { text-align: center; flex: 1; padding: 0 4px; }
+.boleta-header .center-text p { line-height: 1.3; }
+.boleta-sheet table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.boleta-sheet table th, .boleta-sheet table td { border: 1px solid #d1d5db; padding: 4px; text-align: center; }
+.boleta-sheet .info-block { margin-bottom: 8px; }
+.boleta-sheet .info-block p.label { color: #9ca3af; font-size: 9px; }
+.boleta-sheet .info-block p.value { font-weight: 600; }
+.side-boxes { width: 90px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.side-boxes .box { border: 1px solid #d1d5db; border-radius: 6px; padding: 4px; text-align: center; background: #fefce8; }
+.side-boxes .box p.l { font-size: 8px; color: #9ca3af; }
+.side-boxes .box p.v { font-weight: 700; }
+.diploma-card { border-radius: 18px; padding: 24px; text-align: center; color: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.15); margin-bottom: 20px; }
+.diploma-card .inner-box { background: rgba(255,255,255,0.2); border-radius: 10px; padding: 16px 12px; margin: 16px 0; backdrop-filter: blur(4px); }
+.diploma-card button { margin-top: 14px; background: rgba(255,255,255,0.9); color: #1f2937; border: none; font-size: 0.7em; font-weight: 700; padding: 8px 16px; border-radius: 999px; cursor: pointer; }
+.toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; font-size: 0.85em; padding: 8px 16px; border-radius: 999px; z-index: 100; }
+.empty-note { text-align: center; color: #9ca3af; font-size: 0.85em; padding: 30px 0; }
+.info-banner { background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #4338ca; margin-bottom: 12px; }
+.blue-banner { background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #1d4ed8; }
+@media print {
+header.topbar, nav.tabs, .no-print { display: none !important; }
+main { max-width: 100%; padding: 0; }
+body { background: #fff; }
+}
 </style>
 </head>
 <body>
-
 <div id="app"></div>
 <div id="toastBox"></div>
-
 <script>
 // ---------------- Config ----------------
 const GRADOS = ['1°','2°','3°','4°','5°','6°'];
@@ -122,666 +106,582 @@ const PERIODOS_LABEL = ['1er','2do','3er'];
 const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - Junio'];
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 
-let auth = null, db = null;
-let studentsRef = null, schoolRef = null;
-
-let state = {
-  configDone: false,
-  fbConfig: null,
-  user: null,
-  authError: '',
-  tab: 'alumnos',
-  students: [],
-  schoolInfo: { nombre: '', cct: '', autoridadNombre: '', autoridadCargo: 'DIRECTOR(A)' },
-  selectedGrade: '1°',
-  diplomaGrade: '1°',
-  editingStudentId: null,
-  obsPeriodo: {},
-  boletaStudentId: null,
-  importSummary: null
+// Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
 
+let auth = null, db = null;
+let studentsRef = null, schoolRef = null;
+let state = {
+configDone: true,
+fbConfig: FIREBASE_CONFIG,
+user: null,
+authError: '',
+tab: 'alumnos',
+students: [],
+schoolInfo: { nombre: '', cct: '', autoridadNombre: '', autoridadCargo: 'DIRECTOR(A)' },
+selectedGrade: '1°',
+diplomaGrade: '1°',
+editingStudentId: null,
+obsPeriodo: {},
+boletaStudentId: null,
+importSummary: null
+};
 function emptyExtra() {
-  return {
-    curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'',
-    madreNombre:'', madreCurp:'', madreTelefono:'', madreDireccion:'',
-    padreNombre:'', padreCurp:'', padreTelefono:'', padreDireccion:'',
-    tutorNombre:'', tutorCurp:'', tutorTelefono:'', tutorDireccion:''
-  };
+return {
+curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'',
+madreNombre:'', madreCurp:'', madreTelefono:'', madreDireccion:'',
+padreNombre:'', padreCurp:'', padreTelefono:'', padreDireccion:'',
+tutorNombre:'', tutorCurp:'', tutorTelefono:'', tutorDireccion:''
+};
 }
 function normalizeGrado(raw) {
-  if (raw === undefined || raw === null) return null;
-  const s = String(raw).trim();
-  const digit = s.match(/\d/);
-  if (digit) { const m = GRADOS.find(g => g.startsWith(digit[0])); if (m) return m; }
-  return GRADOS.find(g => g === s) || null;
+if (raw === undefined || raw === null) return null;
+const s = String(raw).trim();
+const digit = s.match(/\d/);
+if (digit) { const m = GRADOS.find(g => g.startsWith(digit[0])); if (m) return m; }
+return GRADOS.find(g => g === s) || null;
 }
 function getCicloEscolar() {
-  const now = new Date(); const y = now.getFullYear(); const m = now.getMonth();
-  return m >= 7 ? (y + '-' + (y+1)) : ((y-1) + '-' + y);
+const now = new Date(); const y = now.getFullYear(); const m = now.getMonth();
+return m >= 7 ? (y + '-' + (y+1)) : ((y-1) + '-' + y);
 }
 function calcularEdad(fechaNacimiento, curp) {
-  let birthDate = null;
-  if (fechaNacimiento) {
-    birthDate = new Date(fechaNacimiento + 'T00:00:00');
-  } else if (curp && curp.length >= 10) {
-    const yy = curp.substring(4,6), mm = curp.substring(6,8), dd = curp.substring(8,10);
-    if (/^\d{2}$/.test(yy) && /^\d{2}$/.test(mm) && /^\d{2}$/.test(dd)) {
-      const yearNum = parseInt(yy,10);
-      const century = yearNum <= (new Date().getFullYear()%100) ? 2000 : 1900;
-      birthDate = new Date(century+yearNum, parseInt(mm,10)-1, parseInt(dd,10));
-    }
-  }
-  if (!birthDate || isNaN(birthDate.getTime())) return null;
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m===0 && today.getDate() < birthDate.getDate())) age--;
-  return (age>=0 && age<25) ? age : null;
+let birthDate = null;
+if (fechaNacimiento) {
+birthDate = new Date(fechaNacimiento + 'T00:00:00');
+} else if (curp && curp.length >= 10) {
+const yy = curp.substring(4,6), mm = curp.substring(6,8), dd = curp.substring(8,10);
+if (/^\d{2}$/.test(yy) && /^\d{2}$/.test(mm) && /^\d{2}$/.test(dd)) {
+const yearNum = parseInt(yy,10);
+const century = yearNum <= (new Date().getFullYear()%100) ? 2000 : 1900;
+birthDate = new Date(century+yearNum, parseInt(mm,10)-1, parseInt(dd,10));
+}
+}
+if (!birthDate || isNaN(birthDate.getTime())) return null;
+const today = new Date();
+let age = today.getFullYear() - birthDate.getFullYear();
+const m = today.getMonth() - birthDate.getMonth();
+if (m < 0 || (m===0 && today.getDate() < birthDate.getDate())) age--;
+return (age>=0 && age<25) ? age : null;
 }
 function studentAverage(s) {
-  const vals = [];
-  MATERIAS.forEach(m => (s.grades && s.grades[m] || []).forEach(v => { if (typeof v === 'number') vals.push(v); }));
-  return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+const vals = [];
+MATERIAS.forEach(m => (s.grades && s.grades[m] || []).forEach(v => { if (typeof v === 'number') vals.push(v); }));
+return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
 }
 function subjectAverage(s, m) {
-  const vals = (s.grades && s.grades[m] || []).filter(v => typeof v === 'number');
-  return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+const vals = (s.grades && s.grades[m] || []).filter(v => typeof v === 'number');
+return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
 }
 function showToast(msg) {
-  const box = document.getElementById('toastBox');
-  box.innerHTML = '<div class="toast">'+msg+'</div>';
-  setTimeout(()=>{ box.innerHTML=''; }, 2600);
+const box = document.getElementById('toastBox');
+box.innerHTML = '<div class="toast">'+msg+'</div>';
+setTimeout(()=>{ box.innerHTML=''; }, 2600);
 }
-
-// ---------------- Firebase Config Gate ----------------
-function loadSavedConfig() {
-  try {
-    const raw = localStorage.getItem('fbConfig');
-    if (raw) { state.fbConfig = JSON.parse(raw); state.configDone = true; }
-  } catch(e) {}
-}
-function saveConfigAndInit() {
-  const cfg = {
-    apiKey: document.getElementById('cfgApiKey').value.trim(),
-    authDomain: document.getElementById('cfgAuthDomain').value.trim(),
-    databaseURL: document.getElementById('cfgDatabaseURL').value.trim(),
-    projectId: document.getElementById('cfgProjectId').value.trim(),
-    storageBucket: document.getElementById('cfgStorageBucket').value.trim(),
-    messagingSenderId: document.getElementById('cfgSenderId').value.trim(),
-    appId: document.getElementById('cfgAppId').value.trim(),
-  };
-  if (!cfg.apiKey || !cfg.projectId || !cfg.appId || !cfg.databaseURL) { showToast('Faltan datos, revisa que incluiste databaseURL'); return; }
-  localStorage.setItem('fbConfig', JSON.stringify(cfg));
-  state.fbConfig = cfg;
-  state.configDone = true;
-  initFirebase();
-}
-function resetConfig() {
-  localStorage.removeItem('fbConfig');
-  state.configDone = false;
-  state.fbConfig = null;
-  render();
-}
-
+// ---------------- Firebase Init ----------------
 function initFirebase() {
-  firebase.initializeApp(state.fbConfig);
-  auth = firebase.auth();
-  db = firebase.database();
-  studentsRef = db.ref(DB_ROOT + '/students');
-  schoolRef = db.ref(DB_ROOT + '/schoolInfo');
-
-  auth.onAuthStateChanged(u => {
-    state.user = u;
-    state.authError = '';
-    if (u) { subscribeData(); } else { unsubscribeData(); }
-    render();
-  });
-  render();
+firebase.initializeApp(state.fbConfig);
+auth = firebase.auth();
+db = firebase.database();
+studentsRef = db.ref(DB_ROOT + '/students');
+schoolRef = db.ref(DB_ROOT + '/schoolInfo');
+auth.onAuthStateChanged(u => {
+state.user = u;
+state.authError = '';
+if (u) { subscribeData(); } else { unsubscribeData(); }
+render();
+});
+render();
 }
-
 function subscribeData() {
-  studentsRef.on('value', snap => {
-    const val = snap.val() || {};
-    state.students = Object.keys(val).map(id => ({ id, ...val[id] }));
-    render();
-  }, err => { showToast('Permisos insuficientes: tu correo no está autorizado.'); });
-
-  schoolRef.on('value', snap => {
-    if (snap.val()) state.schoolInfo = snap.val();
-    render();
-  });
+studentsRef.on('value', snap => {
+const val = snap.val() || {};
+state.students = Object.keys(val).map(id => ({ id, ...val[id] }));
+render();
+}, err => { showToast('Permisos insuficientes: tu correo no está autorizado.'); });
+schoolRef.on('value', snap => {
+if (snap.val()) state.schoolInfo = snap.val();
+render();
+});
 }
 function unsubscribeData() {
-  if (studentsRef) studentsRef.off();
-  if (schoolRef) schoolRef.off();
-  state.students = [];
+if (studentsRef) studentsRef.off();
+if (schoolRef) schoolRef.off();
+state.students = [];
 }
-
 async function handleLoginSubmit() {
-  state.authError = '';
-  const email = document.getElementById('loginEmail').value.trim();
-  const pass = document.getElementById('loginPass').value;
-  if (!email || !pass) { state.authError = 'Escribe tu correo y contraseña.'; render(); return; }
-  try {
-    await auth.signInWithEmailAndPassword(email, pass);
-  } catch (e) {
-    state.authError = 'No se pudo iniciar sesión: ' + traducirErrorAuth(e.code);
-    render();
-  }
+state.authError = '';
+const email = document.getElementById('loginEmail').value.trim();
+const pass = document.getElementById('loginPass').value;
+if (!email || !pass) { state.authError = 'Escribe tu correo y contraseña.'; render(); return; }
+try {
+await auth.signInWithEmailAndPassword(email, pass);
+} catch (e) {
+state.authError = 'No se pudo iniciar sesión: ' + traducirErrorAuth(e.code);
+render();
+}
 }
 function traducirErrorAuth(code) {
-  const map = {
-    'auth/user-not-found': 'No existe una cuenta con ese correo. Créala primero en Firebase Console → Authentication → Users.',
-    'auth/wrong-password': 'Contraseña incorrecta.',
-    'auth/invalid-email': 'El correo no es válido.',
-    'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.'
-  };
-  return map[code] || code;
+const map = {
+'auth/user-not-found': 'No existe una cuenta con ese correo. Créala primero en Firebase Console → Authentication → Users.',
+'auth/wrong-password': 'Contraseña incorrecta.',
+'auth/invalid-email': 'El correo no es válido.',
+'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.'
+};
+return map[code] || code;
 }
 function handleLogout() { auth.signOut(); }
-
 // ---------------- Realtime Database actions ----------------
 function addStudent() {
-  const input = document.getElementById('newStudentName');
-  const name = input.value.trim();
-  if (!name) return;
-  const id = studentsRef.push().key;
-  studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra() });
-  input.value = '';
-  showToast('Alumno agregado');
+const input = document.getElementById('newStudentName');
+const name = input.value.trim();
+if (!name) return;
+const id = studentsRef.push().key;
+studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra() });
+input.value = '';
+showToast('Alumno agregado');
 }
 function removeStudent(id) {
-  studentsRef.child(id).remove();
-  if (state.editingStudentId === id) state.editingStudentId = null;
+studentsRef.child(id).remove();
+if (state.editingStudentId === id) state.editingStudentId = null;
 }
 function toggleEdit(id) { state.editingStudentId = state.editingStudentId === id ? null : id; render(); }
 function updateStudentField(id, field, value) {
-  studentsRef.child(id).update({ [field]: value });
+studentsRef.child(id).update({ [field]: value });
 }
-
 let pendingGrades = {};
 function updateGradeLive(studentId, materia, periodo, value) {
-  const s = state.students.find(x => x.id === studentId);
-  if (!s) return;
-  const v = value === '' ? null : Math.max(0, Math.min(10, Number(value)));
-  if (!s.grades) s.grades = {};
-  if (!s.grades[materia]) s.grades[materia] = [null,null,null];
-  s.grades[materia] = [...s.grades[materia]];
-  s.grades[materia][periodo] = v;
-  pendingGrades[studentId] = s.grades;
-  const sub = subjectAverage(s, materia);
-  const subEl = document.getElementById('sub-'+studentId+'-'+MATERIAS.indexOf(materia));
-  if (subEl) subEl.textContent = sub !== null ? sub.toFixed(1) : '—';
-  const avg = studentAverage(s);
-  const avgEl = document.getElementById('avg-'+studentId);
-  if (avgEl) avgEl.textContent = avg !== null ? avg.toFixed(1) : '—';
+const s = state.students.find(x => x.id === studentId);
+if (!s) return;
+const v = value === '' ? null : Math.max(0, Math.min(10, Number(value)));
+if (!s.grades) s.grades = {};
+if (!s.grades[materia]) s.grades[materia] = [null,null,null];
+s.grades[materia] = [...s.grades[materia]];
+s.grades[materia][periodo] = v;
+pendingGrades[studentId] = s.grades;
+const sub = subjectAverage(s, materia);
+const subEl = document.getElementById('sub-'+studentId+'-'+MATERIAS.indexOf(materia));
+if (subEl) subEl.textContent = sub !== null ? sub.toFixed(1) : '—';
+const avg = studentAverage(s);
+const avgEl = document.getElementById('avg-'+studentId);
+if (avgEl) avgEl.textContent = avg !== null ? avg.toFixed(1) : '—';
 }
 function commitGrade(studentId) {
-  if (pendingGrades[studentId]) {
-    studentsRef.child(studentId).update({ grades: pendingGrades[studentId] });
-    delete pendingGrades[studentId];
-  }
+if (pendingGrades[studentId]) {
+studentsRef.child(studentId).update({ grades: pendingGrades[studentId] });
+delete pendingGrades[studentId];
 }
-
+}
 let pendingObs = {};
 function updateObservacionLive(studentId, materia, periodo, value) {
-  const s = state.students.find(x => x.id === studentId);
-  if (!s) return;
-  if (!s.observaciones) s.observaciones = {};
-  if (!s.observaciones[materia]) s.observaciones[materia] = ['','',''];
-  s.observaciones[materia] = [...s.observaciones[materia]];
-  s.observaciones[materia][periodo] = value;
-  pendingObs[studentId] = s.observaciones;
+const s = state.students.find(x => x.id === studentId);
+if (!s) return;
+if (!s.observaciones) s.observaciones = {};
+if (!s.observaciones[materia]) s.observaciones[materia] = ['','',''];
+s.observaciones[materia] = [...s.observaciones[materia]];
+s.observaciones[materia][periodo] = value;
+pendingObs[studentId] = s.observaciones;
 }
 function commitObs(studentId) {
-  if (pendingObs[studentId]) {
-    studentsRef.child(studentId).update({ observaciones: pendingObs[studentId] });
-    delete pendingObs[studentId];
-  }
+if (pendingObs[studentId]) {
+studentsRef.child(studentId).update({ observaciones: pendingObs[studentId] });
+delete pendingObs[studentId];
+}
 }
 function setObsPeriodo(studentId, pi) { state.obsPeriodo[studentId] = pi; render(); }
-
 function updateSchoolField(field, value) {
-  state.schoolInfo[field] = value;
-  schoolRef.update({ [field]: value });
+state.schoolInfo[field] = value;
+schoolRef.update({ [field]: value });
 }
-
 function downloadTemplate() {
-  const headerRow = { Nombre: 'Ej: Juan Pérez', Grado: '1°' };
-  MATERIAS.forEach(m => { headerRow[m+' P1']=''; headerRow[m+' P2']=''; headerRow[m+' P3']=''; });
-  const ws = XLSX.utils.json_to_sheet([headerRow]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
-  XLSX.writeFile(wb, 'plantilla_alumnos.xlsx');
+const headerRow = { Nombre: 'Ej: Juan Pérez', Grado: '1°' };
+MATERIAS.forEach(m => { headerRow[m+' P1']=''; headerRow[m+' P2']=''; headerRow[m+' P3']=''; });
+const ws = XLSX.utils.json_to_sheet([headerRow]);
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+XLSX.writeFile(wb, 'plantilla_alumnos.xlsx');
 }
-
 function handleImportFile(e) {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async (ev) => {
-    try {
-      const data = new Uint8Array(ev.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
-      let added=0, updated=0, skipped=0;
-      for (const row of rows) {
-        const name = String(row['Nombre']||row['nombre']||'').trim();
-        const grado = normalizeGrado(row['Grado']||row['grado']);
-        if (!name || !grado) { skipped++; continue; }
-        let s = state.students.find(x => x.name.toLowerCase()===name.toLowerCase() && x.grade===grado);
-        const id = s ? s.id : studentsRef.push().key;
-        const grades = s ? { ...s.grades } : {};
-        MATERIAS.forEach(m => {
-          [1,2,3].forEach(t => {
-            const key = m+' P'+t;
-            if (row[key] !== undefined && row[key] !== '') {
-              const val = Math.max(0, Math.min(10, Number(row[key])));
-              if (!isNaN(val)) {
-                const arr = grades[m] ? [...grades[m]] : [null,null,null];
-                arr[t-1] = val;
-                grades[m] = arr;
-              }
-            }
-          });
-        });
-        await studentsRef.child(id).update({ name, grade: grado, grades, observaciones: s ? (s.observaciones||{}) : {}, ...(s ? {} : emptyExtra()) });
-        s ? updated++ : added++;
-      }
-      state.importSummary = { added, updated, skipped, total: rows.length };
-      showToast('Importados: '+added+' nuevos, '+updated+' actualizados');
-      render();
-    } catch(err) {
-      showToast('Error al leer el archivo. Usa el formato de la plantilla.');
-    }
-  };
-  reader.readAsArrayBuffer(file);
+const file = e.target.files && e.target.files[0];
+if (!file) return;
+const reader = new FileReader();
+reader.onload = async (ev) => {
+try {
+const data = new Uint8Array(ev.target.result);
+const wb = XLSX.read(data, { type: 'array' });
+const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+let added=0, updated=0, skipped=0;
+for (const row of rows) {
+const name = String(row['Nombre']||row['nombre']||'').trim();
+const grado = normalizeGrado(row['Grado']||row['grado']);
+if (!name || !grado) { skipped++; continue; }
+let s = state.students.find(x => x.name.toLowerCase()===name.toLowerCase() && x.grade===grado);
+const id = s ? s.id : studentsRef.push().key;
+const grades = s ? { ...s.grades } : {};
+MATERIAS.forEach(m => {
+[1,2,3].forEach(t => {
+const key = m+' P'+t;
+if (row[key] !== undefined && row[key] !== '') {
+const val = Math.max(0, Math.min(10, Number(row[key])));
+if (!isNaN(val)) {
+const arr = grades[m] ? [...grades[m]] : [null,null,null];
+arr[t-1] = val;
+grades[m] = arr;
 }
-
+}
+});
+});
+await studentsRef.child(id).update({ name, grade: grado, grades, observaciones: s ? (s.observaciones||{}) : {}, ...(s ? {} : emptyExtra()) });
+s ? updated++ : added++;
+}
+state.importSummary = { added, updated, skipped, total: rows.length };
+showToast('Importados: '+added+' nuevos, '+updated+' actualizados');
+render();
+} catch(err) {
+showToast('Error al leer el archivo. Usa el formato de la plantilla.');
+}
+};
+reader.readAsArrayBuffer(file);
+}
 function exportExcel() {
-  const rows = state.students.map(s => {
-    const row = { Nombre: s.name, Grado: s.grade };
-    MATERIAS.forEach(m => {
-      const arr = (s.grades && s.grades[m]) || [];
-      row[m+' P1']=arr[0]??''; row[m+' P2']=arr[1]??''; row[m+' P3']=arr[2]??'';
-    });
-    const avg = studentAverage(s);
-    row['Promedio General'] = avg!==null? avg.toFixed(1):'';
-    return row;
-  });
-  if (!rows.length) { showToast('No hay alumnos para exportar'); return; }
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Alumnos');
-  XLSX.writeFile(wb, 'alumnos_calificaciones.xlsx');
-  showToast('Excel descargado');
+const rows = state.students.map(s => {
+const row = { Nombre: s.name, Grado: s.grade };
+MATERIAS.forEach(m => {
+const arr = (s.grades && s.grades[m]) || [];
+row[m+' P1']=arr[0]??''; row[m+' P2']=arr[1]??''; row[m+' P3']=arr[2]??'';
+});
+const avg = studentAverage(s);
+row['Promedio General'] = avg!==null? avg.toFixed(1):'';
+return row;
+});
+if (!rows.length) { showToast('No hay alumnos para exportar'); return; }
+const ws = XLSX.utils.json_to_sheet(rows);
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, ws, 'Alumnos');
+XLSX.writeFile(wb, 'alumnos_calificaciones.xlsx');
+showToast('Excel descargado');
 }
-
 function setTab(t) { state.tab = t; state.boletaStudentId = null; render(); }
 function setGrade(g) { state.selectedGrade = g; render(); }
 function setDiplomaGrade(g) { state.diplomaGrade = g; render(); }
 function openBoleta(id) { state.boletaStudentId = id; render(); }
 function closeBoleta() { state.boletaStudentId = null; render(); }
-
 // ---------------- Render ----------------
 function render() {
-  const app = document.getElementById('app');
-  if (!state.configDone) { app.innerHTML = renderConfigForm(); return; }
-  if (!auth) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
-  if (!state.user) { app.innerHTML = renderLogin(); return; }
-  app.innerHTML = renderTopbar() + renderTabs() + '<main>' + renderTabContent() + '</main>';
+const app = document.getElementById('app');
+if (!auth) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
+if (!state.user) { app.innerHTML = renderLogin(); return; }
+app.innerHTML = renderTopbar() + renderTabs() + '<main>' + renderTabContent() + '</main>';
 }
-
-function renderConfigForm() {
-  return `
-  <div class="center-screen">
-    <div class="login-card">
-      <div class="avatar">🔥</div>
-      <h1>Conectar Firebase</h1>
-      <p class="sub">Pega los datos de tu proyecto (Configuración del proyecto → Tus apps). Incluye el <strong>databaseURL</strong> de Realtime Database.</p>
-      <div class="field"><input id="cfgApiKey" placeholder="apiKey" /></div>
-      <div class="field"><input id="cfgAuthDomain" placeholder="authDomain" /></div>
-      <div class="field"><input id="cfgDatabaseURL" placeholder="databaseURL (https://...firebaseio.com)" /></div>
-      <div class="field"><input id="cfgProjectId" placeholder="projectId" /></div>
-      <div class="field"><input id="cfgStorageBucket" placeholder="storageBucket" /></div>
-      <div class="field"><input id="cfgSenderId" placeholder="messagingSenderId" /></div>
-      <div class="field"><input id="cfgAppId" placeholder="appId" /></div>
-      <button class="btn btn-blue" onclick="saveConfigAndInit()">Guardar y conectar</button>
-      <p class="hint">Estos datos se guardan solo en este navegador.</p>
-    </div>
-  </div>`;
-}
-
 function renderLogin() {
-  return `
-  <div class="center-screen">
-    <div class="login-card">
-      <div class="avatar">JC</div>
-      <h1>Sistema Escolar</h1>
-      <p class="sub">Matrícula · Calificaciones · Diplomas</p>
-      <div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarria.edu.com" /></div>
-      <div class="field"><input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')handleLoginSubmit()" /></div>
-      <button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
-      ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
-      <p class="hint">Solo cuentas creadas por el administrador pueden entrar. Si no tienes una, pídesela al administrador del sistema.</p>
-      <p class="hint" style="cursor:pointer;text-decoration:underline;" onclick="resetConfig()">Cambiar configuración de Firebase</p>
-    </div>
-  </div>`;
+return `
+<div class="center-screen">
+<div class="login-card">
+<div class="avatar">JC</div>
+<h1>Sistema Escolar</h1>
+<p class="sub">Matrícula · Calificaciones · Diplomas</p>
+<div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarria.edu.com" /></div>
+<div class="field"><input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')handleLoginSubmit()" /></div>
+<button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
+${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
+<p class="hint">Solo cuentas creadas por el administrador pueden entrar. Si no tienes una, pídesela al administrador del sistema.</p>
+</div>
+</div>`;
 }
-
 function renderTopbar() {
-  const name = state.user.email;
-  return `
-  <header class="topbar">
-    <h1>Matrícula</h1>
-    <div class="userchip">
-      <span>${name}</span>
-      <div class="av">${name.slice(0,2).toUpperCase()}</div>
-      <button onclick="handleLogout()">Salir</button>
-    </div>
-  </header>`;
+const name = state.user.email;
+return `
+<header class="topbar">
+<h1>Matrícula</h1>
+<div class="userchip">
+<span>${name}</span>
+<div class="av">${name.slice(0,2).toUpperCase()}</div>
+<button onclick="handleLogout()">Salir</button>
+</div>
+</header>`;
 }
-
 function renderTabs() {
-  const tabs = [['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
-  return '<nav class="tabs">' + tabs.map(([id,label]) =>
-    `<button class="${state.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`
-  ).join('') + '</nav>';
+const tabs = [['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
+return '<nav class="tabs">' + tabs.map(([id,label]) =>
+`<button class="${state.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`
+).join('') + '</nav>';
 }
-
 function renderGradePills(cssClass, activeGrade, onclickFn) {
-  return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
-    `<button class="${g===activeGrade?'active':''}" onclick="${onclickFn}('${g}')">${g}</button>`
-  ).join('') + '</div>';
+return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
+`<button class="${g===activeGrade?'active':''}" onclick="${onclickFn}('${g}')">${g}</button>`
+).join('') + '</div>';
 }
-
 function renderTabContent() {
-  if (state.tab === 'alumnos') return renderAlumnos();
-  if (state.tab === 'calificaciones') return renderCalificaciones();
-  if (state.tab === 'boletas') return state.boletaStudentId ? renderBoletaDetail() : renderBoletaList();
-  if (state.tab === 'diplomas') return renderDiplomas();
-  if (state.tab === 'datos') return renderDatos();
-  return '';
+if (state.tab === 'alumnos') return renderAlumnos();
+if (state.tab === 'calificaciones') return renderCalificaciones();
+if (state.tab === 'boletas') return state.boletaStudentId ? renderBoletaDetail() : renderBoletaList();
+if (state.tab === 'diplomas') return renderDiplomas();
+if (state.tab === 'datos') return renderDatos();
+return '';
 }
-
 function renderAlumnos() {
-  const list = state.students.filter(s => s.grade === state.selectedGrade);
-  let html = renderGradePills('', state.selectedGrade, 'setGrade');
-  html += `
-  <div class="card">
-    <div class="row-flex">
-      <input id="newStudentName" placeholder="Nombre del alumno (${state.selectedGrade})" onkeydown="if(event.key==='Enter')addStudent()" />
-      <button class="btn btn-blue" style="width:auto;padding:10px 16px;" onclick="addStudent()">Agregar</button>
-    </div>
-  </div>`;
-  if (!list.length) {
-    html += `<p class="empty-note">Sin alumnos en ${state.selectedGrade} aún.</p>`;
-  } else {
-    list.forEach(s => {
-      const avg = studentAverage(s);
-      const edad = calcularEdad(s.fechaNacimiento, s.curp);
-      const editing = state.editingStudentId === s.id;
-      html += `<div class="card">
-        <div class="student-row">
-          <div class="info" onclick="toggleEdit('${s.id}')">
-            <p class="name">${s.name}</p>
-            <p class="avg">Promedio: ${avg!==null?avg.toFixed(1):'—'} ${edad!==null?`· ${edad} años`:''} ${editing?'▲':'▼ datos'}</p>
-          </div>
-          <button class="del" onclick="removeStudent('${s.id}')">Eliminar</button>
-        </div>`;
-      if (editing) {
-        html += `<div class="edit-panel">
-          <input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateStudentField('${s.id}','name',this.value)" />
-          <select onchange="updateStudentField('${s.id}','grade',this.value); setTimeout(render,300);">
-            ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('')}
-          </select>
-          <input placeholder="Grupo (A/B)" value="${s.grupo||''}" oninput="updateStudentField('${s.id}','grupo',this.value)" />
-          <input placeholder="CURP" value="${s.curp||''}" oninput="updateStudentField('${s.id}','curp',this.value)" />
-          <input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateStudentField('${s.id}','matricula',this.value)" />
-          <select onchange="updateStudentField('${s.id}','turno',this.value)">
-            <option value="">Turno</option>
-            <option value="MATUTINO" ${s.turno==='MATUTINO'?'selected':''}>Matutino</option>
-            <option value="VESPERTINO" ${s.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
-          </select>
-          <div class="full">
-            <label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
-            <input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentField('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
-          </div>
-          <input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentField('${s.id}','lenguaIndigena',this.value)" />
-          <input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentField('${s.id}','asistencias',this.value)" />
-          <input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentField('${s.id}','folio',this.value)" class="full" />
-
-          <p class="section-title">👩 Datos de la madre</p>
-          <input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentField('${s.id}','madreNombre',this.value)" />
-          <input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateStudentField('${s.id}','madreCurp',this.value)" />
-          <input placeholder="Teléfono" value="${s.madreTelefono||''}" oninput="updateStudentField('${s.id}','madreTelefono',this.value)" />
-          <input class="full" placeholder="Dirección" value="${s.madreDireccion||''}" oninput="updateStudentField('${s.id}','madreDireccion',this.value)" />
-
-          <p class="section-title">👨 Datos del padre</p>
-          <input class="full" placeholder="Nombre completo" value="${s.padreNombre||''}" oninput="updateStudentField('${s.id}','padreNombre',this.value)" />
-          <input placeholder="CURP" value="${s.padreCurp||''}" oninput="updateStudentField('${s.id}','padreCurp',this.value)" />
-          <input placeholder="Teléfono" value="${s.padreTelefono||''}" oninput="updateStudentField('${s.id}','padreTelefono',this.value)" />
-          <input class="full" placeholder="Dirección" value="${s.padreDireccion||''}" oninput="updateStudentField('${s.id}','padreDireccion',this.value)" />
-
-          <p class="section-title">🧑 Datos del tutor (si aplica)</p>
-          <input class="full" placeholder="Nombre completo" value="${s.tutorNombre||''}" oninput="updateStudentField('${s.id}','tutorNombre',this.value)" />
-          <input placeholder="CURP" value="${s.tutorCurp||''}" oninput="updateStudentField('${s.id}','tutorCurp',this.value)" />
-          <input placeholder="Teléfono" value="${s.tutorTelefono||''}" oninput="updateStudentField('${s.id}','tutorTelefono',this.value)" />
-          <input class="full" placeholder="Dirección" value="${s.tutorDireccion||''}" oninput="updateStudentField('${s.id}','tutorDireccion',this.value)" />
-        </div>`;
-      }
-      html += '</div>';
-    });
-  }
-  return html;
+const list = state.students.filter(s => s.grade === state.selectedGrade);
+let html = renderGradePills('', state.selectedGrade, 'setGrade');
+html += `
+<div class="card">
+<div class="row-flex">
+<input id="newStudentName" placeholder="Nombre del alumno (${state.selectedGrade})" onkeydown="if(event.key==='Enter')addStudent()" />
+<button class="btn btn-blue" style="width:auto;padding:10px 16px;" onclick="addStudent()">Agregar</button>
+</div>
+</div>`;
+if (!list.length) {
+html += `<p class="empty-note">Sin alumnos en ${state.selectedGrade} aún.</p>`;
+} else {
+list.forEach(s => {
+const avg = studentAverage(s);
+const edad = calcularEdad(s.fechaNacimiento, s.curp);
+const editing = state.editingStudentId === s.id;
+html += `<div class="card">
+<div class="student-row">
+<div class="info" onclick="toggleEdit('${s.id}')">
+<p class="name">${s.name}</p>
+<p class="avg">Promedio: ${avg!==null?avg.toFixed(1):'—'} ${edad!==null?`· ${edad} años`:''} ${editing?'▲':'▼ datos'}</p>
+</div>
+<button class="del" onclick="removeStudent('${s.id}')">Eliminar</button>
+</div>`;
+if (editing) {
+html += `<div class="edit-panel">
+<input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateStudentField('${s.id}','name',this.value)" />
+<select onchange="updateStudentField('${s.id}','grade',this.value); setTimeout(render,300);">
+${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('')}
+</select>
+<input placeholder="Grupo (A/B)" value="${s.grupo||''}" oninput="updateStudentField('${s.id}','grupo',this.value)" />
+<input placeholder="CURP" value="${s.curp||''}" oninput="updateStudentField('${s.id}','curp',this.value)" />
+<input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateStudentField('${s.id}','matricula',this.value)" />
+<select onchange="updateStudentField('${s.id}','turno',this.value)">
+<option value="">Turno</option>
+<option value="MATUTINO" ${s.turno==='MATUTINO'?'selected':''}>Matutino</option>
+<option value="VESPERTINO" ${s.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
+</select>
+<div class="full">
+<label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
+<input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentField('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
+</div>
+<input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentField('${s.id}','lenguaIndigena',this.value)" />
+<input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentField('${s.id}','asistencias',this.value)" />
+<input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentField('${s.id}','folio',this.value)" class="full" />
+<p class="section-title">👩 Datos de la madre</p>
+<input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentField('${s.id}','madreNombre',this.value)" />
+<input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateStudentField('${s.id}','madreCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.madreTelefono||''}" oninput="updateStudentField('${s.id}','madreTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.madreDireccion||''}" oninput="updateStudentField('${s.id}','madreDireccion',this.value)" />
+<p class="section-title">👨 Datos del padre</p>
+<input class="full" placeholder="Nombre completo" value="${s.padreNombre||''}" oninput="updateStudentField('${s.id}','padreNombre',this.value)" />
+<input placeholder="CURP" value="${s.padreCurp||''}" oninput="updateStudentField('${s.id}','padreCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.padreTelefono||''}" oninput="updateStudentField('${s.id}','padreTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.padreDireccion||''}" oninput="updateStudentField('${s.id}','padreDireccion',this.value)" />
+<p class="section-title">🧑 Datos del tutor (si aplica)</p>
+<input class="full" placeholder="Nombre completo" value="${s.tutorNombre||''}" oninput="updateStudentField('${s.id}','tutorNombre',this.value)" />
+<input placeholder="CURP" value="${s.tutorCurp||''}" oninput="updateStudentField('${s.id}','tutorCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.tutorTelefono||''}" oninput="updateStudentField('${s.id}','tutorTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.tutorDireccion||''}" oninput="updateStudentField('${s.id}','tutorDireccion',this.value)" />
+</div>`;
 }
-
+html += '</div>';
+});
+}
+return html;
+}
 function renderCalificaciones() {
-  const list = state.students.filter(s => s.grade === state.selectedGrade);
-  let html = renderGradePills('', state.selectedGrade, 'setGrade');
-  html += `<div class="info-banner"><strong>Periodos evaluativos</strong><br/>P1: ${PERIODOS_FECHAS[0]} · P2: ${PERIODOS_FECHAS[1]} · P3: ${PERIODOS_FECHAS[2]}</div>`;
-  if (!list.length) { html += `<p class="empty-note">Agrega alumnos a ${state.selectedGrade} primero.</p>`; return html; }
-
-  list.forEach(s => {
-    const obsP = state.obsPeriodo[s.id] ?? 0;
-    html += `<div class="card">
-      <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">${s.name}</p>
-      <table class="grades-table">
-        <thead><tr><th>Campo Formativo</th><th>P1</th><th>P2</th><th>P3</th><th>Prom.</th></tr></thead>
-        <tbody>`;
-    MATERIAS.forEach((m, mi) => {
-      const arr = (s.grades && s.grades[m]) || [];
-      const sub = subjectAverage(s, m);
-      html += `<tr>
-        <td>${m}</td>
-        ${[0,1,2].map(ti => `<td><input class="grade-input" type="number" min="0" max="10" step="0.1" value="${arr[ti]??''}"
-          oninput="updateGradeLive('${s.id}','${m.replace(/'/g,"\\'")}',${ti},this.value)" onchange="commitGrade('${s.id}')" /></td>`).join('')}
-        <td class="avgcell" id="sub-${s.id}-${mi}">${sub!==null?sub.toFixed(1):'—'}</td>
-      </tr>`;
-    });
-    html += `</tbody></table>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f3f4f6;">
-        <p style="font-size:0.78em;font-weight:600;color:#6b7280;margin-bottom:8px;">📝 Observaciones y sugerencias</p>
-        <div class="periodo-pills">
-          ${PERIODOS_LABEL.map((lbl,pi) => `<button class="${obsP===pi?'active':''}" onclick="setObsPeriodo('${s.id}',${pi})">${lbl} periodo</button>`).join('')}
-        </div>`;
-    MATERIAS.forEach(m => {
-      const val = (s.observaciones && s.observaciones[m] && s.observaciones[m][obsP]) || '';
-      html += `<p class="obs-label">${m}</p>
-        <textarea class="obs-input" rows="2" placeholder="Observación sobre el aprendizaje del alumno en este campo formativo..."
-          oninput="updateObservacionLive('${s.id}','${m.replace(/'/g,"\\'")}',${obsP},this.value)" onchange="commitObs('${s.id}')">${val}</textarea>`;
-    });
-    html += `</div></div>`;
-  });
-  return html;
+const list = state.students.filter(s => s.grade === state.selectedGrade);
+let html = renderGradePills('', state.selectedGrade, 'setGrade');
+html += `<div class="info-banner"><strong>Periodos evaluativos</strong><br/>P1: ${PERIODOS_FECHAS[0]} · P2: ${PERIODOS_FECHAS[1]} · P3: ${PERIODOS_FECHAS[2]}</div>`;
+if (!list.length) { html += `<p class="empty-note">Agrega alumnos a ${state.selectedGrade} primero.</p>`; return html; }
+list.forEach(s => {
+const obsP = state.obsPeriodo[s.id] ?? 0;
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">${s.name}</p>
+<table class="grades-table">
+<thead><tr><th>Campo Formativo</th><th>P1</th><th>P2</th><th>P3</th><th>Prom.</th></tr></thead>
+<tbody>`;
+MATERIAS.forEach((m, mi) => {
+const arr = (s.grades && s.grades[m]) || [];
+const sub = subjectAverage(s, m);
+html += `<tr>
+<td>${m}</td>
+${[0,1,2].map(ti => `<td><input class="grade-input" type="number" min="0" max="10" step="0.1" value="${arr[ti]??''}"
+oninput="updateGradeLive('${s.id}','${m.replace(/'/g,"\\'")}',${ti},this.value)" onchange="commitGrade('${s.id}')" /></td>`).join('')}
+<td class="avgcell" id="sub-${s.id}-${mi}">${sub!==null?sub.toFixed(1):'—'}</td>
+</tr>`;
+});
+html += `</tbody></table>
+<div style="margin-top:12px;padding-top:12px;border-top:1px solid #f3f4f6;">
+<p style="font-size:0.78em;font-weight:600;color:#6b7280;margin-bottom:8px;">📝 Observaciones y sugerencias</p>
+<div class="periodo-pills">
+${PERIODOS_LABEL.map((lbl,pi) => `<button class="${obsP===pi?'active':''}" onclick="setObsPeriodo('${s.id}',${pi})">${lbl} periodo</button>`).join('')}
+</div>`;
+MATERIAS.forEach(m => {
+const val = (s.observaciones && s.observaciones[m] && s.observaciones[m][obsP]) || '';
+html += `<p class="obs-label">${m}</p>
+<textarea class="obs-input" rows="2" placeholder="Observación sobre el aprendizaje del alumno en este campo formativo..."
+oninput="updateObservacionLive('${s.id}','${m.replace(/'/g,"\\'")}',${obsP},this.value)" onchange="commitObs('${s.id}')">${val}</textarea>`;
+});
+html += `</div></div>`;
+});
+return html;
 }
-
 function renderBoletaList() {
-  if (!state.students.length) return '<p class="empty-note">No hay alumnos registrados.</p>';
-  let html = '';
-  GRADOS.forEach(g => {
-    const list = state.students.filter(s => s.grade === g);
-    if (!list.length) return;
-    html += `<p class="grade-group-label">${g}</p>`;
-    list.forEach(s => {
-      html += `<div class="card boleta-list-item" style="cursor:pointer;" onclick="openBoleta('${s.id}')">
-        <span style="font-size:0.85em;">${s.name}</span><span class="link">Ver boleta →</span>
-      </div>`;
-    });
-  });
-  return html;
+if (!state.students.length) return '<p class="empty-note">No hay alumnos registrados.</p>';
+let html = '';
+GRADOS.forEach(g => {
+const list = state.students.filter(s => s.grade === g);
+if (!list.length) return;
+html += `<p class="grade-group-label">${g}</p>`;
+list.forEach(s => {
+html += `<div class="card boleta-list-item" style="cursor:pointer;" onclick="openBoleta('${s.id}')">
+<span style="font-size:0.85em;">${s.name}</span><span class="link">Ver boleta →</span>
+</div>`;
+});
+});
+return html;
 }
-
 function renderBoletaDetail() {
-  const s = state.students.find(x => x.id === state.boletaStudentId);
-  if (!s) return '';
-  const avg = studentAverage(s);
-  const edad = calcularEdad(s.fechaNacimiento, s.curp);
-  let html = `<button style="width:auto;padding:8px 14px;border-radius:8px;border:none;margin-bottom:10px;color:#2563eb;background:none;cursor:pointer;" onclick="closeBoleta()">← Volver</button>`;
-  html += `<div class="card boleta-sheet" id="boletaSheet">
-    <div class="boleta-header">
-      <div style="width:56px;flex-shrink:0;text-align:center;">
-        <div class="badge-circle" style="background:#1f2937;margin:0 auto;">SEP</div>
-        <p style="font-size:7px;color:#9ca3af;margin-top:4px;">Secretaría de Educación Pública</p>
-      </div>
-      <div class="center-text">
-        <p style="font-weight:700;font-size:10px;">SISTEMA EDUCATIVO NACIONAL</p>
-        <p style="font-weight:700;font-size:10px;">JALISCO</p>
-        <p style="font-weight:700;font-size:10px;margin-top:2px;">BOLETA DE EVALUACIÓN</p>
-        <p style="font-size:9px;color:#6b7280;margin-top:2px;">${s.grade} GRADO DE EDUCACIÓN PRIMARIA</p>
-        <p style="font-size:9px;color:#6b7280;">CICLO ESCOLAR ${getCicloEscolar()}</p>
-      </div>
-      <div style="width:56px;flex-shrink:0;text-align:center;">
-        <div class="badge-circle" style="background:#9d174d;margin:0 auto;">JAL</div>
-        <p style="font-size:7px;color:#9ca3af;margin-top:4px;">Gobierno del Estado</p>
-      </div>
-    </div>
-
-    <div class="info-block">
-      <p class="label">NOMBRE(S) Y APELLIDOS DE LA ALUMNA O EL ALUMNO:</p>
-      <p class="value">${s.name || '—'}</p>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-bottom:8px;">
-      <div><p class="label">CURP</p><p class="value">${s.curp||'—'}</p></div>
-      <div><p class="label">MATRÍCULA</p><p class="value">${s.matricula||'—'}</p></div>
-      <div><p class="label">TURNO / GRUPO</p><p class="value">${s.turno||'—'} · ${s.grupo||'—'}</p></div>
-      <div><p class="label">EDAD</p><p class="value">${edad!==null?edad+' años':'—'}</p></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-bottom:8px;">
-      <div><p class="label">NOMBRE DE LA ESCUELA</p><p class="value">${state.schoolInfo.nombre||'—'}</p></div>
-      <div><p class="label">CCT</p><p class="value">${state.schoolInfo.cct||'—'}</p></div>
-    </div>
-    <div style="margin-bottom:12px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">
-      <p class="label" style="font-weight:600;">DATOS DE MADRE, PADRE O TUTOR</p>
-      ${s.madreNombre ? `<p style="font-size:9px;"><strong>Madre:</strong> ${s.madreNombre} ${s.madreTelefono?`· Tel: ${s.madreTelefono}`:''}</p>` : ''}
-      ${s.padreNombre ? `<p style="font-size:9px;"><strong>Padre:</strong> ${s.padreNombre} ${s.padreTelefono?`· Tel: ${s.padreTelefono}`:''}</p>` : ''}
-      ${s.tutorNombre ? `<p style="font-size:9px;"><strong>Tutor:</strong> ${s.tutorNombre} ${s.tutorTelefono?`· Tel: ${s.tutorTelefono}`:''}</p>` : ''}
-      ${(!s.madreNombre && !s.padreNombre && !s.tutorNombre) ? '<p style="font-size:9px;color:#9ca3af;">Sin datos capturados</p>' : ''}
-    </div>
-
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <table style="flex:1;">
-        <thead><tr style="background:#fefce8;"><th style="width:50px;">PERIODO</th>${MATERIAS.map(m=>`<th>${m}</th>`).join('')}</tr></thead>
-        <tbody>
-          ${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MATERIAS.map(m=>`<td>${(s.grades&&s.grades[m]&&s.grades[m][pi]!=null)?s.grades[m][pi]:'—'}</td>`).join('')}</tr>`).join('')}
-          <tr style="background:#f9fafb;font-weight:700;"><td>PROM.</td>${MATERIAS.map(m=>{const sub=subjectAverage(s,m);return `<td>${sub!==null?sub.toFixed(1):'—'}</td>`;}).join('')}</tr>
-        </tbody>
-      </table>
-      <div class="side-boxes">
-        <div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
-        <div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
-        <div class="box"><p class="l">ASISTENCIAS</p><p class="v">${s.asistencias||'—'}</p></div>
-        <div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;">${s.folio||'—'}</p></div>
-      </div>
-    </div>
-
-    <table style="margin-bottom:10px;">
-      <thead><tr style="background:#f3f4f6;"><th style="width:36px;">PERIODO</th><th style="width:90px;">CAMPO FORMATIVO</th><th>OBSERVACIONES Y SUGERENCIAS</th></tr></thead>
-      <tbody>`;
-  PERIODOS_LABEL.forEach((lbl, pi) => {
-    MATERIAS.forEach((m, mi) => {
-      html += `<tr>${mi===0?`<td rowspan="${MATERIAS.length}" style="font-weight:600;vertical-align:top;">${lbl}</td>`:''}<td>${m}</td><td style="text-align:left;">${(s.observaciones && s.observaciones[m] && s.observaciones[m][pi]) || '—'}</td></tr>`;
-    });
-  });
-  html += `</tbody></table>
-    <p style="text-align:center;color:#9ca3af;font-size:9px;">Autoridad educativa: ${state.schoolInfo.autoridadNombre||'—'} · ${state.schoolInfo.autoridadCargo}</p>
-  </div>`;
-  html += `<div class="no-print" style="margin-top:12px;">
-    <button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-  </div>`;
-  return html;
+const s = state.students.find(x => x.id === state.boletaStudentId);
+if (!s) return '';
+const avg = studentAverage(s);
+const edad = calcularEdad(s.fechaNacimiento, s.curp);
+let html = `<button style="width:auto;padding:8px 14px;border-radius:8px;border:none;margin-bottom:10px;color:#2563eb;background:none;cursor:pointer;" onclick="closeBoleta()">← Volver</button>`;
+html += `<div class="card boleta-sheet" id="boletaSheet">
+<div class="boleta-header">
+<div style="width:56px;flex-shrink:0;text-align:center;">
+<div class="badge-circle" style="background:#1f2937;margin:0 auto;">SEP</div>
+<p style="font-size:7px;color:#9ca3af;margin-top:4px;">Secretaría de Educación Pública</p>
+</div>
+<div class="center-text">
+<p style="font-weight:700;font-size:10px;">SISTEMA EDUCATIVO NACIONAL</p>
+<p style="font-weight:700;font-size:10px;">JALISCO</p>
+<p style="font-weight:700;font-size:10px;margin-top:2px;">BOLETA DE EVALUACIÓN</p>
+<p style="font-size:9px;color:#6b7280;margin-top:2px;">${s.grade} GRADO DE EDUCACIÓN PRIMARIA</p>
+<p style="font-size:9px;color:#6b7280;">CICLO ESCOLAR ${getCicloEscolar()}</p>
+</div>
+<div style="width:56px;flex-shrink:0;text-align:center;">
+<div class="badge-circle" style="background:#9d174d;margin:0 auto;">JAL</div>
+<p style="font-size:7px;color:#9ca3af;margin-top:4px;">Gobierno del Estado</p>
+</div>
+</div>
+<div class="info-block">
+<p class="label">NOMBRE(S) Y APELLIDOS DE LA ALUMNA O EL ALUMNO:</p>
+<p class="value">${s.name || '—'}</p>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-bottom:8px;">
+<div><p class="label">CURP</p><p class="value">${s.curp||'—'}</p></div>
+<div><p class="label">MATRÍCULA</p><p class="value">${s.matricula||'—'}</p></div>
+<div><p class="label">TURNO / GRUPO</p><p class="value">${s.turno||'—'} · ${s.grupo||'—'}</p></div>
+<div><p class="label">EDAD</p><p class="value">${edad!==null?edad+' años':'—'}</p></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-bottom:8px;">
+<div><p class="label">NOMBRE DE LA ESCUELA</p><p class="value">${state.schoolInfo.nombre||'—'}</p></div>
+<div><p class="label">CCT</p><p class="value">${state.schoolInfo.cct||'—'}</p></div>
+</div>
+<div style="margin-bottom:12px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">
+<p class="label" style="font-weight:600;">DATOS DE MADRE, PADRE O TUTOR</p>
+${s.madreNombre ? `<p style="font-size:9px;"><strong>Madre:</strong> ${s.madreNombre} ${s.madreTelefono?`· Tel: ${s.madreTelefono}`:''}</p>` : ''}
+${s.padreNombre ? `<p style="font-size:9px;"><strong>Padre:</strong> ${s.padreNombre} ${s.padreTelefono?`· Tel: ${s.padreTelefono}`:''}</p>` : ''}
+${s.tutorNombre ? `<p style="font-size:9px;"><strong>Tutor:</strong> ${s.tutorNombre} ${s.tutorTelefono?`· Tel: ${s.tutorTelefono}`:''}</p>` : ''}
+${(!s.madreNombre && !s.padreNombre && !s.tutorNombre) ? '<p style="font-size:9px;color:#9ca3af;">Sin datos capturados</p>' : ''}
+</div>
+<div style="display:flex;gap:8px;margin-bottom:12px;">
+<table style="flex:1;">
+<thead><tr style="background:#fefce8;"><th style="width:50px;">PERIODO</th>${MATERIAS.map(m=>`<th>${m}</th>`).join('')}</tr></thead>
+<tbody>
+${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MATERIAS.map(m=>`<td>${(s.grades&&s.grades[m]&&s.grades[m][pi]!=null)?s.grades[m][pi]:'—'}</td>`).join('')}</tr>`).join('')}
+<tr style="background:#f9fafb;font-weight:700;"><td>PROM.</td>${MATERIAS.map(m=>{const sub=subjectAverage(s,m);return `<td>${sub!==null?sub.toFixed(1):'—'}</td>`;}).join('')}</tr>
+</tbody>
+</table>
+<div class="side-boxes">
+<div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
+<div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
+<div class="box"><p class="l">ASISTENCIAS</p><p class="v">${s.asistencias||'—'}</p></div>
+<div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;">${s.folio||'—'}</p></div>
+</div>
+</div>
+<table style="margin-bottom:10px;">
+<thead><tr style="background:#f3f4f6;"><th style="width:36px;">PERIODO</th><th style="width:90px;">CAMPO FORMATIVO</th><th>OBSERVACIONES Y SUGERENCIAS</th></tr></thead>
+<tbody>`;
+PERIODOS_LABEL.forEach((lbl, pi) => {
+MATERIAS.forEach((m, mi) => {
+html += `<tr>${mi===0?`<td rowspan="${MATERIAS.length}" style="font-weight:600;vertical-align:top;">${lbl}</td>`:''}<td>${m}</td><td style="text-align:left;">${(s.observaciones && s.observaciones[m] && s.observaciones[m][pi]) || '—'}</td></tr>`;
+});
+});
+html += `</tbody></table>
+<p style="text-align:center;color:#9ca3af;font-size:9px;">Autoridad educativa: ${state.schoolInfo.autoridadNombre||'—'} · ${state.schoolInfo.autoridadCargo}</p>
+</div>`;
+html += `<div class="no-print" style="margin-top:12px;">
+<button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+</div>`;
+return html;
 }
-
 function renderDiplomas() {
-  let html = renderGradePills('purple', state.diplomaGrade, 'setDiplomaGrade');
-  const candidates = state.students
-    .filter(s => s.grade === state.diplomaGrade)
-    .map(s => ({ ...s, avg: studentAverage(s) }))
-    .filter(s => s.avg !== null)
-    .sort((a,b) => b.avg - a.avg)
-    .slice(0,3);
-  if (!candidates.length) { html += `<p class="empty-note">Captura calificaciones en ${state.diplomaGrade} para generar diplomas.</p>`; return html; }
-  const medals = ['🥇 1er Lugar','🥈 2do Lugar','🥉 3er Lugar'];
-  const bgs = ['linear-gradient(135deg,#facc15,#ca8a04)','linear-gradient(135deg,#d1d5db,#6b7280)','linear-gradient(135deg,#fb923c,#c2410c)'];
-  candidates.forEach((s, idx) => {
-    html += `<div class="diploma-card" style="background:${bgs[idx]};">
-      <p style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;opacity:0.9;">Diploma de Excelencia</p>
-      <p style="font-size:1.6em;margin-top:8px;">${medals[idx]}</p>
-      <div class="inner-box">
-        <p style="font-size:0.7em;opacity:0.8;">Se otorga a</p>
-        <p style="font-size:1.2em;font-weight:700;margin-top:4px;">${s.name}</p>
-        <p style="font-size:0.7em;opacity:0.8;margin-top:4px;">${s.grade} · Promedio ${s.avg.toFixed(1)}</p>
-      </div>
-      <p style="font-size:0.7em;opacity:0.85;">Por su destacado desempeño académico</p>
-      <button class="no-print" onclick="window.print()">🖨️ Imprimir diploma</button>
-    </div>`;
-  });
-  return html;
+let html = renderGradePills('purple', state.diplomaGrade, 'setDiplomaGrade');
+const candidates = state.students
+.filter(s => s.grade === state.diplomaGrade)
+.map(s => ({ ...s, avg: studentAverage(s) }))
+.filter(s => s.avg !== null)
+.sort((a,b) => b.avg - a.avg)
+.slice(0,3);
+if (!candidates.length) { html += `<p class="empty-note">Captura calificaciones en ${state.diplomaGrade} para generar diplomas.</p>`; return html; }
+const medals = ['🥇 1er Lugar','🥈 2do Lugar','🥉 3er Lugar'];
+const bgs = ['linear-gradient(135deg,#facc15,#ca8a04)','linear-gradient(135deg,#d1d5db,#6b7280)','linear-gradient(135deg,#fb923c,#c2410c)'];
+candidates.forEach((s, idx) => {
+html += `<div class="diploma-card" style="background:${bgs[idx]};">
+<p style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;opacity:0.9;">Diploma de Excelencia</p>
+<p style="font-size:1.6em;margin-top:8px;">${medals[idx]}</p>
+<div class="inner-box">
+<p style="font-size:0.7em;opacity:0.8;">Se otorga a</p>
+<p style="font-size:1.2em;font-weight:700;margin-top:4px;">${s.name}</p>
+<p style="font-size:0.7em;opacity:0.8;margin-top:4px;">${s.grade} · Promedio ${s.avg.toFixed(1)}</p>
+</div>
+<p style="font-size:0.7em;opacity:0.85;">Por su destacado desempeño académico</p>
+<button class="no-print" onclick="window.print()">🖨️ Imprimir diploma</button>
+</div>`;
+});
+return html;
 }
-
 function renderDatos() {
-  const si = state.schoolInfo;
-  let html = `
-  <div class="card">
-    <p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Datos de la escuela (para boletas)</p>
-    <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la escuela" value="${si.nombre||''}" oninput="updateSchoolField('nombre',this.value)" />
-    <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSchoolField('cct',this.value)" />
-    <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la autoridad educativa" value="${si.autoridadNombre||''}" oninput="updateSchoolField('autoridadNombre',this.value)" />
-    <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" placeholder="Cargo (ej. DIRECTOR/A)" value="${si.autoridadCargo||''}" oninput="updateSchoolField('autoridadCargo',this.value)" />
-  </div>
-
-  <div class="card">
-    <p style="font-weight:600;font-size:0.9em;margin-bottom:4px;">📥 Importar alumnos y calificaciones</p>
-    <p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Sube un archivo Excel (.xlsx) o CSV. Descarga primero la plantilla para asegurar el formato correcto.</p>
-    <button class="btn btn-gray" style="margin-bottom:8px;" onclick="downloadTemplate()">⬇️ Descargar plantilla Excel</button>
-    <label class="btn btn-blue" style="display:block;text-align:center;cursor:pointer;">
-      📤 Subir archivo
-      <input type="file" style="display:none;" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)" />
-    </label>`;
-  if (state.importSummary) {
-    const im = state.importSummary;
-    html += `<p style="font-size:0.75em;color:#9ca3af;margin-top:10px;">Procesadas ${im.total} filas · ${im.added} nuevos · ${im.updated} actualizados${im.skipped>0?` · ${im.skipped} omitidas`:''}</p>`;
-  }
-  html += `</div>
-
-  <div class="card">
-    <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📤 Exportar todo</p>
-    <button class="btn btn-green" onclick="exportExcel()">⬇️ Exportar a Excel</button>
-  </div>
-
-  <div class="blue-banner">💾 Total registrado: ${state.students.length} alumno(s) en ${new Set(state.students.map(s=>s.grade)).size} grado(s). Conectado a Realtime Database.</div>
-
-  <div class="card" style="margin-top:12px;">
-    <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">⚙️ Configuración</p>
-    <button class="btn btn-gray" onclick="resetConfig()">Cambiar proyecto de Firebase</button>
-  </div>`;
-  return html;
+const si = state.schoolInfo;
+let html = `
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Datos de la escuela (para boletas)</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la escuela" value="${si.nombre||''}" oninput="updateSchoolField('nombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSchoolField('cct',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la autoridad educativa" value="${si.autoridadNombre||''}" oninput="updateSchoolField('autoridadNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" placeholder="Cargo (ej. DIRECTOR/A)" value="${si.autoridadCargo||''}" oninput="updateSchoolField('autoridadCargo',this.value)" />
+</div>
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:4px;">📥 Importar alumnos y calificaciones</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Sube un archivo Excel (.xlsx) o CSV. Descarga primero la plantilla para asegurar el formato correcto.</p>
+<button class="btn btn-gray" style="margin-bottom:8px;" onclick="downloadTemplate()">⬇️ Descargar plantilla Excel</button>
+<label class="btn btn-blue" style="display:block;text-align:center;cursor:pointer;">
+📤 Subir archivo
+<input type="file" style="display:none;" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)" />
+</label>`;
+if (state.importSummary) {
+const im = state.importSummary;
+html += `<p style="font-size:0.75em;color:#9ca3af;margin-top:10px;">Procesadas ${im.total} filas · ${im.added} nuevos · ${im.updated} actualizados${im.skipped>0?` · ${im.skipped} omitidas`:''}</p>`;
 }
-
+html += `</div>
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📤 Exportar todo</p>
+<button class="btn btn-green" onclick="exportExcel()">⬇️ Exportar a Excel</button>
+</div>
+<div class="blue-banner">💾 Total registrado: ${state.students.length} alumno(s) en ${new Set(state.students.map(s=>s.grade)).size} grado(s). Conectado a Realtime Database.</div>`;
+return html;
+}
 // ---------------- Init ----------------
-loadSavedConfig();
-if (state.configDone) { initFirebase(); } else { render(); }
+initFirebase();
 </script>
 </body>
 </html>
