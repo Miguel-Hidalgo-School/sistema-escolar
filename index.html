@@ -107,9 +107,11 @@ body { background: #fff; }
 <script>
 // ---------------- Config ----------------
 const GRADOS = ['1°','2°','3°','4°','5°','6°'];
+const GRADOS_SEC = ['1°','2°','3°'];
 const MATERIAS = ['Lenguajes','Saberes y Pensamiento Científico','Ética, Naturaleza y Sociedades','De lo Humano y lo Comunitario'];
 const PERIODOS_LABEL = ['1er','2do','3er'];
 const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - Junio'];
+const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
@@ -124,13 +126,14 @@ const FIREBASE_CONFIG = {
 };
 
 let auth = null, db = null, storage = null;
-let studentsRef = null, schoolRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
 user: null,
 authError: '',
 tab: 'inicio',
+tabHistory: [],
 students: [],
 schoolInfo: { nombre: '', cct: '', autoridadNombre: '', autoridadCargo: 'DIRECTOR(A)' },
 selectedGrade: '1°',
@@ -138,7 +141,12 @@ diplomaGrade: '1°',
 editingStudentId: null,
 obsPeriodo: {},
 boletaStudentId: null,
-importSummary: null
+importSummary: null,
+secStudents: [],
+secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '' },
+secSelectedGrade: '1°',
+secEditingId: null,
+secReportGrade: null
 };
 function emptyExtra() {
 return {
@@ -199,6 +207,8 @@ auth = firebase.auth();
 db = firebase.database();
 studentsRef = db.ref(DB_ROOT + '/students');
 schoolRef = db.ref(DB_ROOT + '/schoolInfo');
+secStudentsRef = db.ref(DB_ROOT + '/secStudents');
+secSchoolRef = db.ref(DB_ROOT + '/secSchoolInfo');
 auth.onAuthStateChanged(u => {
 state.user = u;
 state.authError = '';
@@ -217,11 +227,23 @@ schoolRef.on('value', snap => {
 if (snap.val()) state.schoolInfo = snap.val();
 render();
 });
+secStudentsRef.on('value', snap => {
+const val = snap.val() || {};
+state.secStudents = Object.keys(val).map(id => ({ id, ...val[id] }));
+render();
+}, () => {});
+secSchoolRef.on('value', snap => {
+if (snap.val()) state.secSchoolInfo = snap.val();
+render();
+});
 }
 function unsubscribeData() {
 if (studentsRef) studentsRef.off();
 if (schoolRef) schoolRef.off();
+if (secStudentsRef) secStudentsRef.off();
+if (secSchoolRef) secSchoolRef.off();
 state.students = [];
+state.secStudents = [];
 }
 async function handleLoginSubmit() {
 state.authError = '';
@@ -482,7 +504,102 @@ if (!confirm('¿Seguro que quieres borrar TODOS los alumnos? Esta acción no se 
 studentsRef.remove();
 showToast('Todos los alumnos fueron eliminados');
 }
-function setTab(t) { state.tab = t; state.boletaStudentId = null; render(); }
+// ---------------- Secundaria ----------------
+function setSecGrade(g) { state.secSelectedGrade = g; render(); }
+function toggleSecEdit(id) { state.secEditingId = state.secEditingId === id ? null : id; render(); }
+function addSecStudent() {
+const input = document.getElementById('newSecStudentName');
+const btn = document.getElementById('addSecStudentBtn');
+const name = input.value.trim();
+if (!name) return;
+if (btn) { btn.textContent = 'Agregando...'; btn.disabled = true; }
+const id = secStudentsRef.push().key;
+secStudentsRef.child(id).set({ name, grade: state.secSelectedGrade, periodos: [null,null,null] })
+.then(() => showToast('✅ Alumno agregado'))
+.catch(() => showToast('❌ Error al agregar'))
+.finally(() => { if (btn) { btn.textContent = 'Agregar'; btn.disabled = false; } });
+input.value = '';
+}
+let pendingSecEdits = {};
+function updateSecStudentFieldLocal(id, field, value) {
+const s = state.secStudents.find(x => x.id === id);
+if (s) s[field] = value;
+if (!pendingSecEdits[id]) pendingSecEdits[id] = {};
+pendingSecEdits[id][field] = value;
+}
+function saveSecStudentEdits(id) {
+if (!pendingSecEdits[id] || !Object.keys(pendingSecEdits[id]).length) { showToast('No hay cambios nuevos que guardar'); return; }
+secStudentsRef.child(id).update(pendingSecEdits[id]);
+delete pendingSecEdits[id];
+showToast('💾 Datos guardados');
+}
+function deleteSecStudentConfirm(id, name) {
+if (!confirm('¿Seguro que quieres eliminar a '+name+'? Esta acción no se puede deshacer.')) return;
+secStudentsRef.child(id).remove();
+if (state.secEditingId === id) state.secEditingId = null;
+showToast('Alumno eliminado');
+render();
+}
+let pendingSecGrades = {};
+function updateSecGradeLive(id, periodo, value) {
+const s = state.secStudents.find(x => x.id === id);
+if (!s) return;
+const v = value === '' ? null : Number(value);
+if (!s.periodos) s.periodos = [null,null,null];
+s.periodos = [...s.periodos];
+s.periodos[periodo] = v;
+pendingSecGrades[id] = s.periodos;
+const finalEl = document.getElementById('secfinal-'+id);
+if (finalEl) {
+const suma = s.periodos.reduce((a,b) => a + (typeof b === 'number' ? b : 0), 0);
+finalEl.textContent = suma.toFixed(1);
+}
+}
+function commitSecGrade(id) {
+if (pendingSecGrades[id]) {
+secStudentsRef.child(id).update({ periodos: pendingSecGrades[id] });
+delete pendingSecGrades[id];
+}
+}
+function secStudentFinal(s) {
+const periodos = s.periodos || [];
+const capturados = periodos.filter(v => typeof v === 'number');
+const suma = capturados.reduce((a,b) => a+b, 0);
+return { suma, periodosCapturados: capturados.length };
+}
+let pendingSecSchoolInfo = {};
+function updateSecSchoolFieldLocal(field, value) {
+state.secSchoolInfo[field] = value;
+pendingSecSchoolInfo[field] = value;
+}
+function saveSecSchoolInfo() {
+if (!Object.keys(pendingSecSchoolInfo).length) { showToast('No hay cambios nuevos que guardar'); return; }
+secSchoolRef.update(pendingSecSchoolInfo);
+pendingSecSchoolInfo = {};
+showToast('💾 Datos guardados');
+}
+function openSecReporte(grade) { state.secReportGrade = grade; state.tabHistory.push('secundaria'); render(); }
+function setTab(t) {
+if (state.tab !== t) state.tabHistory.push(state.tab);
+state.tab = t;
+state.boletaStudentId = null;
+state.secReportGrade = null;
+render();
+}
+function goBack() {
+if (state.secReportGrade !== null) { state.secReportGrade = null; state.tabHistory.pop(); render(); return; }
+if (state.boletaStudentId !== null) { state.boletaStudentId = null; render(); return; }
+const prev = state.tabHistory.pop();
+state.tab = prev !== undefined ? prev : 'inicio';
+render();
+}
+function renderNavBar() {
+if (state.tab === 'inicio') return '';
+return `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
+<button class="btn btn-gray" style="width:auto;flex:1;padding:8px 12px;font-size:0.85em;" onclick="goBack()">← Atrás</button>
+<button class="btn btn-gray" style="width:auto;flex:1;padding:8px 12px;font-size:0.85em;" onclick="setTab('inicio')">🏠 Principal</button>
+</div>`;
+}
 function setGrade(g) { state.selectedGrade = g; render(); }
 function setDiplomaGrade(g) { state.diplomaGrade = g; render(); }
 function openBoleta(id) { state.boletaStudentId = id; render(); }
@@ -531,7 +648,7 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['secundaria','Secundaria'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -542,12 +659,14 @@ return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
 ).join('') + '</div>';
 }
 function renderTabContent() {
+const nav = renderNavBar();
 if (state.tab === 'inicio') return renderInicio();
-if (state.tab === 'alumnos') return renderAlumnos();
-if (state.tab === 'calificaciones') return renderCalificaciones();
-if (state.tab === 'boletas') return state.boletaStudentId ? renderBoletaDetail() : renderBoletaList();
-if (state.tab === 'diplomas') return renderDiplomas();
-if (state.tab === 'datos') return renderDatos();
+if (state.tab === 'alumnos') return nav + renderAlumnos();
+if (state.tab === 'calificaciones') return nav + renderCalificaciones();
+if (state.tab === 'boletas') return nav + (state.boletaStudentId ? renderBoletaDetail() : renderBoletaList());
+if (state.tab === 'diplomas') return nav + renderDiplomas();
+if (state.tab === 'secundaria') return nav + (state.secReportGrade ? renderSecReporte() : renderSecundaria());
+if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
 function renderInicio() {
@@ -813,6 +932,130 @@ html += `<div class="diploma-card" style="background:${bgs[idx]};">
 <button class="no-print" onclick="window.print()">🖨️ Imprimir diploma</button>
 </div>`;
 });
+return html;
+}
+function renderSecundaria() {
+const si = state.secSchoolInfo;
+const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade);
+let html = `
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Datos de Secundaria (para el reporte)</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la secundaria" value="${si.nombre||''}" oninput="updateSecSchoolFieldLocal('nombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSecSchoolFieldLocal('cct',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la materia" value="${si.materia||''}" oninput="updateSecSchoolFieldLocal('materia',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:10px;" placeholder="Nombre del docente" value="${si.docente||''}" oninput="updateSecSchoolFieldLocal('docente',this.value)" />
+<button class="btn btn-green" onclick="saveSecSchoolInfo()">💾 Guardar datos</button>
+</div>`;
+html += `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
+html += `
+<div class="card">
+<div class="row-flex">
+<input id="newSecStudentName" placeholder="Nombre del alumno (${state.secSelectedGrade} Secundaria)" onkeydown="if(event.key==='Enter')addSecStudent()" />
+<button class="btn btn-blue" id="addSecStudentBtn" style="width:auto;padding:10px 16px;" onclick="addSecStudent()">Agregar</button>
+</div>
+</div>
+<button class="btn btn-purple" style="margin-bottom:12px;" onclick="openSecReporte('${state.secSelectedGrade}')">📄 Ver reporte de ${state.secSelectedGrade} Secundaria</button>`;
+if (!list.length) {
+html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} de Secundaria aún.</p>`;
+} else {
+list.forEach(s => {
+const { suma } = secStudentFinal(s);
+const editing = state.secEditingId === s.id;
+const p = s.periodos || [null,null,null];
+html += `<div class="card">
+<div class="student-row">
+<div class="info" onclick="toggleSecEdit('${s.id}')" style="width:100%;">
+<p class="name">${s.name}</p>
+<p class="avg">Final: <span id="secfinal-${s.id}">${suma.toFixed(1)}</span> / ${CALIF_FINAL_MINIMA_SEC} ${editing?'▲':'▼ calificar'}</p>
+</div>
+</div>`;
+if (editing) {
+html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6;">
+<input class="full" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:0.8em;margin-bottom:8px;" placeholder="Nombre" value="${s.name}" oninput="updateSecStudentFieldLocal('${s.id}','name',this.value)" />
+<div class="row-flex" style="margin-bottom:10px;">
+<input type="number" step="0.1" placeholder="P1" value="${p[0]??''}" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;text-align:center;" oninput="updateSecGradeLive('${s.id}',0,this.value)" onchange="commitSecGrade('${s.id}')" />
+<input type="number" step="0.1" placeholder="P2" value="${p[1]??''}" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;text-align:center;" oninput="updateSecGradeLive('${s.id}',1,this.value)" onchange="commitSecGrade('${s.id}')" />
+<input type="number" step="0.1" placeholder="P3" value="${p[2]??''}" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;text-align:center;" oninput="updateSecGradeLive('${s.id}',2,this.value)" onchange="commitSecGrade('${s.id}')" />
+</div>
+<div class="row-flex">
+<button class="btn btn-green" style="width:auto;flex:1;" onclick="saveSecStudentEdits('${s.id}')">💾 Guardar cambios</button>
+<button class="btn btn-red" style="width:auto;flex:1;" onclick="deleteSecStudentConfirm('${s.id}','${s.name.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
+</div>
+</div>`;
+}
+html += '</div>';
+});
+}
+return html;
+}
+function renderSecReporte() {
+const grade = state.secReportGrade;
+const si = state.secSchoolInfo;
+const list = state.secStudents.filter(s => s.grade === grade);
+let html = `<div class="card boleta-sheet">
+<div class="boleta-header">
+<div style="width:56px;flex-shrink:0;text-align:center;">
+<div class="badge-circle" style="background:#065f46;margin:0 auto;">STE</div>
+<p style="font-size:7px;color:#9ca3af;margin-top:4px;">Secundarias Técnicas</p>
+</div>
+<div class="center-text">
+<p style="font-weight:700;font-size:10px;">${si.nombre || 'SECUNDARIA TÉCNICA'}</p>
+<p style="font-size:9px;color:#6b7280;">CCT: ${si.cct||'—'}</p>
+<p style="font-weight:700;font-size:10px;margin-top:2px;">REPORTE DE CALIFICACIONES</p>
+<p style="font-size:9px;color:#6b7280;">${grade} GRADO · CICLO ${getCicloEscolar()}</p>
+</div>
+<div style="width:56px;flex-shrink:0;"></div>
+</div>
+<div class="info-block">
+<p class="label">MATERIA</p>
+<p class="value">${si.materia || '—'}</p>
+</div>
+<div class="info-block">
+<p class="label">DOCENTE</p>
+<p class="value">${si.docente || '—'}</p>
+</div>
+<div style="border-top:1px dashed #d1d5db; margin: 10px 0 14px; padding-top:14px;">
+<p style="font-size:9px;">Firma del docente: ____________________________</p>
+</div>
+<table>
+<thead><tr style="background:#f3f4f6;"><th style="text-align:left;">Alumno</th><th>P1</th><th>P2</th><th>P3</th><th>Final</th><th>Estatus</th></tr></thead>
+<tbody>`;
+const enRiesgo = [];
+list.forEach(s => {
+const p = s.periodos || [null,null,null];
+const { suma, periodosCapturados } = secStudentFinal(s);
+const pasa = suma >= CALIF_FINAL_MINIMA_SEC;
+if (!pasa) enRiesgo.push({ s, suma, periodosCapturados });
+html += `<tr>
+<td style="text-align:left;">${s.name}</td>
+<td>${p[0]??'—'}</td><td>${p[1]??'—'}</td><td>${p[2]??'—'}</td>
+<td style="font-weight:700;">${suma.toFixed(1)}</td>
+<td style="color:${pasa?'#16a34a':'#dc2626'};font-weight:700;">${pasa?'OK':'RIESGO'}</td>
+</tr>`;
+});
+html += `</tbody></table>`;
+html += `<div style="margin-top:14px;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
+<p style="font-weight:700;color:#b91c1c;font-size:9px;margin-bottom:6px;">⚠️ ALUMNOS EN RIESGO DE REPROBAR (mínimo ${CALIF_FINAL_MINIMA_SEC})</p>`;
+if (!enRiesgo.length) {
+html += `<p style="font-size:9px;color:#6b7280;">Ningún alumno en riesgo por ahora.</p>`;
+} else {
+enRiesgo.forEach(({s, suma, periodosCapturados}) => {
+if (periodosCapturados >= 3) {
+html += `<p style="font-size:9px;">• ${s.name}: sumó ${suma.toFixed(1)}/${CALIF_FINAL_MINIMA_SEC} con los 3 periodos capturados. <strong>Reprobado.</strong></p>`;
+} else {
+const necesita = Math.max(0, CALIF_FINAL_MINIMA_SEC - suma);
+html += `<p style="font-size:9px;">• ${s.name}: lleva ${suma.toFixed(1)}. Necesita ${necesita.toFixed(1)} de calificación en el siguiente periodo.</p>`;
+}
+});
+}
+html += `</div>`;
+html += `<div style="border-top:1px dashed #d1d5db; margin-top:20px; padding-top:14px;">
+<p style="font-size:9px;">Firma del docente: ____________________________</p>
+</div>
+</div>
+<div class="no-print" style="margin-top:12px;">
+<button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+</div>`;
 return html;
 }
 function renderDatos() {
