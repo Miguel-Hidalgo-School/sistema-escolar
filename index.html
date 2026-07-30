@@ -250,20 +250,43 @@ function handleLogout() { auth.signOut(); }
 // ---------------- Realtime Database actions ----------------
 function addStudent() {
 const input = document.getElementById('newStudentName');
+const btn = document.getElementById('addStudentBtn');
 const name = input.value.trim();
 if (!name) return;
+if (btn) { btn.textContent = 'Agregando...'; btn.disabled = true; }
 const id = studentsRef.push().key;
-studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra() });
+studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra() })
+.then(() => showToast('✅ Alumno agregado'))
+.catch(() => showToast('❌ Error al agregar alumno'))
+.finally(() => { if (btn) { btn.textContent = 'Agregar'; btn.disabled = false; } });
 input.value = '';
-showToast('Alumno agregado');
 }
 function removeStudent(id) {
 studentsRef.child(id).remove();
 if (state.editingStudentId === id) state.editingStudentId = null;
 }
+function deleteStudentConfirm(id, name) {
+if (!confirm('¿Seguro que quieres eliminar a '+name+'? Esta acción no se puede deshacer.')) return;
+removeStudent(id);
+showToast('Alumno eliminado');
+render();
+}
 function toggleEdit(id) { state.editingStudentId = state.editingStudentId === id ? null : id; render(); }
 function updateStudentField(id, field, value) {
 studentsRef.child(id).update({ [field]: value });
+}
+let pendingStudentEdits = {};
+function updateStudentFieldLocal(id, field, value) {
+const s = state.students.find(x => x.id === id);
+if (s) s[field] = value;
+if (!pendingStudentEdits[id]) pendingStudentEdits[id] = {};
+pendingStudentEdits[id][field] = value;
+}
+function saveStudentEdits(id) {
+if (!pendingStudentEdits[id] || !Object.keys(pendingStudentEdits[id]).length) { showToast('No hay cambios nuevos que guardar'); return; }
+studentsRef.child(id).update(pendingStudentEdits[id]);
+delete pendingStudentEdits[id];
+showToast('💾 Datos del alumno guardados');
 }
 let pendingGrades = {};
 function updateGradeLive(studentId, materia, periodo, value) {
@@ -539,7 +562,7 @@ html += `
 <div class="card">
 <div class="row-flex">
 <input id="newStudentName" placeholder="Nombre del alumno (${state.selectedGrade})" onkeydown="if(event.key==='Enter')addStudent()" />
-<button class="btn btn-blue" style="width:auto;padding:10px 16px;" onclick="addStudent()">Agregar</button>
+<button class="btn btn-blue" id="addStudentBtn" style="width:auto;padding:10px 16px;" onclick="addStudent()">Agregar</button>
 </div>
 </div>`;
 if (!list.length) {
@@ -552,11 +575,10 @@ const editing = state.editingStudentId === s.id;
 html += `<div class="card">
 <div class="student-row">
 ${s.foto ? `<img src="${s.foto}" style="width:36px;height:36px;border-radius:999px;object-fit:cover;margin-right:10px;flex-shrink:0;" />` : ''}
-<div class="info" onclick="toggleEdit('${s.id}')">
+<div class="info" onclick="toggleEdit('${s.id}')" style="width:100%;">
 <p class="name">${s.name}</p>
 <p class="avg">Promedio: ${avg!==null?avg.toFixed(1):'—'} ${edad!==null?`· ${edad} años`:''} ${editing?'▲':'▼ datos'}</p>
 </div>
-<button class="del" onclick="removeStudent('${s.id}')">Eliminar</button>
 </div>`;
 if (editing) {
 html += `<div class="edit-panel">
@@ -569,40 +591,44 @@ Subir foto del alumno
 <input type="file" accept="image/*" style="display:none;" onchange="uploadStudentPhoto('${s.id}', event)" />
 </label>
 </div>
-<input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateStudentField('${s.id}','name',this.value)" />
+<input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateStudentFieldLocal('${s.id}','name',this.value)" />
 <select onchange="updateStudentField('${s.id}','grade',this.value); setTimeout(render,300);">
 ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('')}
 </select>
-<input placeholder="Grupo (A/B)" value="${s.grupo||''}" oninput="updateStudentField('${s.id}','grupo',this.value)" />
-<input placeholder="CURP" value="${s.curp||''}" oninput="updateStudentField('${s.id}','curp',this.value)" />
-<input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateStudentField('${s.id}','matricula',this.value)" />
-<select onchange="updateStudentField('${s.id}','turno',this.value)">
+<input placeholder="Grupo (A/B)" value="${s.grupo||''}" oninput="updateStudentFieldLocal('${s.id}','grupo',this.value)" />
+<input placeholder="CURP" value="${s.curp||''}" oninput="updateStudentFieldLocal('${s.id}','curp',this.value)" />
+<input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateStudentFieldLocal('${s.id}','matricula',this.value)" />
+<select onchange="updateStudentFieldLocal('${s.id}','turno',this.value)">
 <option value="">Turno</option>
 <option value="MATUTINO" ${s.turno==='MATUTINO'?'selected':''}>Matutino</option>
 <option value="VESPERTINO" ${s.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
 </select>
 <div class="full">
 <label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
-<input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentField('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
+<input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
 </div>
-<input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentField('${s.id}','lenguaIndigena',this.value)" />
-<input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentField('${s.id}','asistencias',this.value)" />
-<input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentField('${s.id}','folio',this.value)" class="full" />
+<input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentFieldLocal('${s.id}','lenguaIndigena',this.value)" />
+<input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
+<input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentFieldLocal('${s.id}','folio',this.value)" class="full" />
 <p class="section-title">👩 Datos de la madre</p>
-<input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentField('${s.id}','madreNombre',this.value)" />
-<input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateStudentField('${s.id}','madreCurp',this.value)" />
-<input placeholder="Teléfono" value="${s.madreTelefono||''}" oninput="updateStudentField('${s.id}','madreTelefono',this.value)" />
-<input class="full" placeholder="Dirección" value="${s.madreDireccion||''}" oninput="updateStudentField('${s.id}','madreDireccion',this.value)" />
+<input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentFieldLocal('${s.id}','madreNombre',this.value)" />
+<input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateStudentFieldLocal('${s.id}','madreCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.madreTelefono||''}" oninput="updateStudentFieldLocal('${s.id}','madreTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.madreDireccion||''}" oninput="updateStudentFieldLocal('${s.id}','madreDireccion',this.value)" />
 <p class="section-title">👨 Datos del padre</p>
-<input class="full" placeholder="Nombre completo" value="${s.padreNombre||''}" oninput="updateStudentField('${s.id}','padreNombre',this.value)" />
-<input placeholder="CURP" value="${s.padreCurp||''}" oninput="updateStudentField('${s.id}','padreCurp',this.value)" />
-<input placeholder="Teléfono" value="${s.padreTelefono||''}" oninput="updateStudentField('${s.id}','padreTelefono',this.value)" />
-<input class="full" placeholder="Dirección" value="${s.padreDireccion||''}" oninput="updateStudentField('${s.id}','padreDireccion',this.value)" />
+<input class="full" placeholder="Nombre completo" value="${s.padreNombre||''}" oninput="updateStudentFieldLocal('${s.id}','padreNombre',this.value)" />
+<input placeholder="CURP" value="${s.padreCurp||''}" oninput="updateStudentFieldLocal('${s.id}','padreCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.padreTelefono||''}" oninput="updateStudentFieldLocal('${s.id}','padreTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.padreDireccion||''}" oninput="updateStudentFieldLocal('${s.id}','padreDireccion',this.value)" />
 <p class="section-title">🧑 Datos del tutor (si aplica)</p>
-<input class="full" placeholder="Nombre completo" value="${s.tutorNombre||''}" oninput="updateStudentField('${s.id}','tutorNombre',this.value)" />
-<input placeholder="CURP" value="${s.tutorCurp||''}" oninput="updateStudentField('${s.id}','tutorCurp',this.value)" />
-<input placeholder="Teléfono" value="${s.tutorTelefono||''}" oninput="updateStudentField('${s.id}','tutorTelefono',this.value)" />
-<input class="full" placeholder="Dirección" value="${s.tutorDireccion||''}" oninput="updateStudentField('${s.id}','tutorDireccion',this.value)" />
+<input class="full" placeholder="Nombre completo" value="${s.tutorNombre||''}" oninput="updateStudentFieldLocal('${s.id}','tutorNombre',this.value)" />
+<input placeholder="CURP" value="${s.tutorCurp||''}" oninput="updateStudentFieldLocal('${s.id}','tutorCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.tutorTelefono||''}" oninput="updateStudentFieldLocal('${s.id}','tutorTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.tutorDireccion||''}" oninput="updateStudentFieldLocal('${s.id}','tutorDireccion',this.value)" />
+<div class="full row-flex" style="margin-top:6px;">
+<button class="btn btn-green" style="width:auto;flex:1;" onclick="saveStudentEdits('${s.id}')">💾 Guardar cambios</button>
+<button class="btn btn-red" style="width:auto;flex:1;" onclick="deleteStudentConfirm('${s.id}','${s.name.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
+</div>
 </div>`;
 }
 html += '</div>';
