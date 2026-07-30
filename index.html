@@ -6,6 +6,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -117,14 +118,14 @@ const FIREBASE_CONFIG = {
   appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
 
-let auth = null, db = null;
+let auth = null, db = null, storage = null;
 let studentsRef = null, schoolRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
 user: null,
 authError: '',
-tab: 'alumnos',
+tab: 'inicio',
 students: [],
 schoolInfo: { nombre: '', cct: '', autoridadNombre: '', autoridadCargo: 'DIRECTOR(A)' },
 selectedGrade: '1°',
@@ -136,7 +137,7 @@ importSummary: null
 };
 function emptyExtra() {
 return {
-curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'',
+foto:'', curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'',
 madreNombre:'', madreCurp:'', madreTelefono:'', madreDireccion:'',
 padreNombre:'', padreCurp:'', padreTelefono:'', padreDireccion:'',
 tutorNombre:'', tutorCurp:'', tutorTelefono:'', tutorDireccion:''
@@ -191,6 +192,7 @@ function initFirebase() {
 firebase.initializeApp(state.fbConfig);
 auth = firebase.auth();
 db = firebase.database();
+storage = firebase.storage();
 studentsRef = db.ref(DB_ROOT + '/students');
 schoolRef = db.ref(DB_ROOT + '/schoolInfo');
 auth.onAuthStateChanged(u => {
@@ -369,6 +371,54 @@ XLSX.utils.book_append_sheet(wb, ws, 'Alumnos');
 XLSX.writeFile(wb, 'alumnos_calificaciones.xlsx');
 showToast('Excel descargado');
 }
+function uploadImage(file, path, onDone) {
+if (!file) return;
+if (!storage) { showToast('Storage no disponible'); return; }
+showToast('Subiendo imagen...');
+const ref = storage.ref(path);
+ref.put(file).then(snap => snap.ref.getDownloadURL()).then(url => onDone(url)).catch(err => showToast('Error al subir: '+err.message));
+}
+function uploadSchoolLogo(event) {
+const file = event.target.files && event.target.files[0];
+if (!file) return;
+uploadImage(file, 'escuela/logo_'+Date.now()+'_'+file.name, url => {
+state.schoolInfo.logoURL = url;
+schoolRef.update({ logoURL: url });
+showToast('Logo actualizado');
+render();
+});
+}
+function uploadStudentPhoto(id, event) {
+const file = event.target.files && event.target.files[0];
+if (!file) return;
+uploadImage(file, 'alumnos/'+id+'_'+Date.now()+'_'+file.name, url => {
+studentsRef.child(id).update({ foto: url });
+showToast('Foto actualizada');
+});
+}
+const DEMO_NOMBRES = ['Ana','Luis','María','Carlos','Sofía','Diego','Valeria','José','Camila','Fernando','Regina','Emiliano','Ximena','Andrés','Renata','Iker','Paola','Sebastián','Mariana','Gael','Daniela','Santiago','Fernanda','Alexander'];
+const DEMO_APELLIDOS = ['Pérez','García','López','Martínez','Hernández','González'];
+function generarCalifDemo() { return Math.round((Math.random()*3+7)*10)/10; }
+function loadDemoData() {
+if (!confirm('Esto agregará 4 alumnos de ejemplo en cada uno de los 6 grados (24 en total), con calificaciones ya capturadas. ¿Continuar?')) return;
+let idx = 0;
+GRADOS.forEach(grado => {
+for (let i=0;i<4;i++) {
+const name = DEMO_NOMBRES[idx % DEMO_NOMBRES.length] + ' ' + DEMO_APELLIDOS[idx % DEMO_APELLIDOS.length];
+idx++;
+const id = studentsRef.push().key;
+const grades = {};
+MATERIAS.forEach(m => { grades[m] = [generarCalifDemo(), generarCalifDemo(), generarCalifDemo()]; });
+studentsRef.child(id).set({ name, grade: grado, grades, observaciones: {}, ...emptyExtra() });
+}
+});
+showToast('24 alumnos de ejemplo agregados');
+}
+function clearAllStudents() {
+if (!confirm('¿Seguro que quieres borrar TODOS los alumnos? Esta acción no se puede deshacer.')) return;
+studentsRef.remove();
+showToast('Todos los alumnos fueron eliminados');
+}
 function setTab(t) { state.tab = t; state.boletaStudentId = null; render(); }
 function setGrade(g) { state.selectedGrade = g; render(); }
 function setDiplomaGrade(g) { state.diplomaGrade = g; render(); }
@@ -409,7 +459,7 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -420,12 +470,37 @@ return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
 ).join('') + '</div>';
 }
 function renderTabContent() {
+if (state.tab === 'inicio') return renderInicio();
 if (state.tab === 'alumnos') return renderAlumnos();
 if (state.tab === 'calificaciones') return renderCalificaciones();
 if (state.tab === 'boletas') return state.boletaStudentId ? renderBoletaDetail() : renderBoletaList();
 if (state.tab === 'diplomas') return renderDiplomas();
 if (state.tab === 'datos') return renderDatos();
 return '';
+}
+function renderInicio() {
+const si = state.schoolInfo;
+return `
+<div class="card" style="text-align:center;">
+<div style="width:96px;height:96px;border-radius:16px;background:#f3f4f6;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2em;">🏫</span>`}
+</div>
+<p style="font-weight:700;font-size:1.05em;margin-bottom:4px;">${si.nombre || 'Sistema Escolar'}</p>
+<label class="btn btn-gray" style="display:inline-block;width:auto;padding:8px 16px;cursor:pointer;margin-top:8px;">
+📷 Subir logo de la escuela
+<input type="file" accept="image/*" style="display:none;" onchange="uploadSchoolLogo(event)" />
+</label>
+</div>
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Información de la institución</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la escuela" value="${si.nombre||''}" oninput="updateSchoolField('nombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSchoolField('cct',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del encargado de la institución" value="${si.encargadoNombre||''}" oninput="updateSchoolField('encargadoNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.autoridadNombre||''}" oninput="updateSchoolField('autoridadNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" placeholder="Cargo del director (ej. DIRECTOR/A)" value="${si.autoridadCargo||''}" oninput="updateSchoolField('autoridadCargo',this.value)" />
+</div>
+<button class="btn btn-blue" onclick="setTab('alumnos')">Continuar a Alumnos →</button>
+`;
 }
 function renderAlumnos() {
 const list = state.students.filter(s => s.grade === state.selectedGrade);
@@ -446,6 +521,7 @@ const edad = calcularEdad(s.fechaNacimiento, s.curp);
 const editing = state.editingStudentId === s.id;
 html += `<div class="card">
 <div class="student-row">
+${s.foto ? `<img src="${s.foto}" style="width:36px;height:36px;border-radius:999px;object-fit:cover;margin-right:10px;flex-shrink:0;" />` : ''}
 <div class="info" onclick="toggleEdit('${s.id}')">
 <p class="name">${s.name}</p>
 <p class="avg">Promedio: ${avg!==null?avg.toFixed(1):'—'} ${edad!==null?`· ${edad} años`:''} ${editing?'▲':'▼ datos'}</p>
@@ -454,6 +530,15 @@ html += `<div class="card">
 </div>`;
 if (editing) {
 html += `<div class="edit-panel">
+<div class="full" style="display:flex;align-items:center;gap:10px;">
+<div style="width:48px;height:48px;border-radius:999px;overflow:hidden;background:#f3f4f6;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+${s.foto ? `<img src="${s.foto}" style="width:100%;height:100%;object-fit:cover;" />` : '📷'}
+</div>
+<label style="font-size:0.75em;color:#2563eb;cursor:pointer;">
+Subir foto del alumno
+<input type="file" accept="image/*" style="display:none;" onchange="uploadStudentPhoto('${s.id}', event)" />
+</label>
+</div>
 <input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateStudentField('${s.id}','name',this.value)" />
 <select onchange="updateStudentField('${s.id}','grade',this.value); setTimeout(render,300);">
 ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('')}
@@ -651,14 +736,15 @@ html += `<div class="diploma-card" style="background:${bgs[idx]};">
 return html;
 }
 function renderDatos() {
-const si = state.schoolInfo;
 let html = `
 <div class="card">
-<p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Datos de la escuela (para boletas)</p>
-<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la escuela" value="${si.nombre||''}" oninput="updateSchoolField('nombre',this.value)" />
-<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSchoolField('cct',this.value)" />
-<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la autoridad educativa" value="${si.autoridadNombre||''}" oninput="updateSchoolField('autoridadNombre',this.value)" />
-<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" placeholder="Cargo (ej. DIRECTOR/A)" value="${si.autoridadCargo||''}" oninput="updateSchoolField('autoridadCargo',this.value)" />
+<p style="font-size:0.8em;color:#6b7280;">🏫 Los datos de la escuela, director y logo se editan en la pestaña <strong>Inicio</strong>.</p>
+</div>
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">🧪 Datos de ejemplo</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Crea 4 alumnos de prueba en cada uno de los 6 grados, con calificaciones ya capturadas.</p>
+<button class="btn btn-purple" style="margin-bottom:8px;" onclick="loadDemoData()">➕ Cargar 24 alumnos de ejemplo</button>
+<button class="btn btn-red" onclick="clearAllStudents()">🗑️ Borrar todos los alumnos</button>
 </div>
 <div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:4px;">📥 Importar alumnos y calificaciones</p>
