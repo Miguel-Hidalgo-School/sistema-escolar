@@ -494,14 +494,23 @@ if (!auth) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div
 if (!state.user) { app.innerHTML = renderLogin(); return; }
 app.innerHTML = renderTopbar() + renderTabs() + '<main>' + renderTabContent() + '</main>';
 }
+function updateLoginInitial() {
+const email = document.getElementById('loginEmail').value.trim();
+const badge = document.getElementById('loginInitialBadge');
+if (badge) badge.textContent = email ? email.slice(0,2).toUpperCase() : '🧒👧';
+}
 function renderLogin() {
 return `
 <div class="center-screen">
 <div class="login-card">
-<div class="avatar">JC</div>
+<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:8px;">
+<div style="width:52px;height:52px;border-radius:14px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:1.6em;">📚</div>
+<div class="avatar" style="margin:0;">JC</div>
+<div id="loginInitialBadge" style="width:52px;height:52px;border-radius:14px;background:#fdf2f8;display:flex;align-items:center;justify-content:center;font-size:1.3em;font-weight:700;color:#be185d;">🧒👧</div>
+</div>
 <h1>Sistema Escolar</h1>
 <p class="sub">Matrícula · Calificaciones · Diplomas</p>
-<div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarria.edu.com" /></div>
+<div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarria.edu.com" oninput="updateLoginInitial()" /></div>
 <div class="field"><input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')handleLoginSubmit()" /></div>
 <button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
 ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
