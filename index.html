@@ -7,7 +7,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -198,7 +197,6 @@ function initFirebase() {
 firebase.initializeApp(state.fbConfig);
 auth = firebase.auth();
 db = firebase.database();
-storage = firebase.storage();
 studentsRef = db.ref(DB_ROOT + '/students');
 schoolRef = db.ref(DB_ROOT + '/schoolInfo');
 auth.onAuthStateChanged(u => {
@@ -419,30 +417,47 @@ XLSX.utils.book_append_sheet(wb, ws, 'Alumnos');
 XLSX.writeFile(wb, 'alumnos_calificaciones.xlsx');
 showToast('Excel descargado');
 }
-function uploadImage(file, path, onDone) {
-if (!file) return;
-if (!storage) { showToast('Storage no disponible'); return; }
-showToast('Subiendo imagen...');
-const ref = storage.ref(path);
-ref.put(file).then(snap => snap.ref.getDownloadURL()).then(url => onDone(url)).catch(err => showToast('Error al subir: '+err.message));
+function resizeImageToBase64(file, maxSize, quality, onDone, onError) {
+const reader = new FileReader();
+reader.onload = (e) => {
+const img = new Image();
+img.onload = () => {
+let w = img.width, h = img.height;
+if (w > h) { if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; } }
+else { if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; } }
+const canvas = document.createElement('canvas');
+canvas.width = w; canvas.height = h;
+const ctx = canvas.getContext('2d');
+ctx.drawImage(img, 0, 0, w, h);
+onDone(canvas.toDataURL('image/jpeg', quality));
+};
+img.onerror = () => onError && onError();
+img.src = e.target.result;
+};
+reader.onerror = () => onError && onError();
+reader.readAsDataURL(file);
 }
 function uploadSchoolLogo(event) {
 const file = event.target.files && event.target.files[0];
 if (!file) return;
-uploadImage(file, 'escuela/logo_'+Date.now()+'_'+file.name, url => {
-state.schoolInfo.logoURL = url;
-schoolRef.update({ logoURL: url });
-showToast('Logo actualizado');
+showToast('Procesando logo...');
+resizeImageToBase64(file, 300, 0.75, (base64) => {
+if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
+state.schoolInfo.logoURL = base64;
+schoolRef.update({ logoURL: base64 });
+showToast('✅ Logo actualizado');
 render();
-});
+}, () => showToast('❌ Error al procesar la imagen'));
 }
 function uploadStudentPhoto(id, event) {
 const file = event.target.files && event.target.files[0];
 if (!file) return;
-uploadImage(file, 'alumnos/'+id+'_'+Date.now()+'_'+file.name, url => {
-studentsRef.child(id).update({ foto: url });
-showToast('Foto actualizada');
-});
+showToast('Procesando foto...');
+resizeImageToBase64(file, 200, 0.7, (base64) => {
+if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
+studentsRef.child(id).update({ foto: base64 });
+showToast('✅ Foto actualizada');
+}, () => showToast('❌ Error al procesar la imagen'));
 }
 const DEMO_NOMBRES = ['Ana','Luis','María','Carlos','Sofía','Diego','Valeria','José','Camila','Fernando','Regina','Emiliano','Ximena','Andrés','Renata','Iker','Paola','Sebastián','Mariana','Gael','Daniela','Santiago','Fernanda','Alexander'];
 const DEMO_APELLIDOS = ['Pérez','García','López','Martínez','Hernández','González'];
