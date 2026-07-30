@@ -132,7 +132,9 @@ configDone: true,
 fbConfig: FIREBASE_CONFIG,
 user: null,
 authError: '',
+nivel: null,
 tab: 'inicio',
+secTab: 'inicio',
 tabHistory: [],
 students: [],
 schoolInfo: { nombre: '', cct: '', autoridadNombre: '', autoridadCargo: 'DIRECTOR(A)' },
@@ -143,7 +145,7 @@ obsPeriodo: {},
 boletaStudentId: null,
 importSummary: null,
 secStudents: [],
-secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '' },
+secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '' },
 secSelectedGrade: '1°',
 secEditingId: null,
 secReportGrade: null
@@ -471,6 +473,18 @@ showToast('✅ Logo actualizado');
 render();
 }, () => showToast('❌ Error al procesar la imagen'));
 }
+function uploadSecLogo(event) {
+const file = event.target.files && event.target.files[0];
+if (!file) return;
+showToast('Procesando logo...');
+resizeImageToBase64(file, 300, 0.75, (base64) => {
+if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
+state.secSchoolInfo.logoURL = base64;
+secSchoolRef.update({ logoURL: base64 });
+showToast('✅ Logo actualizado');
+render();
+}, () => showToast('❌ Error al procesar la imagen'));
+}
 function uploadStudentPhoto(id, event) {
 const file = event.target.files && event.target.files[0];
 if (!file) return;
@@ -578,26 +592,51 @@ secSchoolRef.update(pendingSecSchoolInfo);
 pendingSecSchoolInfo = {};
 showToast('💾 Datos guardados');
 }
-function openSecReporte(grade) { state.secReportGrade = grade; state.tabHistory.push('secundaria'); render(); }
+function openSecReporte(grade) {
+state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
+state.secReportGrade = grade;
+render();
+}
+function selectNivel(n) {
+state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
+state.nivel = n;
+state.tab = 'inicio';
+state.secTab = 'inicio';
+render();
+}
+function backToNivelSelector() {
+state.nivel = null;
+state.tabHistory = [];
+render();
+}
 function setTab(t) {
-if (state.tab !== t) state.tabHistory.push(state.tab);
+state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
 state.tab = t;
 state.boletaStudentId = null;
+render();
+}
+function setSecTab(t) {
+state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
+state.secTab = t;
 state.secReportGrade = null;
 render();
 }
 function goBack() {
-if (state.secReportGrade !== null) { state.secReportGrade = null; state.tabHistory.pop(); render(); return; }
-if (state.boletaStudentId !== null) { state.boletaStudentId = null; render(); return; }
 const prev = state.tabHistory.pop();
-state.tab = prev !== undefined ? prev : 'inicio';
+if (!prev) { state.nivel = null; render(); return; }
+state.nivel = prev.nivel;
+state.tab = prev.tab;
+state.secTab = prev.secTab;
+state.secReportGrade = prev.secReportGrade;
+state.boletaStudentId = prev.boletaStudentId;
 render();
 }
 function renderNavBar() {
-if (state.tab === 'inicio') return '';
+const home = state.nivel === 'secundaria' ? "setSecTab('inicio')" : "setTab('inicio')";
 return `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
 <button class="btn btn-gray" style="width:auto;flex:1;padding:8px 12px;font-size:0.85em;" onclick="goBack()">← Atrás</button>
-<button class="btn btn-gray" style="width:auto;flex:1;padding:8px 12px;font-size:0.85em;" onclick="setTab('inicio')">🏠 Principal</button>
+<button class="btn btn-gray" style="width:auto;flex:1;padding:8px 12px;font-size:0.85em;" onclick="${home}">🏠 Inicio</button>
+<button class="btn btn-gray" style="width:auto;flex:1;padding:8px 12px;font-size:0.85em;" onclick="backToNivelSelector()">🔀 Nivel</button>
 </div>`;
 }
 function setGrade(g) { state.selectedGrade = g; render(); }
@@ -609,7 +648,12 @@ function render() {
 const app = document.getElementById('app');
 if (!auth) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
 if (!state.user) { app.innerHTML = renderLogin(); return; }
+if (!state.nivel) { app.innerHTML = renderTopbarSimple() + renderNivelSelector(); return; }
+if (state.nivel === 'primaria') {
 app.innerHTML = renderTopbar() + renderTabs() + '<main>' + renderTabContent() + '</main>';
+} else {
+app.innerHTML = renderTopbar() + renderSecTabs() + '<main>' + renderSecTabContent() + '</main>';
+}
 }
 function updateLoginInitial() {
 const email = document.getElementById('loginEmail').value.trim();
@@ -635,11 +679,41 @@ ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
 </div>
 </div>`;
 }
+function renderTopbarSimple() {
+const name = state.user.email;
+return `
+<header class="topbar">
+<h1>Sistema Escolar</h1>
+<div class="userchip">
+<span>${name}</span>
+<div class="av">${name.slice(0,2).toUpperCase()}</div>
+<button onclick="handleLogout()">Salir</button>
+</div>
+</header>`;
+}
+function renderNivelSelector() {
+return `
+<main>
+<p style="text-align:center;color:#6b7280;font-size:0.85em;margin-bottom:16px;">¿Con qué nivel educativo quieres trabajar?</p>
+<div style="display:flex;flex-direction:column;gap:14px;">
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('primaria')">
+<p style="font-size:2.2em;margin-bottom:6px;">🎒</p>
+<p style="font-weight:700;font-size:1.2em;">PRIMARIA</p>
+<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 6° · Boletas y diplomas</p>
+</div>
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#059669,#065f46);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('secundaria')">
+<p style="font-size:2.2em;margin-bottom:6px;">🏫</p>
+<p style="font-weight:700;font-size:1.2em;">SECUNDARIA</p>
+<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 3° · Reporte por materia</p>
+</div>
+</div>
+</main>`;
+}
 function renderTopbar() {
 const name = state.user.email;
 return `
 <header class="topbar">
-<h1>Matrícula</h1>
+<h1>${state.nivel === 'secundaria' ? 'Secundaria' : 'Matrícula'}</h1>
 <div class="userchip">
 <span>${name}</span>
 <div class="av">${name.slice(0,2).toUpperCase()}</div>
@@ -648,9 +722,15 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['secundaria','Secundaria'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`
+).join('') + '</nav>';
+}
+function renderSecTabs() {
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos']];
+return '<nav class="tabs">' + tabs.map(([id,label]) =>
+`<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderGradePills(cssClass, activeGrade, onclickFn) {
@@ -665,8 +745,14 @@ if (state.tab === 'alumnos') return nav + renderAlumnos();
 if (state.tab === 'calificaciones') return nav + renderCalificaciones();
 if (state.tab === 'boletas') return nav + (state.boletaStudentId ? renderBoletaDetail() : renderBoletaList());
 if (state.tab === 'diplomas') return nav + renderDiplomas();
-if (state.tab === 'secundaria') return nav + (state.secReportGrade ? renderSecReporte() : renderSecundaria());
 if (state.tab === 'datos') return nav + renderDatos();
+return '';
+}
+function renderSecTabContent() {
+const nav = renderNavBar();
+if (state.secReportGrade) return nav + renderSecReporte();
+if (state.secTab === 'inicio') return renderSecInicio();
+if (state.secTab === 'alumnos') return nav + renderSecAlumnos();
 return '';
 }
 function renderInicio() {
@@ -696,6 +782,7 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 </div>
 </div>
 <button class="btn btn-blue" onclick="setTab('alumnos')">Continuar a Alumnos →</button>
+<button class="btn btn-gray" style="margin-top:8px;" onclick="backToNivelSelector()">🔀 Cambiar nivel educativo</button>
 `;
 }
 function renderAlumnos() {
@@ -934,19 +1021,35 @@ html += `<div class="diploma-card" style="background:${bgs[idx]};">
 });
 return html;
 }
-function renderSecundaria() {
+function renderSecInicio() {
 const si = state.secSchoolInfo;
-const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade);
-let html = `
+return `
+<div class="inicio-hero" style="background:linear-gradient(135deg,#059669,#065f46);">
+<div class="logo-box">
+${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2.2em;">🏫</span>`}
+</div>
+<p style="font-weight:700;font-size:1.1em;">${si.nombre || 'Secundaria'}</p>
+<p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Reportes por materia y grado</p>
+<label class="upload-label">
+📷 Subir logo de la secundaria
+<input type="file" accept="image/*" style="display:none;" onchange="uploadSecLogo(event)" />
+</label>
+</div>
 <div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Datos de Secundaria (para el reporte)</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la secundaria" value="${si.nombre||''}" oninput="updateSecSchoolFieldLocal('nombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSecSchoolFieldLocal('cct',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la materia" value="${si.materia||''}" oninput="updateSecSchoolFieldLocal('materia',this.value)" />
-<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:10px;" placeholder="Nombre del docente" value="${si.docente||''}" oninput="updateSecSchoolFieldLocal('docente',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre del docente" value="${si.docente||''}" oninput="updateSecSchoolFieldLocal('docente',this.value)" />
 <button class="btn btn-green" onclick="saveSecSchoolInfo()">💾 Guardar datos</button>
-</div>`;
-html += `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
+</div>
+<button class="btn btn-blue" onclick="setSecTab('alumnos')">Continuar a Alumnos →</button>
+<button class="btn btn-gray" style="margin-top:8px;" onclick="backToNivelSelector()">🔀 Cambiar nivel educativo</button>
+`;
+}
+function renderSecAlumnos() {
+const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade);
+let html = `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
 html += `
 <div class="card">
 <div class="row-flex">
@@ -995,7 +1098,7 @@ const list = state.secStudents.filter(s => s.grade === grade);
 let html = `<div class="card boleta-sheet">
 <div class="boleta-header">
 <div style="width:56px;flex-shrink:0;text-align:center;">
-<div class="badge-circle" style="background:#065f46;margin:0 auto;">STE</div>
+${si.logoURL ? `<img src="${si.logoURL}" style="width:34px;height:34px;border-radius:999px;object-fit:cover;margin:0 auto;display:block;" />` : `<div class="badge-circle" style="background:#065f46;margin:0 auto;">STE</div>`}
 <p style="font-size:7px;color:#9ca3af;margin-top:4px;">Secundarias Técnicas</p>
 </div>
 <div class="center-text">
