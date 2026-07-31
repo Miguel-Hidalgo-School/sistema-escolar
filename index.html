@@ -94,10 +94,24 @@ textarea.obs-input { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px;
 .empty-note { text-align: center; color: #9ca3af; font-size: 0.85em; padding: 30px 0; }
 .info-banner { background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #4338ca; margin-bottom: 12px; }
 .blue-banner { background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #1d4ed8; }
+.honor-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.honor-grade-box { background: #fff; border-radius: 16px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 2px dashed #f0abfc; }
+.honor-grade-title { text-align: center; font-weight: 800; font-size: 0.85em; color: #7e22ce; margin-bottom: 8px; }
+.honor-medals-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.honor-medal-card { flex: 1; min-width: 82px; max-width: 120px; border-radius: 14px; text-align: center; padding: 8px 4px; }
+.honor-medal-emoji { font-size: 1.1em; }
+.honor-photo { width: 40px; height: 40px; border-radius: 999px; background: #fff; border: 3px solid #ccc; margin: 3px auto 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 1.1em; }
+.honor-name { font-weight: 700; font-size: 0.68em; color: #1f2937; line-height: 1.15; }
+.honor-avg { font-size: 0.62em; color: #374151; margin-top: 1px; }
+.honor-empty { font-size: 0.75em; color: #9ca3af; text-align: center; width: 100%; padding: 10px 0; }
 @media print {
 header.topbar, nav.tabs, .no-print { display: none !important; }
 main { max-width: 100%; padding: 0; }
 body { background: #fff; }
+#honorPage { grid-template-columns: 1fr 1fr 1fr !important; gap: 6px !important; }
+#honorPage .honor-grade-box { break-inside: avoid; padding: 6px !important; }
+#honorPage .honor-photo { width: 32px !important; height: 32px !important; }
+#honorPage .honor-name { font-size: 0.6em !important; }
 }
 </style>
 </head>
@@ -108,6 +122,7 @@ body { background: #fff; }
 // ---------------- Config ----------------
 const GRADOS = ['1°','2°','3°','4°','5°','6°'];
 const GRADOS_SEC = ['1°','2°','3°'];
+const GRUPOS_SEC = ['A','B','C','D','E','F'];
 const MATERIAS = ['Lenguajes','Saberes y Pensamiento Científico','Ética, Naturaleza y Sociedades','De lo Humano y lo Comunitario'];
 const PERIODOS_LABEL = ['1er','2do','3er'];
 const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - Junio'];
@@ -149,6 +164,7 @@ honorPeriodo: 0,
 secStudents: [],
 secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '' },
 secSelectedGrade: '1°',
+secSelectedGrupo: 'A',
 secEditingId: null,
 secReportGrade: null
 };
@@ -522,6 +538,7 @@ showToast('Todos los alumnos fueron eliminados');
 }
 // ---------------- Secundaria ----------------
 function setSecGrade(g) { state.secSelectedGrade = g; render(); }
+function setSecGrupo(g) { state.secSelectedGrupo = g; render(); }
 function toggleSecEdit(id) { state.secEditingId = state.secEditingId === id ? null : id; render(); }
 function addSecStudent() {
 const input = document.getElementById('newSecStudentName');
@@ -530,7 +547,7 @@ const name = input.value.trim();
 if (!name) return;
 if (btn) { btn.textContent = 'Agregando...'; btn.disabled = true; }
 const id = secStudentsRef.push().key;
-secStudentsRef.child(id).set({ name, grade: state.secSelectedGrade, periodos: [null,null,null] })
+secStudentsRef.child(id).set({ name, grade: state.secSelectedGrade, grupo: state.secSelectedGrupo, periodos: [null,null,null] })
 .then(() => showToast('✅ Alumno agregado'))
 .catch(() => showToast('❌ Error al agregar'))
 .finally(() => { if (btn) { btn.textContent = 'Agregar'; btn.disabled = false; } });
@@ -602,9 +619,9 @@ secSchoolRef.update(pendingSecSchoolInfo);
 pendingSecSchoolInfo = {};
 showToast('💾 Datos guardados');
 }
-function openSecReporte(grade) {
+function openSecReporte(grade, grupo) {
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
-state.secReportGrade = grade;
+state.secReportGrade = { grade, grupo };
 render();
 }
 function selectNivel(n) {
@@ -1066,18 +1083,19 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 `;
 }
 function renderSecAlumnos() {
-const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade);
+const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade && (s.grupo || 'A') === state.secSelectedGrupo);
 let html = `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
+html += `<div class="grade-pills purple">` + GRUPOS_SEC.map(gr => `<button class="${gr===state.secSelectedGrupo?'active':''}" onclick="setSecGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
 html += `
 <div class="card">
 <div class="row-flex">
-<input id="newSecStudentName" placeholder="Nombre del alumno (${state.secSelectedGrade} Secundaria)" onkeydown="if(event.key==='Enter')addSecStudent()" />
+<input id="newSecStudentName" placeholder="Nombre del alumno (${state.secSelectedGrade} ${state.secSelectedGrupo})" onkeydown="if(event.key==='Enter')addSecStudent()" />
 <button class="btn btn-blue" id="addSecStudentBtn" style="width:auto;padding:10px 16px;" onclick="addSecStudent()">Agregar</button>
 </div>
 </div>
-<button class="btn btn-purple" style="margin-bottom:12px;" onclick="openSecReporte('${state.secSelectedGrade}')">📄 Ver reporte de ${state.secSelectedGrade} Secundaria</button>`;
+<button class="btn btn-purple" style="margin-bottom:12px;" onclick="openSecReporte('${state.secSelectedGrade}','${state.secSelectedGrupo}')">📄 Ver reporte de ${state.secSelectedGrade} ${state.secSelectedGrupo} Secundaria</button>`;
 if (!list.length) {
-html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} de Secundaria aún.</p>`;
+html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} Grupo ${state.secSelectedGrupo} de Secundaria aún.</p>`;
 } else {
 list.forEach(s => {
 const { suma } = secStudentFinal(s);
@@ -1093,6 +1111,14 @@ html += `<div class="card">
 if (editing) {
 html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6;">
 <input class="full" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:0.8em;margin-bottom:8px;" placeholder="Nombre" value="${s.name}" oninput="updateSecStudentFieldLocal('${s.id}','name',this.value)" />
+<div class="row-flex" style="margin-bottom:10px;">
+<select style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;" onchange="updateSecStudentFieldLocal('${s.id}','grade',this.value)">
+${GRADOS_SEC.map(g => `<option value="${g}" ${(s.grade||'1°')===g?'selected':''}>${g}</option>`).join('')}
+</select>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;" onchange="updateSecStudentFieldLocal('${s.id}','grupo',this.value)">
+${GRUPOS_SEC.map(g => `<option value="${g}" ${(s.grupo||'A')===g?'selected':''}>Grupo ${g}</option>`).join('')}
+</select>
+</div>
 <div class="row-flex" style="margin-bottom:10px;">
 <input type="number" step="0.1" placeholder="P1" value="${p[0]??''}" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;text-align:center;" oninput="updateSecGradeLive('${s.id}',0,this.value)" onchange="commitSecGrade('${s.id}')" />
 <input type="number" step="0.1" placeholder="P2" value="${p[1]??''}" style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:8px;text-align:center;" oninput="updateSecGradeLive('${s.id}',1,this.value)" onchange="commitSecGrade('${s.id}')" />
@@ -1110,9 +1136,9 @@ html += '</div>';
 return html;
 }
 function renderSecReporte() {
-const grade = state.secReportGrade;
+const { grade, grupo } = state.secReportGrade || {};
 const si = state.secSchoolInfo;
-const list = state.secStudents.filter(s => s.grade === grade);
+const list = state.secStudents.filter(s => s.grade === grade && (s.grupo || 'A') === grupo);
 let html = `<div class="card boleta-sheet">
 <div class="boleta-header">
 <div style="width:56px;flex-shrink:0;text-align:center;">
@@ -1123,7 +1149,7 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:34px;height:34px;border-ra
 <p style="font-weight:700;font-size:10px;">${si.nombre || 'SECUNDARIA TÉCNICA'}</p>
 <p style="font-size:9px;color:#6b7280;">CCT: ${si.cct||'—'}</p>
 <p style="font-weight:700;font-size:10px;margin-top:2px;">REPORTE DE CALIFICACIONES</p>
-<p style="font-size:9px;color:#6b7280;">${grade} GRADO · CICLO ${getCicloEscolar()}</p>
+<p style="font-size:9px;color:#6b7280;">${grade} GRADO GRUPO ${grupo} · CICLO ${getCicloEscolar()}</p>
 </div>
 <div style="width:56px;flex-shrink:0;"></div>
 </div>
@@ -1207,44 +1233,48 @@ html += `<div style="border-top:1px dashed #d1d5db; margin-top:20px; padding-top
 return html;
 }
 function renderCuadroHonor() {
-let html = `<div style="text-align:center;margin-bottom:14px;">
+const GRADO_NOMBRE = { '1°':'Primer Grado', '2°':'Segundo Grado', '3°':'Tercer Grado', '4°':'Cuarto Grado', '5°':'Quinto Grado', '6°':'Sexto Grado' };
+let html = `<div style="text-align:center;margin-bottom:10px;">
 <p style="font-size:1.6em;">🌟🏆🌟</p>
 <p style="font-weight:800;font-size:1.2em;background:linear-gradient(90deg,#f59e0b,#ec4899,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;">Cuadro de Honor</p>
-<p style="font-size:0.78em;color:#6b7280;">¡Los mejores promedios del salón! 🎉</p>
+<p style="font-size:0.78em;color:#6b7280;">¡Los mejores promedios de la escuela! 🎉</p>
 </div>`;
-html += `<div class="grade-pills">` + GRADOS.map(g => `<button class="${g===state.honorGrade?'active':''}" onclick="setHonorGrade('${g}')">${g}</button>`).join('') + `</div>`;
-html += `<div class="periodo-pills" style="justify-content:center;">` + PERIODOS_LABEL.map((lbl,pi) => `<button class="${state.honorPeriodo===pi?'active':''}" onclick="setHonorPeriodo(${pi})" style="${state.honorPeriodo===pi?'background:#ec4899;':''}">${lbl} periodo</button>`).join('') + `</div>`;
+html += `<div class="periodo-pills no-print" style="justify-content:center;">` + PERIODOS_LABEL.map((lbl,pi) => `<button class="${state.honorPeriodo===pi?'active':''}" onclick="setHonorPeriodo(${pi})" style="${state.honorPeriodo===pi?'background:#ec4899;':''}">${lbl} periodo</button>`).join('') + `</div>`;
+const medalStyles = [
+{ bg: 'linear-gradient(135deg,#fde047,#f59e0b)', medal: '🥇', ring: '#f59e0b' },
+{ bg: 'linear-gradient(135deg,#e5e7eb,#9ca3af)', medal: '🥈', ring: '#9ca3af' },
+{ bg: 'linear-gradient(135deg,#fdba74,#c2410c)', medal: '🥉', ring: '#c2410c' }
+];
+html += `<div id="honorPage" class="honor-grid">`;
+GRADOS.forEach(g => {
 const ranked = state.students
-.filter(s => s.grade === state.honorGrade)
+.filter(s => s.grade === g)
 .map(s => ({ s, avg: studentPeriodoAvg(s, state.honorPeriodo) }))
 .filter(x => x.avg !== null)
 .sort((a,b) => b.avg - a.avg)
 .slice(0,3);
+html += `<div class="honor-grade-box">
+<p class="honor-grade-title">🎈 ${GRADO_NOMBRE[g]} 🎈</p>
+<div class="honor-medals-row">`;
 if (!ranked.length) {
-html += `<div class="card" style="text-align:center;padding:30px;">
-<p style="font-size:2em;">🎈🖍️🎈</p>
-<p style="color:#9ca3af;font-size:0.9em;margin-top:8px;">Aún no hay calificaciones capturadas en ${state.honorGrade} para este periodo.</p>
-</div>`;
+html += `<p class="honor-empty">Sin calificaciones aún</p>`;
 } else {
-const medalStyles = [
-{ bg: 'linear-gradient(135deg,#fde047,#f59e0b)', medal: '🥇', label: '1er Lugar', ring: '#f59e0b' },
-{ bg: 'linear-gradient(135deg,#e5e7eb,#9ca3af)', medal: '🥈', label: '2do Lugar', ring: '#9ca3af' },
-{ bg: 'linear-gradient(135deg,#fdba74,#c2410c)', medal: '🥉', label: '3er Lugar', ring: '#c2410c' }
-];
 ranked.forEach(({s, avg}, idx) => {
 const style = medalStyles[idx];
-html += `<div class="card" style="background:${style.bg};text-align:center;padding:20px;margin-bottom:14px;border-radius:22px;box-shadow:0 8px 20px rgba(0,0,0,0.15);">
-<p style="font-size:1.8em;">${style.medal}</p>
-<div style="width:88px;height:88px;border-radius:999px;background:#fff;border:4px solid ${style.ring};margin:6px auto 10px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-${s.foto ? `<img src="${s.foto}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2em;">🧒</span>`}
+html += `<div class="honor-medal-card" style="background:${style.bg};">
+<p class="honor-medal-emoji">${style.medal}</p>
+<div class="honor-photo" style="border-color:${style.ring};">
+${s.foto ? `<img src="${s.foto}" style="width:100%;height:100%;object-fit:cover;" />` : `<span>🧒</span>`}
 </div>
-<p style="font-weight:800;font-size:1.05em;color:#1f2937;">${style.label}</p>
-<p style="font-weight:700;font-size:1.1em;color:#1f2937;margin-top:2px;">${s.name}</p>
-<p style="font-size:0.85em;color:#374151;margin-top:2px;">⭐ Promedio: ${avg.toFixed(1)} ⭐</p>
+<p class="honor-name">${s.name}</p>
+<p class="honor-avg">⭐ ${avg.toFixed(1)}</p>
 </div>`;
 });
 }
-html += `<div class="no-print" style="margin-top:10px;">
+html += `</div></div>`;
+});
+html += `</div>`;
+html += `<div class="no-print" style="margin-top:14px;">
 <button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir Cuadro de Honor</button>
 </div>`;
 return html;
