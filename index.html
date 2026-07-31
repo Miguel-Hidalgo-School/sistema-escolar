@@ -144,6 +144,8 @@ editingStudentId: null,
 obsPeriodo: {},
 boletaStudentId: null,
 importSummary: null,
+honorGrade: '1°',
+honorPeriodo: 0,
 secStudents: [],
 secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '' },
 secSelectedGrade: '1°',
@@ -651,6 +653,13 @@ function setGrade(g) { state.selectedGrade = g; render(); }
 function setDiplomaGrade(g) { state.diplomaGrade = g; render(); }
 function openBoleta(id) { state.boletaStudentId = id; render(); }
 function closeBoleta() { state.boletaStudentId = null; render(); }
+function setHonorGrade(g) { state.honorGrade = g; render(); }
+function setHonorPeriodo(p) { state.honorPeriodo = p; render(); }
+function studentPeriodoAvg(s, periodoIdx) {
+const vals = [];
+MATERIAS.forEach(m => { const v = s.grades && s.grades[m] && s.grades[m][periodoIdx]; if (typeof v === 'number') vals.push(v); });
+return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+}
 // ---------------- Render ----------------
 function render() {
 const app = document.getElementById('app');
@@ -730,7 +739,7 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['boletas','Boletas'],['diplomas','Diplomas'],['honor','Cuadro de Honor'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -753,6 +762,7 @@ if (state.tab === 'alumnos') return nav + renderAlumnos();
 if (state.tab === 'calificaciones') return nav + renderCalificaciones();
 if (state.tab === 'boletas') return nav + (state.boletaStudentId ? renderBoletaDetail() : renderBoletaList());
 if (state.tab === 'diplomas') return nav + renderDiplomas();
+if (state.tab === 'honor') return nav + renderCuadroHonor();
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
@@ -1193,6 +1203,49 @@ html += `<div style="border-top:1px dashed #d1d5db; margin-top:20px; padding-top
 </div>
 <div class="no-print" style="margin-top:12px;">
 <button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+</div>`;
+return html;
+}
+function renderCuadroHonor() {
+let html = `<div style="text-align:center;margin-bottom:14px;">
+<p style="font-size:1.6em;">🌟🏆🌟</p>
+<p style="font-weight:800;font-size:1.2em;background:linear-gradient(90deg,#f59e0b,#ec4899,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;">Cuadro de Honor</p>
+<p style="font-size:0.78em;color:#6b7280;">¡Los mejores promedios del salón! 🎉</p>
+</div>`;
+html += `<div class="grade-pills">` + GRADOS.map(g => `<button class="${g===state.honorGrade?'active':''}" onclick="setHonorGrade('${g}')">${g}</button>`).join('') + `</div>`;
+html += `<div class="periodo-pills" style="justify-content:center;">` + PERIODOS_LABEL.map((lbl,pi) => `<button class="${state.honorPeriodo===pi?'active':''}" onclick="setHonorPeriodo(${pi})" style="${state.honorPeriodo===pi?'background:#ec4899;':''}">${lbl} periodo</button>`).join('') + `</div>`;
+const ranked = state.students
+.filter(s => s.grade === state.honorGrade)
+.map(s => ({ s, avg: studentPeriodoAvg(s, state.honorPeriodo) }))
+.filter(x => x.avg !== null)
+.sort((a,b) => b.avg - a.avg)
+.slice(0,3);
+if (!ranked.length) {
+html += `<div class="card" style="text-align:center;padding:30px;">
+<p style="font-size:2em;">🎈🖍️🎈</p>
+<p style="color:#9ca3af;font-size:0.9em;margin-top:8px;">Aún no hay calificaciones capturadas en ${state.honorGrade} para este periodo.</p>
+</div>`;
+} else {
+const medalStyles = [
+{ bg: 'linear-gradient(135deg,#fde047,#f59e0b)', medal: '🥇', label: '1er Lugar', ring: '#f59e0b' },
+{ bg: 'linear-gradient(135deg,#e5e7eb,#9ca3af)', medal: '🥈', label: '2do Lugar', ring: '#9ca3af' },
+{ bg: 'linear-gradient(135deg,#fdba74,#c2410c)', medal: '🥉', label: '3er Lugar', ring: '#c2410c' }
+];
+ranked.forEach(({s, avg}, idx) => {
+const style = medalStyles[idx];
+html += `<div class="card" style="background:${style.bg};text-align:center;padding:20px;margin-bottom:14px;border-radius:22px;box-shadow:0 8px 20px rgba(0,0,0,0.15);">
+<p style="font-size:1.8em;">${style.medal}</p>
+<div style="width:88px;height:88px;border-radius:999px;background:#fff;border:4px solid ${style.ring};margin:6px auto 10px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+${s.foto ? `<img src="${s.foto}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2em;">🧒</span>`}
+</div>
+<p style="font-weight:800;font-size:1.05em;color:#1f2937;">${style.label}</p>
+<p style="font-weight:700;font-size:1.1em;color:#1f2937;margin-top:2px;">${s.name}</p>
+<p style="font-size:0.85em;color:#374151;margin-top:2px;">⭐ Promedio: ${avg.toFixed(1)} ⭐</p>
+</div>`;
+});
+}
+html += `<div class="no-print" style="margin-top:10px;">
+<button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir Cuadro de Honor</button>
 </div>`;
 return html;
 }
