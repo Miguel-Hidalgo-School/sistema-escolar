@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Reporte Evaluativo Formativo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+body{overflow-x:hidden;}
+.tag-input{display:flex;gap:8px;margin-bottom:6px;}
+.tag-input input{flex:1;}
+select.phrase-picker{width:100%;font-size:11px;padding:6px 8px;border:1px dashed #93c5fd;border-radius:8px;background:#eff6ff;color:#1d4ed8;margin-bottom:6px;}
+.badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:999px;font-size:10px;font-weight:600;white-space:nowrap;}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans p-4 md:p-8">
+<div class="max-w-4xl mx-auto space-y-6" id="root"></div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+const DB_ROOT = 'Sistema Escolar';
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+const evalRef = db.ref(DB_ROOT + '/evaluaciones');
+const params = new URLSearchParams(window.location.search);
+const viewId = params.get('id');
+const root = document.getElementById('root');
+function icons() { lucide.createIcons(); }
+
+// ---------------- Catálogos de frases sugeridas ----------------
+const ESTADOS_PROCESO = ['Logrado','En Proceso','Requiere Apoyo'];
+const CALIFICACIONES = ['Sobresaliente','Notable','Aceptable','Requiere Apoyo'];
+function colorEstado(txt) {
+  if (txt === 'Logrado' || txt === 'Sobresaliente' || txt === 'Notable') return 'emerald';
+  if (txt === 'En Proceso' || txt === 'Aceptable') return 'amber';
+  return 'red';
+}
+const FRASES = {
+  observacion: [
+    "Entregó a tiempo y explicó los conceptos con claridad ante el grupo.",
+    "Mantiene el ritmo semanal pero requiere detallar más sus opiniones personales.",
+    "Demuestra un papel activo proponiendo ideas creativas para su equipo.",
+    "Expresa verbalmente sus reflexiones y comprende con facilidad las instrucciones de trabajo."
+  ],
+  fortalezas: [
+    "Comunicación asertiva: expresa sus ideas con claridad en clase y apoya activamente a sus compañeros.",
+    "Trabajo en equipo: muestra disposición para asumir roles de liderazgo en proyectos grupales.",
+    "Pensamiento reflexivo y disposición para aprender.",
+    "Excelente integración y trabajo en equipo."
+  ],
+  areas: [
+    "Se le dificulta mantener la atención durante tareas largas de escritura manual.",
+    "Requiere reforzar la puntualidad en la entrega de tareas.",
+    "Le cuesta trabajo autorregular sus emociones en actividades de juego libre o colaborativo."
+  ],
+  tareas: [
+    "Entrega sus tareas puntualmente y con excelente presentación.",
+    "Cumple con la mayoría de las tareas, pero requiere supervisión en la precisión de las indicaciones.",
+    "Presenta omisiones frecuentes en la entrega de tareas para la casa; se sugiere seguimiento en el hogar."
+  ],
+  convivencia: [
+    "Respeta los acuerdos de convivencia dentro y fuera del aula.",
+    "Muestra empatía, autorregulación y disposición para integrar a sus compañeros.",
+    "Le cuesta trabajo autorregular sus emociones en actividades de juego libre o colaborativo."
+  ],
+  recomendaciones: [
+    "Continuar motivando la lectura comprensiva mediante actividades grupales de análisis corto.",
+    "Dividir los proyectos de escritura larga en etapas de 15 minutos para evitar la fatiga."
+  ],
+  sugerencias: [
+    "Lectura diaria: leer 15 minutos al día en voz alta y pedirle que haga un breve resumen verbal de la historia.",
+    "Organización: revisar en conjunto la agenda de tareas antes de iniciar la tarde."
+  ]
+};
+function phrasePickerHTML(catalogKey, targetId) {
+  return `<select class="phrase-picker" onchange="appendPhrase('${targetId}', this)">
+    <option value="">💡 Elegir frase sugerida (se puede editar)...</option>
+    ${FRASES[catalogKey].map(f => `<option value="${f.replace(/"/g,'&quot;')}">${f}</option>`).join('')}
+  </select>`;
+}
+function appendPhrase(targetId, selectEl) {
+  const val = selectEl.value;
+  if (!val) return;
+  const target = document.getElementById(targetId);
+  target.value = target.value.trim() ? target.value.trim() + ' ' + val : val;
+  selectEl.selectedIndex = 0;
+  target.focus();
+}
+
+// ---------------- Listas dinámicas simples (fortalezas / áreas) ----------------
+const formState = { fortalezas: [''], areas: [''] };
+function renderTagList(containerId) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = formState[containerId].map((val, i) => `
+    <div class="tag-input">
+      <input value="${val.replace(/"/g,'&quot;')}" class="p-2 border border-slate-300 rounded-lg text-sm" oninput="updateTagValue('${containerId}', ${i}, this.value)" placeholder="Escribe o elige abajo" />
+      <button onclick="removeTag('${containerId}', ${i})" class="text-red-500 text-xs px-2">✕</button>
+    </div>`).join('') + `<button onclick="addTag('${containerId}')" class="text-xs text-blue-600 font-semibold mt-1 mb-2">+ Agregar</button>`;
+}
+function addTag(id) { formState[id].push(''); renderTagList(id); }
+function removeTag(id, i) { formState[id].splice(i,1); if(!formState[id].length) formState[id].push(''); renderTagList(id); }
+function updateTagValue(id, i, v) { formState[id][i] = v; }
+
+// ---------------- Logros (tarjetas con estado/calificación/observación) ----------------
+let logroItems = [];
+function nuevoLogro() { return { proyecto:'', estado:'Logrado', calificacion:'Sobresaliente', observacion:'' }; }
+function renderLogros() {
+  const c = document.getElementById('logrosBox');
+  c.innerHTML = logroItems.map((item, i) => `
+    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/50 mb-3">
+      <div class="flex justify-between items-center mb-2">
+        <input value="${item.proyecto.replace(/"/g,'&quot;')}" oninput="logroItems[${i}].proyecto=this.value" placeholder="Nombre del proyecto o evidencia" class="font-semibold text-sm p-1.5 border border-slate-300 rounded flex-1 mr-2" />
+        <button onclick="quitarLogro(${i})" class="text-red-500 text-xs px-2">✕</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <select onchange="logroItems[${i}].estado=this.value; renderLogros();" class="p-1.5 border border-slate-300 rounded text-xs">
+          ${ESTADOS_PROCESO.map(e => `<option ${item.estado===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+        <select onchange="logroItems[${i}].calificacion=this.value; renderLogros();" class="p-1.5 border border-slate-300 rounded text-xs">
+          ${CALIFICACIONES.map(e => `<option ${item.calificacion===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+      </div>
+      <div class="flex gap-2 mb-1">
+        <span class="badge bg-${colorEstado(item.estado)}-100 text-${colorEstado(item.estado)}-800 border border-${colorEstado(item.estado)}-200">${item.estado}</span>
+        <span class="badge bg-${colorEstado(item.calificacion)}-100 text-${colorEstado(item.calificacion)}-800 border border-${colorEstado(item.calificacion)}-200">${item.calificacion}</span>
+      </div>
+      ${phrasePickerHTML('observacion', 'obsLogro'+i)}
+      <textarea id="obsLogro${i}" rows="2" class="w-full p-2 border border-slate-300 rounded-lg text-sm" placeholder="Observación..." oninput="logroItems[${i}].observacion=this.value">${item.observacion}</textarea>
+    </div>`).join('') + `<button onclick="agregarLogro()" class="text-xs text-blue-600 font-semibold">+ Agregar logro / evidencia</button>`;
+  icons();
+}
+function agregarLogro() { logroItems.push(nuevoLogro()); renderLogros(); }
+function quitarLogro(i) { logroItems.splice(i,1); if(!logroItems.length) logroItems.push(nuevoLogro()); renderLogros(); }
+
+// ---------------- MODO ADMIN ----------------
+function renderAdmin() {
+  root.innerHTML = `
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2"><i data-lucide="clipboard-check" class="text-blue-600"></i> Nuevo Reporte Formativo</h1>
+    <p class="text-xs text-slate-500 mt-1">Usa las frases sugeridas (💡) o escribe tu propio texto — todo es editable. Al guardar, todo queda como texto normal.</p>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+    <label class="text-xs font-semibold text-slate-600">Alumno</label>
+    <select id="selAlumno" class="w-full p-2 border border-slate-300 rounded-lg text-sm"><option value="">Cargando alumnos...</option></select>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="text-xs font-semibold text-slate-600">Docente</label>
+      <input id="inpDocente" class="w-full p-2 border border-slate-300 rounded-lg text-sm" placeholder="Nombre del docente" /></div>
+      <div><label class="text-xs font-semibold text-slate-600">Periodo / cierre</label>
+      <input id="inpPeriodo" class="w-full p-2 border border-slate-300 rounded-lg text-sm" placeholder="Ej. Cierre de Mes (Julio 2026)" /></div>
+    </div>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><i data-lucide="award" class="text-emerald-600 w-4 h-4"></i> Logros y Progresos</h2>
+    <div id="logrosBox"></div>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><i data-lucide="sparkles" class="text-emerald-600 w-4 h-4"></i> Fortalezas</h2>
+    ${phrasePickerHTML('fortalezas', 'fortalezaHint')}
+    <input type="hidden" id="fortalezaHint" />
+    <div id="fortalezas"></div>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><i data-lucide="target" class="text-amber-600 w-4 h-4"></i> Áreas de Oportunidad</h2>
+    ${phrasePickerHTML('areas', 'areaHint')}
+    <input type="hidden" id="areaHint" />
+    <div id="areas"></div>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i data-lucide="clipboard-list" class="text-slate-600 w-4 h-4"></i> Desarrollo Formativo y Asistencia</h2>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Asistencia y puntualidad</label>
+      <input id="inpAsistencia" class="w-full p-2 border border-slate-300 rounded-lg text-sm" placeholder="Ej. 98% (Excelente)" />
+    </div>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Cumplimiento de tareas</label>
+      ${phrasePickerHTML('tareas', 'inpTareas')}
+      <textarea id="inpTareas" rows="2" class="w-full p-2 border border-slate-300 rounded-lg text-sm"></textarea>
+    </div>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Convivencia escolar</label>
+      ${phrasePickerHTML('convivencia', 'inpConvivencia')}
+      <textarea id="inpConvivencia" rows="2" class="w-full p-2 border border-slate-300 rounded-lg text-sm"></textarea>
+    </div>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+    <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i data-lucide="compass" class="text-indigo-600 w-4 h-4"></i> Compromisos y Plan de Acción</h2>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Recomendaciones del docente</label>
+      ${phrasePickerHTML('recomendaciones', 'inpRecomendaciones')}
+      <textarea id="inpRecomendaciones" rows="2" class="w-full p-2 border border-slate-300 rounded-lg text-sm"></textarea>
+    </div>
+    <div>
+      <label class="text-xs font-semibold text-slate-600">Sugerencias para el hogar</label>
+      ${phrasePickerHTML('sugerencias', 'inpSugerencias')}
+      <textarea id="inpSugerencias" rows="2" class="w-full p-2 border border-slate-300 rounded-lg text-sm"></textarea>
+    </div>
+  </div>
+
+  <button onclick="guardarEvaluacion()" id="btnGuardar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-sm flex items-center justify-center gap-2">
+    <i data-lucide="link" class="w-4 h-4"></i> Generar reporte y link para los padres
+  </button>
+  <div id="resultadoLink" class="hidden bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2"></div>
+  `;
+  icons();
+  logroItems = [nuevoLogro()];
+  renderLogros();
+  renderTagList('fortalezas');
+  renderTagList('areas');
+  cargarAlumnos();
+}
+
+function cargarAlumnos() {
+  const sel = document.getElementById('selAlumno');
+  const opciones = [];
+  db.ref(DB_ROOT + '/students').once('value').then(snap => {
+    const val = snap.val() || {};
+    Object.keys(val).forEach(id => opciones.push({ id, label: `${val[id].name} — ${val[id].grade} Primaria`, nivel: 'primaria' }));
+    return db.ref(DB_ROOT + '/secStudents').once('value');
+  }).then(snap => {
+    const val = snap.val() || {};
+    Object.keys(val).forEach(id => opciones.push({ id, label: `${val[id].name} — ${val[id].grade} ${val[id].grupo||''} Secundaria`, nivel: 'secundaria' }));
+    if (!opciones.length) { sel.innerHTML = '<option value="">No hay alumnos registrados todavía</option>'; return; }
+    sel.innerHTML = '<option value="">Selecciona un alumno...</option>' + opciones.map(o => `<option value="${o.id}|${o.nivel}">${o.label}</option>`).join('');
+  }).catch(() => { sel.innerHTML = '<option value="">Error al cargar alumnos</option>'; });
+}
+
+function guardarEvaluacion() {
+  const sel = document.getElementById('selAlumno');
+  if (!sel.value) { alert('Selecciona un alumno primero.'); return; }
+  const [alumnoId, nivel] = sel.value.split('|');
+  const alumnoNombre = sel.options[sel.selectedIndex].text.split(' — ')[0];
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const data = {
+    alumnoId, nivel, alumnoNombre,
+    docente: document.getElementById('inpDocente').value.trim(),
+    periodo: document.getElementById('inpPeriodo').value.trim(),
+    logros: logroItems.filter(l => l.proyecto.trim() || l.observacion.trim()),
+    fortalezas: formState.fortalezas.filter(v => v.trim()),
+    areas: formState.areas.filter(v => v.trim()),
+    asistencia: document.getElementById('inpAsistencia').value.trim(),
+    tareas: document.getElementById('inpTareas').value.trim(),
+    convivencia: document.getElementById('inpConvivencia').value.trim(),
+    recomendaciones: document.getElementById('inpRecomendaciones').value.trim(),
+    sugerencias: document.getElementById('inpSugerencias').value.trim(),
+    creado: Date.now(),
+    confirmado: false
+  };
+
+  const newRef = evalRef.push();
+  newRef.set(data).then(() => {
+    const link = window.location.origin + window.location.pathname + '?id=' + newRef.key;
+    const box = document.getElementById('resultadoLink');
+    box.classList.remove('hidden');
+    box.innerHTML = `
+      <p class="text-sm font-semibold text-emerald-800 flex items-center gap-2"><i data-lucide="check-circle" class="w-4 h-4"></i> Reporte guardado</p>
+      <p class="text-xs text-slate-600">Comparte este link solo con los padres de ${alumnoNombre}:</p>
+      <div class="flex gap-2">
+        <input readonly value="${link}" id="linkGenerado" class="flex-1 p-2 border border-slate-300 rounded-lg text-xs bg-white" />
+        <button onclick="copiarLink()" class="bg-slate-700 text-white text-xs font-semibold px-3 rounded-lg">Copiar</button>
+      </div>
+      <a href="https://wa.me/?text=${encodeURIComponent('Reporte formativo de ' + alumnoNombre + ': ' + link)}" target="_blank" class="inline-flex items-center gap-2 bg-green-600 text-white text-xs font-semibold px-3 py-2 rounded-lg mt-1">
+        <i data-lucide="message-circle" class="w-4 h-4"></i> Enviar por WhatsApp
+      </a>`;
+    icons();
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="link" class="w-4 h-4"></i> Generar otro reporte';
+    icons();
+  }).catch(err => {
+    alert('Error al guardar: ' + err.message);
+    btn.disabled = false; btn.textContent = 'Generar reporte y link para los padres';
+  });
+}
+function copiarLink() {
+  const inp = document.getElementById('linkGenerado');
+  inp.select();
+  navigator.clipboard.writeText(inp.value).then(() => alert('¡Link copiado!'));
+}
+
+// ---------------- MODO PADRES ----------------
+function renderNotFound() {
+  root.innerHTML = `<div class="bg-white p-8 rounded-xl shadow-sm border border-slate-200 text-center">
+    <p class="text-4xl mb-2">🔍</p>
+    <p class="font-semibold text-slate-700">Este link no es válido o el reporte ya no está disponible.</p>
+  </div>`;
+}
+function toggleAccordion(id) {
+  document.getElementById(id).classList.toggle('hidden');
+  document.getElementById('icon-'+id).classList.toggle('rotate-180');
+}
+function renderReporte(id, d) {
+  root.innerHTML = `
+  <header class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-100 pb-4 mb-4 gap-3">
+      <div>
+        <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2"><i data-lucide="clipboard-check" class="text-blue-600"></i> Reporte Formativo del Alumno</h1>
+        <p class="text-sm text-slate-500">Evaluación cualitativa y seguimiento continuo</p>
+      </div>
+      ${d.periodo ? `<span class="bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-blue-200">${d.periodo}</span>` : ''}
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div class="bg-slate-50 p-3 rounded-lg border border-slate-100"><span class="text-xs text-slate-400 font-medium block">ALUMNO(A)</span><span class="font-semibold text-slate-700">${d.alumnoNombre || '—'}</span></div>
+      <div class="bg-slate-50 p-3 rounded-lg border border-slate-100"><span class="text-xs text-slate-400 font-medium block">DOCENTE</span><span class="font-semibold text-slate-700">${d.docente || '—'}</span></div>
+    </div>
+  </header>
+
+  ${(d.logros && d.logros.length) ? `
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+    <h2 class="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="award" class="text-emerald-600"></i> Logros y Progresos</h2>
+    <div class="space-y-3 text-sm">
+      ${d.logros.map(l => `
+      <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+        <div class="flex justify-between items-center mb-1.5 flex-wrap gap-1">
+          <h3 class="font-semibold text-slate-800">${l.proyecto || 'Evidencia'}</h3>
+          <div class="flex gap-1">
+            <span class="badge bg-${colorEstado(l.estado)}-100 text-${colorEstado(l.estado)}-800 border border-${colorEstado(l.estado)}-200">${l.estado}</span>
+            <span class="badge bg-${colorEstado(l.calificacion)}-100 text-${colorEstado(l.calificacion)}-800 border border-${colorEstado(l.calificacion)}-200">${l.calificacion}</span>
+          </div>
+        </div>
+        <p class="text-slate-600 text-xs">${l.observacion || ''}</p>
+      </div>`).join('')}
+    </div>
+  </section>` : ''}
+
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    ${(d.fortalezas && d.fortalezas.length) ? `
+    <div class="bg-emerald-50/40 border border-emerald-200/60 rounded-xl p-6">
+      <h2 class="text-md font-bold text-emerald-900 mb-3 flex items-center gap-2"><i data-lucide="sparkles" class="text-emerald-600"></i> Fortalezas</h2>
+      <ul class="space-y-2 text-sm text-slate-700">${d.fortalezas.map(f => `<li class="flex items-start gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i><span>${f}</span></li>`).join('')}</ul>
+    </div>` : '<div></div>'}
+    ${(d.areas && d.areas.length) ? `
+    <div class="bg-amber-50/40 border border-amber-200/60 rounded-xl p-6">
+      <h2 class="text-md font-bold text-amber-900 mb-3 flex items-center gap-2"><i data-lucide="target" class="text-amber-600"></i> Áreas de Oportunidad</h2>
+      <ul class="space-y-2 text-sm text-slate-700">${d.areas.map(a => `<li class="flex items-start gap-2"><i data-lucide="alert-circle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i><span>${a}</span></li>`).join('')}</ul>
+    </div>` : '<div></div>'}
+  </section>
+
+  ${(d.asistencia || d.tareas || d.convivencia) ? `
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2"><i data-lucide="clipboard-list" class="text-slate-600"></i> Desarrollo Formativo y Asistencia</h2>
+    ${d.asistencia ? `<div class="p-3 bg-slate-50 rounded-lg border border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">Asistencia y puntualidad</p><p class="text-sm text-slate-700">${d.asistencia}</p></div>` : ''}
+    ${d.tareas ? `<div class="p-3 bg-slate-50 rounded-lg border border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">Cumplimiento de tareas</p><p class="text-sm text-slate-700">${d.tareas}</p></div>` : ''}
+    ${d.convivencia ? `<div class="p-3 bg-slate-50 rounded-lg border border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">Convivencia escolar</p><p class="text-sm text-slate-700">${d.convivencia}</p></div>` : ''}
+  </section>` : ''}
+
+  ${(d.recomendaciones || d.sugerencias) ? `
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2"><i data-lucide="compass" class="text-indigo-600"></i> Compromisos y Plan de Acción</h2>
+    ${d.recomendaciones ? `
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <button onclick="toggleAccordion('acc-rec')" class="w-full text-left p-3 bg-slate-50 flex justify-between items-center font-semibold text-slate-700 text-sm">
+        <span class="flex items-center gap-2"><i data-lucide="user-check" class="w-4 h-4 text-indigo-600"></i> Recomendaciones del Docente</span>
+        <i id="icon-acc-rec" data-lucide="chevron-down" class="w-4 h-4 transition-transform"></i>
+      </button>
+      <div id="acc-rec" class="hidden p-3 bg-white text-sm text-slate-600 border-t border-slate-100">${d.recomendaciones}</div>
+    </div>` : ''}
+    ${d.sugerencias ? `
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <button onclick="toggleAccordion('acc-hogar')" class="w-full text-left p-3 bg-slate-50 flex justify-between items-center font-semibold text-slate-700 text-sm">
+        <span class="flex items-center gap-2"><i data-lucide="home" class="w-4 h-4 text-indigo-600"></i> Sugerencias para el Hogar</span>
+        <i id="icon-acc-hogar" data-lucide="chevron-down" class="w-4 h-4 transition-transform"></i>
+      </button>
+      <div id="acc-hogar" class="hidden p-3 bg-white text-sm text-slate-600 border-t border-slate-100">${d.sugerencias}</div>
+    </div>` : ''}
+  </section>` : ''}
+
+  <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+    <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2"><i data-lucide="pen-tool" class="text-slate-700"></i> Acuerdos y Acuse del Tutor</h2>
+    ${d.confirmado ? `
+      <div class="p-3 bg-emerald-100 text-emerald-800 text-sm rounded-lg flex items-center gap-2"><i data-lucide="check-circle" class="w-4 h-4"></i> Ya confirmaste la recepción de este reporte${d.respuestaPadre ? ': "' + d.respuestaPadre + '"' : ''}.</div>
+    ` : `
+      <div class="space-y-3">
+        <textarea id="inpComentarioPadre" rows="2" class="w-full p-3 border border-slate-300 rounded-lg text-sm" placeholder="Escriba aquí sus observaciones o compromisos acordados en casa..."></textarea>
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" id="checkLectura" class="w-4 h-4"/> Confirmar lectura y recepción del reporte</label>
+          <button onclick="confirmarAcuse('${id}')" class="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">Enviar Confirmación</button>
+        </div>
+      </div>`}
+  </section>
+
+  <button onclick="descargarPDF()" class="w-full bg-slate-800 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> Guardar como PDF</button>
+  `;
+  icons();
+}
+function confirmarAcuse(id) {
+  if (!document.getElementById('checkLectura').checked) { alert('Marca la casilla de confirmación primero.'); return; }
+  const comentario = document.getElementById('inpComentarioPadre').value.trim();
+  evalRef.child(id).update({ confirmado: true, respuestaPadre: comentario, fechaConfirmacion: Date.now() }).then(() => {
+    evalRef.child(id).once('value').then(snap => renderReporte(id, snap.val()));
+  });
+}
+function descargarPDF() {
+  const opciones = { margin: 0.3, filename: 'Reporte_Evaluativo.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' } };
+  html2pdf().set(opciones).from(document.getElementById('root')).save();
+}
+
+// ---------------- Arranque ----------------
+if (viewId) {
+  root.innerHTML = '<p class="text-center text-slate-500 py-10">Cargando reporte...</p>';
+  evalRef.child(viewId).once('value').then(snap => {
+    if (!snap.exists()) { renderNotFound(); return; }
+    renderReporte(viewId, snap.val());
+  }).catch(() => renderNotFound());
+} else {
+  renderAdmin();
+}
+</script>
+</body>
+</html>
