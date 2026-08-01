@@ -66,11 +66,14 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s || 
 
 function renderReport(data) {
   const criterios = data.criterios || [];
+  const periodoLabels = { '1': '1er Periodo', '2': '2do Periodo', '3': '3er Periodo' };
+  const queSeEvalua = data.periodo === 'proyecto' ? ('Proyecto: ' + (data.proyectoNombre || 'Sin nombre')) : (periodoLabels[data.periodo] || '');
   let html = `<main>
   <div class="card">
   <h1>📋 Evaluación Formativa</h1>
   <p class="sub">${esc(data.schoolName)} · ${esc(data.grade)}${data.grupo?(' '+esc(data.grupo)):''} · ${data.nivel==='secundaria'?'Secundaria':'Primaria'}</p>
   <p style="font-weight:700;font-size:1.05em;">${esc(data.studentName)}</p>
+  ${queSeEvalua ? `<p style="font-size:0.78em;color:#2563eb;font-weight:600;margin-top:4px;">🗓️ ${esc(queSeEvalua)}</p>` : ''}
   ${data.docente ? `<p style="font-size:0.78em;color:#64748b;margin-top:2px;">Docente/Autoridad: ${esc(data.docente)}</p>` : ''}
   </div>
 

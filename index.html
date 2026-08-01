@@ -1416,6 +1416,38 @@ if (s) s[field] = value;
 if (!pendingSecContactEdits[id]) pendingSecContactEdits[id] = {};
 pendingSecContactEdits[id][field] = value;
 }
+function forceUpper(el) {
+const pos = el.selectionStart;
+const upper = el.value.toUpperCase();
+if (upper !== el.value) { el.value = upper; el.selectionStart = el.selectionEnd = pos; }
+}
+const PRESETS_OBS = [
+'MUESTRA UN DESEMPEÑO SOBRESALIENTE EN ESTE ASPECTO.',
+'CUMPLE CON LO ESPERADO; SE SUGIERE CONTINUAR REFORZANDO.',
+'SE ENCUENTRA EN PROCESO DE CONSOLIDAR ESTA HABILIDAD.',
+'REQUIERE APOYO ADICIONAL Y SEGUIMIENTO CERCANO.',
+'HA MOSTRADO MEJORA NOTABLE RESPECTO AL PERIODO ANTERIOR.',
+'PARTICIPA ACTIVAMENTE Y MUESTRA BUENA DISPOSICIÓN EN CLASE.',
+'NECESITA MEJORAR SU CONSTANCIA Y ORGANIZACIÓN EN EL TRABAJO.',
+'TRABAJA BIEN EN EQUIPO Y RESPETA LAS OPINIONES DE SUS COMPAÑEROS.',
+'SE DISTRAE CON FACILIDAD; SE RECOMIENDA REFORZAR LA ATENCIÓN EN CLASE.'
+];
+function applyPresetObs(i, text) {
+if (!text) return;
+state.formativoForm.criterios[i].comentario = text;
+render();
+}
+function updateFormativoCriterioField(i, field, value) {
+state.formativoForm.criterios[i][field] = value;
+}
+function setFormativoCriterioNivel(i, value) {
+state.formativoForm.criterios[i].nivel = value;
+render();
+}
+function setFormativoPeriodo(p) {
+state.formativoForm.periodo = p;
+render();
+}
 function selectFormativoStudent(nivel, id) {
 if (!id) { state.formativoStudentId = null; state.formativoForm = null; state.formativoShareUrl = null; render(); return; }
 const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
@@ -1430,6 +1462,8 @@ criterios = [{ nombre: state.secSchoolInfo.materia || 'Materia', nivel: 'amarill
 }
 state.formativoStudentId = id;
 state.formativoForm = {
+periodo: (existing && existing.periodo) || '1',
+proyectoNombre: (existing && existing.proyectoNombre) || '',
 criterios,
 fortalezas: (existing && existing.fortalezas) || '',
 areasOportunidad: (existing && existing.areasOportunidad) || '',
@@ -1437,10 +1471,6 @@ recomendacionDocente: (existing && existing.recomendacionDocente) || '',
 recomendacionHogar: (existing && existing.recomendacionHogar) || ''
 };
 state.formativoShareUrl = null;
-render();
-}
-function updateFormativoCriterio(i, field, value) {
-state.formativoForm.criterios[i][field] = value;
 render();
 }
 function addFormativoCriterio() {
@@ -1460,6 +1490,8 @@ const id = state.formativoStudentId;
 const ref = nivel === 'primaria' ? formativosPriRef : formativosSecRef;
 state.formativoSaving = true; render();
 const payload = {
+periodo: state.formativoForm.periodo || '1',
+proyectoNombre: state.formativoForm.proyectoNombre || '',
 criterios: state.formativoForm.criterios,
 fortalezas: state.formativoForm.fortalezas || '',
 areasOportunidad: state.formativoForm.areasOportunidad || '',
@@ -1496,6 +1528,8 @@ studentName: s.name || '',
 grade: s.grade || '', grupo: s.grupo || '',
 schoolName: si.nombre || '',
 docente: nivel === 'secundaria' ? (si.docente || '') : (si.autoridadNombre || ''),
+periodo: report.periodo || '1',
+proyectoNombre: report.proyectoNombre || '',
 criterios: report.criterios || [],
 fortalezas: report.fortalezas || '',
 areasOportunidad: report.areasOportunidad || '',
@@ -1526,7 +1560,7 @@ function semaforoBtn(idx, current, value, label) {
 const colors = { verde: ['#16a34a','#dcfce7'], amarillo: ['#ca8a04','#fef9c3'], rojo: ['#dc2626','#fee2e2'] };
 const [border, bg] = colors[value];
 const active = current === value;
-return `<button style="flex:1;padding:8px 2px;border-radius:8px;border:2px solid ${active?border:'#e5e7eb'};background:${active?bg:'#fff'};font-size:0.68em;font-weight:600;" onclick="updateFormativoCriterio(${idx},'nivel','${value}')">${label}</button>`;
+return `<button style="flex:1;padding:8px 2px;border-radius:8px;border:2px solid ${active?border:'#e5e7eb'};background:${active?bg:'#fff'};font-size:0.68em;font-weight:600;" onclick="setFormativoCriterioNivel(${idx},'${value}')">${label}</button>`;
 }
 function renderFormativo(nivel) {
 const list = nivel === 'primaria' ? state.students : state.secStudents;
@@ -1553,12 +1587,20 @@ const f = state.formativoForm;
 html += `<div class="card">
 <p style="font-weight:600;font-size:0.95em;margin-bottom:2px;">${s.name}</p>
 <p style="font-size:0.75em;color:#9ca3af;margin-bottom:12px;">${s.grade||''} ${s.grupo?('· Grupo '+s.grupo):''}</p>
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 8px;">🗓️ ¿Qué se está evaluando?</p>
+<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+${[['1','1er Periodo'],['2','2do Periodo'],['3','3er Periodo'],['proyecto','Proyecto']].map(([val,lbl]) => {
+const active = f.periodo === val;
+return `<button style="flex:1;min-width:72px;padding:8px 4px;border-radius:8px;border:2px solid ${active?'#2563eb':'#e5e7eb'};background:${active?'#dbeafe':'#fff'};font-size:0.72em;font-weight:600;" onclick="setFormativoPeriodo('${val}')">${lbl}</button>`;
+}).join('')}
+</div>
+${f.periodo === 'proyecto' ? `<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;text-transform:uppercase;" placeholder="Nombre del proyecto" value="${f.proyectoNombre||''}" oninput="forceUpper(this);updateFormativoField('proyectoNombre',this.value)" />` : ''}
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 8px;">🎯 Nivel de logro por aspecto</p>`;
 f.criterios.forEach((c, i) => {
 html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:8px;">`;
 if (nivel === 'secundaria') {
 html += `<div style="display:flex;gap:6px;margin-bottom:6px;">
-<input style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;" placeholder="Aspecto a evaluar" value="${c.nombre||''}" oninput="updateFormativoCriterio(${i},'nombre',this.value)" />
+<input style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;text-transform:uppercase;" placeholder="Aspecto a evaluar" value="${c.nombre||''}" oninput="forceUpper(this);updateFormativoCriterioField(${i},'nombre',this.value)" />
 ${f.criterios.length>1?`<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:0 10px;font-size:0.8em;" onclick="removeFormativoCriterio(${i})">✕</button>`:''}
 </div>`;
 } else {
@@ -1569,18 +1611,22 @@ ${semaforoBtn(i, c.nivel, 'verde', '🟢 Nivel esperado')}
 ${semaforoBtn(i, c.nivel, 'amarillo', '🟡 En desarrollo')}
 ${semaforoBtn(i, c.nivel, 'rojo', '🔴 Requiere apoyo')}
 </div>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;" rows="2" placeholder="Comentario (opcional)" oninput="updateFormativoCriterio(${i},'comentario',this.value)">${c.comentario||''}</textarea>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:0.72em;margin-bottom:6px;color:#6b7280;" onchange="applyPresetObs(${i}, this.value); this.selectedIndex=0;">
+<option value="">➕ Usar observación predeterminada...</option>
+${PRESETS_OBS.map(p=>`<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`).join('')}
+</select>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;text-transform:uppercase;" rows="2" placeholder="Comentario (opcional, o elige uno de arriba)" oninput="forceUpper(this);updateFormativoCriterioField(${i},'comentario',this.value)">${c.comentario||''}</textarea>
 </div>`;
 });
 if (nivel === 'secundaria') html += `<button class="btn btn-gray" style="margin-bottom:10px;" onclick="addFormativoCriterio()">➕ Agregar aspecto</button>`;
 html += `<p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">✨ Fortalezas</p>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" rows="3" placeholder="Una por línea" oninput="updateFormativoField('fortalezas',this.value)">${f.fortalezas||''}</textarea>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;text-transform:uppercase;" rows="3" placeholder="Una por línea" oninput="forceUpper(this);updateFormativoField('fortalezas',this.value)">${f.fortalezas||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🎯 Áreas de oportunidad</p>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" rows="3" placeholder="Una por línea" oninput="updateFormativoField('areasOportunidad',this.value)">${f.areasOportunidad||''}</textarea>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;text-transform:uppercase;" rows="3" placeholder="Una por línea" oninput="forceUpper(this);updateFormativoField('areasOportunidad',this.value)">${f.areasOportunidad||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🧑‍🏫 Recomendación para el docente</p>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" rows="2" oninput="updateFormativoField('recomendacionDocente',this.value)">${f.recomendacionDocente||''}</textarea>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;text-transform:uppercase;" rows="2" oninput="forceUpper(this);updateFormativoField('recomendacionDocente',this.value)">${f.recomendacionDocente||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🏠 Sugerencia para el hogar</p>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;" rows="2" oninput="updateFormativoField('recomendacionHogar',this.value)">${f.recomendacionHogar||''}</textarea>`;
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;text-transform:uppercase;" rows="2" oninput="forceUpper(this);updateFormativoField('recomendacionHogar',this.value)">${f.recomendacionHogar||''}</textarea>`;
 if (nivel === 'secundaria') {
 html += `<p style="font-weight:600;font-size:0.85em;margin:14px 0 8px;">👨‍👩‍👧 Datos de contacto</p>
 <p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usa el teléfono del padre; si no hay, el del tutor; si no hay, el de la madre; si no hay ninguno, el del director(a).</p>
