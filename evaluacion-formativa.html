@@ -6,6 +6,7 @@
 <title>Evaluación Formativa</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { overflow-x: hidden; max-width: 100vw; }
@@ -50,9 +51,14 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "234198294318",
   appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
+const EMAILJS_SERVICE_ID = 'service_3yt7xpj';
+const EMAILJS_TEMPLATE_ID = 'template_f6a4gjl';
+const EMAILJS_PUBLIC_KEY = '4N06W3huyau9WFWYo';
+emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 const NIVEL_COLORS = { verde: ['#16a34a','#dcfce7','🟢 Nivel esperado'], amarillo: ['#ca8a04','#fef9c3','🟡 En desarrollo'], rojo: ['#dc2626','#fee2e2','🔴 Requiere apoyo'] };
 const app = document.getElementById('app');
 let currentToken = null;
+let currentData = null;
 
 function renderMessage(icon, title, sub) {
   app.innerHTML = `<div class="center-screen"><div>
@@ -129,11 +135,19 @@ function enviarAcuse() {
   const comentario = document.getElementById('comentarioAcuse').value.trim();
   const btn = document.getElementById('btnAcuse');
   btn.disabled = true; btn.textContent = 'Enviando...';
+  const confirmedAt = Date.now();
   firebase.database().ref(DB_ROOT + '/reportesFormativosCompartidos/' + currentToken + '/acuse').set({
-    comentario, confirmedAt: Date.now()
+    comentario, confirmedAt
   }).then(() => {
     document.getElementById('acuseCard').querySelectorAll('textarea, input, button').forEach(el => el.disabled = true);
     document.getElementById('acuseOk').style.display = 'flex';
+    const fechaTexto = new Date(confirmedAt).toLocaleString('es-MX', { day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      alumno: (currentData && currentData.studentName) || '',
+      grado: currentData ? `${currentData.grade||''} ${currentData.grupo||''}`.trim() : '',
+      fecha: fechaTexto,
+      comentario: comentario || '(sin comentarios)'
+    }).catch(() => { /* si falla el correo, el acuse ya quedó guardado en Firebase de todos modos */ });
   }).catch(() => {
     btn.disabled = false; btn.textContent = 'Enviar acuse de recepción';
     alert('No se pudo enviar. Verifica tu conexión e intenta de nuevo.');
@@ -161,6 +175,7 @@ function init() {
       return;
     }
     renderReport(data);
+    currentData = data;
     if (data.acuse) {
       setTimeout(() => {
         document.getElementById('comentarioAcuse').value = data.acuse.comentario || '';
