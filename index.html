@@ -176,7 +176,8 @@ formativoForm: null,
 formativoSaving: false,
 formativoShareUrl: null,
 formativoShareLoading: false,
-formativoShareTel: ''
+formativoShareTel: '',
+formativoAcuseInfo: null,
 };
 function emptyExtra() {
 return {
@@ -1471,6 +1472,17 @@ recomendacionDocente: (existing && existing.recomendacionDocente) || '',
 recomendacionHogar: (existing && existing.recomendacionHogar) || ''
 };
 state.formativoShareUrl = null;
+state.formativoAcuseInfo = null;
+if (existing && existing.lastShareToken) {
+const tok = existing.lastShareToken;
+db.ref(DB_ROOT + '/reportesFormativosCompartidos/' + tok).once('value').then(snap => {
+const d = snap.val();
+if (state.formativoStudentId === id) {
+state.formativoAcuseInfo = d ? { acuse: d.acuse || null, expiresAt: d.expiresAt || 0 } : null;
+render();
+}
+}).catch(() => {});
+}
 render();
 }
 function addFormativoCriterio() {
@@ -1497,6 +1509,7 @@ fortalezas: state.formativoForm.fortalezas || '',
 areasOportunidad: state.formativoForm.areasOportunidad || '',
 recomendacionDocente: state.formativoForm.recomendacionDocente || '',
 recomendacionHogar: state.formativoForm.recomendacionHogar || '',
+lastShareToken: ((nivel === 'primaria' ? state.formativosPri : state.formativosSec)[id] || {}).lastShareToken || null,
 updatedAt: Date.now()
 };
 const tasks = [ref.child(id).set(payload)];
@@ -1538,9 +1551,12 @@ recomendacionHogar: report.recomendacionHogar || '',
 createdAt: now, expiresAt
 };
 ref.set(snapshot).then(() => {
+const dataRef = nivel === 'primaria' ? formativosPriRef : formativosSecRef;
+dataRef.child(id).update({ lastShareToken: token });
 const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
 state.formativoShareUrl = base + 'evaluacion-formativa.html?t=' + token;
 state.formativoShareLoading = false;
+state.formativoAcuseInfo = null;
 render();
 }).catch(() => { state.formativoShareLoading = false; showToast('No se pudo generar el link'); render(); });
 }
@@ -1639,6 +1655,19 @@ html += `<p style="font-weight:600;font-size:0.85em;margin:14px 0 8px;">👨‍�
 }
 html += `<button class="btn btn-green" style="width:100%;" onclick="saveFormativo('${nivel}')" ${state.formativoSaving?'disabled':''}>${state.formativoSaving?'Guardando...':'💾 Guardar evaluación'}</button>`;
 if (dataMap[s.id]) {
+const ai = state.formativoAcuseInfo;
+if (ai && ai.acuse) {
+const fecha = new Date(ai.acuse.confirmedAt).toLocaleDateString('es-MX', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+html += `<div class="card" style="border:1px solid #bbf7d0;background:#f0fdf4;margin-top:12px;">
+<p style="font-weight:700;font-size:0.82em;color:#166534;margin-bottom:4px;">✅ El padre/madre/tutor confirmó lectura</p>
+<p style="font-size:0.72em;color:#6b7280;margin-bottom:6px;">${fecha}</p>
+${ai.acuse.comentario ? `<p style="font-size:0.8em;color:#334155;background:#fff;border-radius:8px;padding:8px;">"${ai.acuse.comentario}"</p>` : `<p style="font-size:0.75em;color:#9ca3af;">Sin comentarios adicionales.</p>`}
+</div>`;
+} else if (dataMap[s.id].lastShareToken) {
+html += `<div class="card" style="border:1px solid #fde68a;background:#fffbeb;margin-top:12px;">
+<p style="font-size:0.8em;color:#92400e;">⏳ El link ya se generó, pero el padre/madre/tutor aún no confirma lectura.</p>
+</div>`;
+}
 const contact = resolveContact(s, nivel);
 html += `<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;">
 <p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">📤 Compartir con la familia</p>
