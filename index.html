@@ -141,7 +141,7 @@ const FIREBASE_CONFIG = {
 };
 
 let auth = null, db = null, storage = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
@@ -168,7 +168,15 @@ secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '' },
 secSelectedGrade: '1°',
 secSelectedGrupo: 'A',
 secEditingId: null,
-secReportGrade: null
+secReportGrade: null,
+formativosPri: {},
+formativosSec: {},
+formativoStudentId: null,
+formativoForm: null,
+formativoSaving: false,
+formativoShareUrl: null,
+formativoShareLoading: false,
+formativoShareTel: ''
 };
 function emptyExtra() {
 return {
@@ -231,6 +239,8 @@ studentsRef = db.ref(DB_ROOT + '/students');
 schoolRef = db.ref(DB_ROOT + '/schoolInfo');
 secStudentsRef = db.ref(DB_ROOT + '/secStudents');
 secSchoolRef = db.ref(DB_ROOT + '/secSchoolInfo');
+formativosPriRef = db.ref(DB_ROOT + '/formativos/primaria');
+formativosSecRef = db.ref(DB_ROOT + '/formativos/secundaria');
 auth.onAuthStateChanged(u => {
 state.user = u;
 state.authError = '';
@@ -258,14 +268,20 @@ secSchoolRef.on('value', snap => {
 if (snap.val()) state.secSchoolInfo = snap.val();
 render();
 });
+formativosPriRef.on('value', snap => { state.formativosPri = snap.val() || {}; render(); }, () => {});
+formativosSecRef.on('value', snap => { state.formativosSec = snap.val() || {}; render(); }, () => {});
 }
 function unsubscribeData() {
 if (studentsRef) studentsRef.off();
 if (schoolRef) schoolRef.off();
 if (secStudentsRef) secStudentsRef.off();
 if (secSchoolRef) secSchoolRef.off();
+if (formativosPriRef) formativosPriRef.off();
+if (formativosSecRef) formativosSecRef.off();
 state.students = [];
 state.secStudents = [];
+state.formativosPri = {};
+state.formativosSec = {};
 }
 async function handleLoginSubmit() {
 state.authError = '';
@@ -793,13 +809,13 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['formativo','Formativa']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -837,6 +853,7 @@ if (state.tab === 'descargas') return nav + renderDescargasMenu();
 if (state.tab === 'boletas') return nav + (state.boletaStudentId ? renderBoletaDetail() : renderBoletaList());
 if (state.tab === 'diplomas') return nav + renderDiplomas();
 if (state.tab === 'honor') return nav + renderCuadroHonor();
+if (state.tab === 'formativo') return nav + renderFormativo('primaria');
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
@@ -845,6 +862,7 @@ const nav = renderNavBar();
 if (state.secReportGrade) return nav + renderSecReporte();
 if (state.secTab === 'inicio') return renderSecInicio();
 if (state.secTab === 'alumnos') return nav + renderSecAlumnos();
+if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
 return '';
 }
 function renderInicio() {
@@ -1144,6 +1162,10 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSecSchoolFieldLocal('cct',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la materia" value="${si.materia||''}" oninput="updateSecSchoolFieldLocal('materia',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre del docente" value="${si.docente||''}" oninput="updateSecSchoolFieldLocal('docente',this.value)" />
+<p style="font-weight:600;font-size:0.85em;margin:6px 0 8px;color:#6b7280;">👤 Director(a) de la secundaria</p>
+<p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usará para compartir evaluaciones cuando no haya teléfono del padre/madre/tutor registrado.</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.directorNombre||''}" oninput="updateSecSchoolFieldLocal('directorNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Teléfono del director(a) (WhatsApp)" value="${si.directorTelefono||''}" oninput="updateSecSchoolFieldLocal('directorTelefono',this.value)" />
 <button class="btn btn-green" onclick="saveSecSchoolInfo()">💾 Guardar datos</button>
 </div>
 <button class="btn btn-blue" onclick="setSecTab('alumnos')">Continuar a Alumnos →</button>
@@ -1377,6 +1399,218 @@ html += `</div>
 <button class="btn btn-green" onclick="exportExcel()">⬇️ Exportar a Excel</button>
 </div>
 <div class="blue-banner">💾 Total registrado: ${state.students.length} alumno(s) en ${new Set(state.students.map(s=>s.grade)).size} grado(s). Conectado a Realtime Database.</div>`;
+return html;
+}
+// ---------------- Evaluación Formativa ----------------
+function resolveContact(s, nivel) {
+if (s.padreTelefono) return { tel: s.padreTelefono, label: 'Padre' };
+if (s.tutorTelefono) return { tel: s.tutorTelefono, label: 'Tutor(a)' };
+if (s.madreTelefono) return { tel: s.madreTelefono, label: 'Madre' };
+if (nivel === 'secundaria' && state.secSchoolInfo.directorTelefono) return { tel: state.secSchoolInfo.directorTelefono, label: 'Director(a) — sin contacto de familia registrado' };
+return { tel: '', label: '' };
+}
+let pendingSecContactEdits = {};
+function updateSecFormativoContact(id, field, value) {
+const s = state.secStudents.find(x => x.id === id);
+if (s) s[field] = value;
+if (!pendingSecContactEdits[id]) pendingSecContactEdits[id] = {};
+pendingSecContactEdits[id][field] = value;
+}
+function selectFormativoStudent(nivel, id) {
+if (!id) { state.formativoStudentId = null; state.formativoForm = null; state.formativoShareUrl = null; render(); return; }
+const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
+const existing = dataMap[id];
+let criterios;
+if (existing && existing.criterios && existing.criterios.length) {
+criterios = existing.criterios.map(c => ({ ...c }));
+} else if (nivel === 'primaria') {
+criterios = MATERIAS.map(m => ({ nombre: m, nivel: 'amarillo', comentario: '' }));
+} else {
+criterios = [{ nombre: state.secSchoolInfo.materia || 'Materia', nivel: 'amarillo', comentario: '' }];
+}
+state.formativoStudentId = id;
+state.formativoForm = {
+criterios,
+fortalezas: (existing && existing.fortalezas) || '',
+areasOportunidad: (existing && existing.areasOportunidad) || '',
+recomendacionDocente: (existing && existing.recomendacionDocente) || '',
+recomendacionHogar: (existing && existing.recomendacionHogar) || ''
+};
+state.formativoShareUrl = null;
+render();
+}
+function updateFormativoCriterio(i, field, value) {
+state.formativoForm.criterios[i][field] = value;
+render();
+}
+function addFormativoCriterio() {
+state.formativoForm.criterios.push({ nombre: '', nivel: 'amarillo', comentario: '' });
+render();
+}
+function removeFormativoCriterio(i) {
+state.formativoForm.criterios.splice(i, 1);
+render();
+}
+function updateFormativoField(field, value) {
+state.formativoForm[field] = value;
+}
+function saveFormativo(nivel) {
+if (!state.formativoStudentId || !state.formativoForm) return;
+const id = state.formativoStudentId;
+const ref = nivel === 'primaria' ? formativosPriRef : formativosSecRef;
+state.formativoSaving = true; render();
+const payload = {
+criterios: state.formativoForm.criterios,
+fortalezas: state.formativoForm.fortalezas || '',
+areasOportunidad: state.formativoForm.areasOportunidad || '',
+recomendacionDocente: state.formativoForm.recomendacionDocente || '',
+recomendacionHogar: state.formativoForm.recomendacionHogar || '',
+updatedAt: Date.now()
+};
+const tasks = [ref.child(id).set(payload)];
+if (nivel === 'secundaria' && pendingSecContactEdits[id]) {
+tasks.push(secStudentsRef.child(id).update(pendingSecContactEdits[id]));
+delete pendingSecContactEdits[id];
+}
+Promise.all(tasks).then(() => {
+state.formativoSaving = false;
+showToast('💾 Evaluación guardada');
+render();
+}).catch(() => { state.formativoSaving = false; showToast('No se pudo guardar'); render(); });
+}
+function compartirFormativo(nivel, id) {
+const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === id);
+const report = dataMap[id];
+if (!s || !report) return;
+state.formativoShareLoading = true; render();
+const ref = db.ref(DB_ROOT + '/reportesFormativosCompartidos').push();
+const token = ref.key;
+const now = Date.now();
+const expiresAt = now + 15 * 24 * 60 * 60 * 1000; // 15 días
+const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
+const snapshot = {
+nivel,
+studentName: s.name || '',
+grade: s.grade || '', grupo: s.grupo || '',
+schoolName: si.nombre || '',
+docente: nivel === 'secundaria' ? (si.docente || '') : (si.autoridadNombre || ''),
+criterios: report.criterios || [],
+fortalezas: report.fortalezas || '',
+areasOportunidad: report.areasOportunidad || '',
+recomendacionDocente: report.recomendacionDocente || '',
+recomendacionHogar: report.recomendacionHogar || '',
+createdAt: now, expiresAt
+};
+ref.set(snapshot).then(() => {
+const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
+state.formativoShareUrl = base + 'evaluacion-formativa.html?t=' + token;
+state.formativoShareLoading = false;
+render();
+}).catch(() => { state.formativoShareLoading = false; showToast('No se pudo generar el link'); render(); });
+}
+function copyFormativoLink() {
+if (!state.formativoShareUrl) return;
+navigator.clipboard.writeText(state.formativoShareUrl).then(() => showToast('Link copiado ✅'));
+}
+function enviarFormativoWhatsapp(telDigits, studentName) {
+if (!state.formativoShareUrl || !telDigits) return;
+let phone = telDigits.replace(/\D/g, '');
+if (phone.length === 10) phone = '52' + phone;
+const msg = `Hola, le comparto el reporte de evaluación formativa de ${studentName}: ${state.formativoShareUrl}`;
+const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+window.open(url, '_blank');
+}
+function semaforoBtn(idx, current, value, label) {
+const colors = { verde: ['#16a34a','#dcfce7'], amarillo: ['#ca8a04','#fef9c3'], rojo: ['#dc2626','#fee2e2'] };
+const [border, bg] = colors[value];
+const active = current === value;
+return `<button style="flex:1;padding:8px 2px;border-radius:8px;border:2px solid ${active?border:'#e5e7eb'};background:${active?bg:'#fff'};font-size:0.68em;font-weight:600;" onclick="updateFormativoCriterio(${idx},'nivel','${value}')">${label}</button>`;
+}
+function renderFormativo(nivel) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
+const sorted = [...list].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+let html = `<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📋 Evaluación Formativa — ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Selecciona un alumno para llenar o revisar su reporte.</p>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" onchange="selectFormativoStudent('${nivel}', this.value)">
+<option value="">— Selecciona un alumno —</option>
+${sorted.map(s => {
+const done = !!dataMap[s.id];
+const label = `${s.name || '(sin nombre)'} · ${s.grade||''}${s.grupo?(' '+s.grupo):''} ${done?'✅ Evaluado':'⏳ Pendiente'}`;
+return `<option value="${s.id}" ${state.formativoStudentId===s.id?'selected':''}>${label}</option>`;
+}).join('')}
+</select>
+<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${sorted.filter(s=>dataMap[s.id]).length} de ${sorted.length} alumnos evaluados</p>
+</div>`;
+if (!list.length) { html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">Aún no hay alumnos registrados en este nivel.</p></div>`; return html; }
+if (!state.formativoStudentId || !state.formativoForm) return html;
+const s = list.find(x => x.id === state.formativoStudentId);
+if (!s) return html;
+const f = state.formativoForm;
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.95em;margin-bottom:2px;">${s.name}</p>
+<p style="font-size:0.75em;color:#9ca3af;margin-bottom:12px;">${s.grade||''} ${s.grupo?('· Grupo '+s.grupo):''}</p>
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 8px;">🎯 Nivel de logro por aspecto</p>`;
+f.criterios.forEach((c, i) => {
+html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:8px;">`;
+if (nivel === 'secundaria') {
+html += `<div style="display:flex;gap:6px;margin-bottom:6px;">
+<input style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;" placeholder="Aspecto a evaluar" value="${c.nombre||''}" oninput="updateFormativoCriterio(${i},'nombre',this.value)" />
+${f.criterios.length>1?`<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:0 10px;font-size:0.8em;" onclick="removeFormativoCriterio(${i})">✕</button>`:''}
+</div>`;
+} else {
+html += `<p style="font-size:0.82em;font-weight:600;margin-bottom:6px;">${c.nombre}</p>`;
+}
+html += `<div style="display:flex;gap:6px;margin-bottom:6px;">
+${semaforoBtn(i, c.nivel, 'verde', '🟢 Nivel esperado')}
+${semaforoBtn(i, c.nivel, 'amarillo', '🟡 En desarrollo')}
+${semaforoBtn(i, c.nivel, 'rojo', '🔴 Requiere apoyo')}
+</div>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;" rows="2" placeholder="Comentario (opcional)" oninput="updateFormativoCriterio(${i},'comentario',this.value)">${c.comentario||''}</textarea>
+</div>`;
+});
+if (nivel === 'secundaria') html += `<button class="btn btn-gray" style="margin-bottom:10px;" onclick="addFormativoCriterio()">➕ Agregar aspecto</button>`;
+html += `<p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">✨ Fortalezas</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" rows="3" placeholder="Una por línea" oninput="updateFormativoField('fortalezas',this.value)">${f.fortalezas||''}</textarea>
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🎯 Áreas de oportunidad</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" rows="3" placeholder="Una por línea" oninput="updateFormativoField('areasOportunidad',this.value)">${f.areasOportunidad||''}</textarea>
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🧑‍🏫 Recomendación para el docente</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" rows="2" oninput="updateFormativoField('recomendacionDocente',this.value)">${f.recomendacionDocente||''}</textarea>
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🏠 Sugerencia para el hogar</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;" rows="2" oninput="updateFormativoField('recomendacionHogar',this.value)">${f.recomendacionHogar||''}</textarea>`;
+if (nivel === 'secundaria') {
+html += `<p style="font-weight:600;font-size:0.85em;margin:14px 0 8px;">👨‍👩‍👧 Datos de contacto</p>
+<p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usa el teléfono del padre; si no hay, el del tutor; si no hay, el de la madre; si no hay ninguno, el del director(a).</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre del padre" value="${s.padreNombre||''}" oninput="updateSecFormativoContact('${s.id}','padreNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Teléfono del padre" value="${s.padreTelefono||''}" oninput="updateSecFormativoContact('${s.id}','padreTelefono',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre de la madre" value="${s.madreNombre||''}" oninput="updateSecFormativoContact('${s.id}','madreNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Teléfono de la madre" value="${s.madreTelefono||''}" oninput="updateSecFormativoContact('${s.id}','madreTelefono',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre del tutor" value="${s.tutorNombre||''}" oninput="updateSecFormativoContact('${s.id}','tutorNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:10px;" placeholder="Teléfono del tutor" value="${s.tutorTelefono||''}" oninput="updateSecFormativoContact('${s.id}','tutorTelefono',this.value)" />`;
+}
+html += `<button class="btn btn-green" style="width:100%;" onclick="saveFormativo('${nivel}')" ${state.formativoSaving?'disabled':''}>${state.formativoSaving?'Guardando...':'💾 Guardar evaluación'}</button>`;
+if (dataMap[s.id]) {
+const contact = resolveContact(s, nivel);
+html += `<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;">
+<p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">📤 Compartir con la familia</p>
+<p style="font-size:0.75em;color:#6b7280;margin-bottom:8px;">${contact.tel ? `Contacto detectado — ${contact.label}: ${contact.tel}` : 'Sin teléfono registrado. Agrega uno arriba' + (nivel==='secundaria' ? ' o captura el del director(a) en Inicio.' : '.')}</p>
+<button class="btn btn-blue" style="width:100%;margin-bottom:8px;" onclick="compartirFormativo('${nivel}','${s.id}')" ${state.formativoShareLoading?'disabled':''}>🔗 ${state.formativoShareLoading?'Generando...':'Generar link para el padre'}</button>`;
+if (state.formativoShareUrl) {
+html += `<div class="card" style="border:1px solid #bfdbfe;background:#eff6ff;margin-top:4px;">
+<p style="font-weight:700;font-size:0.8em;color:#1d4ed8;margin-bottom:6px;">✅ Link generado (válido 15 días)</p>
+<p style="font-size:0.75em;color:#374151;word-break:break-all;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:8px;margin-bottom:8px;">${state.formativoShareUrl}</p>
+<div style="display:flex;gap:8px;">
+<button class="btn btn-blue" style="flex:1;" onclick="copyFormativoLink()">📋 Copiar</button>
+${contact.tel ? `<button class="btn btn-green" style="flex:1;" onclick="enviarFormativoWhatsapp('${contact.tel.replace(/[^0-9]/g,'')}','${(s.name||'').replace(/'/g,"\\'")}')">📲 WhatsApp</button>` : ''}
+</div>
+</div>`;
+}
+html += `</div>`;
+}
+html += `</div>`;
 return html;
 }
 // ---------------- Init ----------------
