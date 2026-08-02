@@ -193,6 +193,7 @@ disciplinaPri: {},
 disciplinaSec: {},
 disciplinaStudentId: null,
 disciplinaIncidenteNuevo: null,
+disciplinaReportMode: null,
 };
 function emptyExtra() {
 return {
@@ -1220,6 +1221,9 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 <p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usará para compartir evaluaciones cuando no haya teléfono del padre/madre/tutor registrado.</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.directorNombre||''}" oninput="updateSecSchoolFieldLocal('directorNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Teléfono del director(a) (WhatsApp)" value="${si.directorTelefono||''}" oninput="updateSecSchoolFieldLocal('directorTelefono',this.value)" />
+<p style="font-weight:600;font-size:0.85em;margin:6px 0 8px;color:#6b7280;">📋 Datos para reportes de indisciplina</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Ubicación (ej. SAN MARCOS, TONILA, JALISCO.)" value="${si.direccionReporte||''}" oninput="updateSecSchoolFieldLocal('direccionReporte',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre de orientador(a) (L.T.S.)" value="${si.orientadorNombre||''}" oninput="updateSecSchoolFieldLocal('orientadorNombre',this.value)" />
 <button class="btn btn-green" onclick="saveSecSchoolInfo()">💾 Guardar datos</button>
 </div>
 <button class="btn btn-blue" onclick="setSecTab('alumnos')">Continuar a Alumnos →</button>
@@ -2094,6 +2098,7 @@ const ref = nivel === 'primaria' ? disciplinaPriRef : disciplinaSecRef;
 ref.child(studentId).child('estado').set(estado);
 }
 function renderDisciplina(nivel) {
+if (state.disciplinaReportMode && state.disciplinaReportMode.nivel === nivel) return renderReporteImprimible();
 const list = nivel === 'primaria' ? state.students : state.secStudents;
 const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
 const sorted = [...list].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
@@ -2162,7 +2167,10 @@ incidentes.forEach(([id, inc]) => {
 html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:6px;">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
 <p style="font-size:0.72em;color:#9ca3af;">${inc.fecha||''}</p>
+<div style="display:flex;gap:6px;">
+<button style="border:none;background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:0.7em;font-weight:600;" onclick="abrirReporte('${nivel}','${s.id}','${id}')">🖨️ Reporte</button>
 <button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:2px 6px;font-size:0.7em;" onclick="deleteIncidente('${nivel}','${s.id}','${id}')">✕</button>
+</div>
 </div>`;
 if (nivel === 'primaria') {
 html += (inc.faltas||[]).map(f=>`<p style="font-size:0.78em;color:#334155;">• ${f}</p>`).join('');
@@ -2177,6 +2185,92 @@ html += `</div>`;
 });
 }
 html += `</div>`;
+return html;
+}
+// ---------------- Reporte escolar / Citatorio ----------------
+function abrirReporte(nivel, studentId, incId) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === studentId);
+const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
+const inc = map[studentId] && map[studentId].incidentes && map[studentId].incidentes[incId];
+if (!s || !inc) return;
+state.disciplinaReportMode = {
+nivel, studentId, incId,
+padreNombre: s.padreNombre || s.tutorNombre || s.madreNombre || '',
+maestroNombre: nivel === 'primaria' ? (state.schoolInfo.autoridadNombre || '') : '',
+fecha: inc.fecha || new Date().toISOString().slice(0, 10),
+accionIntervenga: true, accionAcudir: false, accionResguardo: false,
+citaFecha: '', citaHora: '', resguardoDias: '',
+orientadorNombre: state.secSchoolInfo.orientadorNombre || ''
+};
+render();
+}
+function cerrarReporte() { state.disciplinaReportMode = null; render(); }
+function updateReporteField(field, value) { state.disciplinaReportMode[field] = value; }
+function toggleReporteAccion(field) { state.disciplinaReportMode[field] = !state.disciplinaReportMode[field]; render(); }
+function renderReporteImprimible() {
+const rm = state.disciplinaReportMode;
+const nivel = rm.nivel;
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === rm.studentId);
+const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
+const inc = map[rm.studentId].incidentes[rm.incId];
+let html = `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
+<button class="btn btn-gray" style="flex:1;" onclick="cerrarReporte()">← Volver</button>
+<button class="btn btn-dark" style="flex:2;" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+</div>`;
+if (nivel === 'primaria') {
+html += `<div class="card" style="font-size:12px;line-height:1.6;">
+<p style="text-align:center;font-weight:800;font-size:1.5em;margin-bottom:18px;">Reporte escolar</p>
+<p>Sr(a) <input style="border:none;border-bottom:1px solid #000;width:230px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> por medio del presente se le informa que su</p>
+<p style="margin-top:4px;">hijo(a): <strong>${s.name}</strong>, el cual asiste al grupo de <strong>${s.grade||''}${s.grupo?(' '+s.grupo):''}</strong> a cargo del</p>
+<p style="margin-top:4px;">maestro(a): <input style="border:none;border-bottom:1px solid #000;width:230px;font-size:1em;" value="${rm.maestroNombre}" oninput="updateReporteField('maestroNombre',this.value)">, ha incurrido en las siguientes faltas:</p>
+<div style="margin:16px 0;">
+${FALTAS_PRIMARIA.map(falta => `<p style="margin:4px 0;">${(inc.faltas||[]).includes(falta) ? '☑' : '☐'} ${falta}</p>`).join('')}
+<p style="margin:4px 0;">☐ Otros: ${inc.otros ? inc.otros : '_________________________________'}</p>
+</div>
+<p style="margin-top:16px;">Por lo anterior es necesario que:</p>
+<p style="margin:6px 0;">${rm.accionIntervenga?'☑':'☐'} Intervenga desde casa valorando la conducta de su hijo(a) y estableciendo límites y reglas claros.</p>
+<p style="margin:6px 0;">${rm.accionAcudir?'☑':'☐'} Acuda a nuestra institución el día: <input style="border:none;border-bottom:1px solid #000;width:110px;font-size:1em;" value="${rm.citaFecha}" oninput="updateReporteField('citaFecha',this.value)"> a las <input style="border:none;border-bottom:1px solid #000;width:80px;font-size:1em;" value="${rm.citaHora}" oninput="updateReporteField('citaHora',this.value)"> horas para firmar acuerdos y compromisos.</p>
+<p style="margin:6px 0;">${rm.accionResguardo?'☑':'☐'} El alumno(a) queda bajo resguardo familiar por <input style="border:none;border-bottom:1px solid #000;width:50px;font-size:1em;" value="${rm.resguardoDias}" oninput="updateReporteField('resguardoDias',this.value)"> días, como medida precautoria para su seguridad.</p>
+<div class="no-print" style="display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;">
+<button onclick="toggleReporteAccion('accionIntervenga')" class="btn btn-gray" style="flex:1;font-size:0.68em;min-width:100px;">☑/☐ Intervenga</button>
+<button onclick="toggleReporteAccion('accionAcudir')" class="btn btn-gray" style="flex:1;font-size:0.68em;min-width:100px;">☑/☐ Acuda a cita</button>
+<button onclick="toggleReporteAccion('accionResguardo')" class="btn btn-gray" style="flex:1;font-size:0.68em;min-width:100px;">☑/☐ Resguardo</button>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:70px;">
+<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del docente</div>
+<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del padre/madre</div>
+</div>
+</div>`;
+} else {
+const causaLbl = { leve: 'CAUSA LEVE', grave: 'CAUSA GRAVE', muygrave: 'CAUSA MUY GRAVE' };
+const protLbl = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO INDIRECTO', sexual: 'SEXUAL', psicologico: 'PSICOLÓGICO', exclusion: 'POR EXCLUSIÓN SOCIAL', cyberbullying: 'POR CYBERBULLYING' };
+const si = state.secSchoolInfo;
+html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
+<div style="font-weight:700;font-size:1.1em;">📖</div>
+<div style="text-align:center;flex:1;">
+<p style="font-weight:700;font-size:1.05em;">${si.nombre || 'ESCUELA SECUNDARIA TÉCNICA'}</p>
+<p>${si.direccionReporte || ''}</p>
+<p>CICLO ESCOLAR ${getCicloEscolar()}</p>
+</div>
+<div style="width:34px;"></div>
+</div>
+<p>PADRE DE FAMILIA O TUTOR: <input style="border:none;border-bottom:1px solid #000;width:220px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> &nbsp; FECHA: <input type="date" style="border:none;border-bottom:1px solid #000;font-size:1em;" value="${rm.fecha}" oninput="updateReporteField('fecha',this.value)"></p>
+<p style="text-align:center;font-weight:700;margin:12px 0;font-size:1.1em;">REPORTE DE INDISCIPLINA</p>
+<p>POR ESTE MEDIO SE LE NOTIFICA A USTED QUE SU HIJO(A): <strong>${(s.name||'').toUpperCase()}</strong> DEL GRUPO <strong>${s.grade||''}${s.grupo||''}</strong> TIENE REPORTE DE INDISCIPLINA POR LOS ACTOS QUE AMERITAN MEDIDAS DISCIPLINARIAS A LOS ALUMNOS POR FALTAR AL REGLAMENTO ESCOLAR Y QUE SE CLASIFICAN EN EL SIGUIENTE PUNTO:</p>
+<p style="margin-top:10px;">${Object.entries(causaLbl).map(([k,v]) => `${inc.causa===k?'☑':'☐'} ${v}`).join(' &nbsp; &nbsp; ')}</p>
+<p style="margin-top:10px;">PROTOCOLO EN CASO DE VIOLENCIA (si aplica): ${Object.entries(protLbl).map(([k,v]) => `${inc.protocolo===k?'☑':'☐'} ${v}`).join(' &nbsp; ')}</p>
+<p style="margin-top:12px;">CAUSA POR LO QUE SE LE REPORTA:</p>
+<p style="border:1px solid #000;min-height:55px;padding:6px;margin-top:4px;">${(inc.descripcion||'').toUpperCase()}</p>
+<div style="display:flex;justify-content:space-between;margin-top:50px;">
+<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">PROFR(A). DEL MÓDULO<br>NOMBRE Y FIRMA</div>
+<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">ACEPTA EL REPORTE<br>NOMBRE Y FIRMA DEL ALUMNO(A)</div>
+</div>
+<p style="margin-top:36px;border-top:1px solid #000;padding-top:4px;text-align:center;">L.T.S. <input style="border:none;border-bottom:1px solid #000;text-align:center;font-size:1em;" value="${rm.orientadorNombre}" oninput="updateReporteField('orientadorNombre',this.value)"></p>
+</div>`;
+}
 return html;
 }
 // ---------------- Init ----------------
