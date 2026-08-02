@@ -186,6 +186,7 @@ tareaFilterGrade: '',
 tareaFilterGrupo: '',
 tareaShareUrl: null,
 tareaShareLoading: false,
+tareaPrintMode: false,
 };
 function emptyExtra() {
 return {
@@ -1855,12 +1856,56 @@ let phone = contact.tel.replace(/\D/g, ''); if (phone.length === 10) phone = '52
 const msg = `Hola, le comparto el reporte de cumplimiento de tareas de ${s.name || ''}: ${state.tareaShareUrl}`;
 window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
+function renderTareasImprimible(nivel) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
+const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
+const tareasGrupo = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' || t.grupo === state.tareaFilterGrupo)).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
+const alumnos = list.filter(s => s.grade === state.tareaFilterGrade && (nivel==='primaria' || s.grupo === state.tareaFilterGrupo)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+let html = `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
+<button class="btn btn-gray" style="flex:1;" onclick="state.tareaPrintMode=false;render();">← Volver</button>
+<button class="btn btn-dark" style="flex:2;" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+</div>
+<div class="card" style="font-size:11px;">
+<p style="font-weight:700;font-size:1.1em;">${si.nombre || 'Escuela'}</p>
+<p style="font-size:0.85em;color:#6b7280;margin-bottom:2px;">Cumplimiento de tareas — ${state.tareaFilterGrade}${nivel==='secundaria' ? (' Grupo '+state.tareaFilterGrupo) : ''} · ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:12px;">Generado el ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}</p>`;
+if (!tareasGrupo.length || !alumnos.length) {
+html += `<p style="font-size:0.85em;color:#9ca3af;">No hay tareas o alumnos registrados para este grado${nivel==='secundaria'?'/grupo':''}.</p></div>`;
+return html;
+}
+html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:9px;">
+<thead><tr style="background:#f3f4f6;">
+<th style="border:1px solid #d1d5db;padding:5px;text-align:left;min-width:110px;">Alumno</th>
+${tareasGrupo.map(([id,t])=>`<th style="border:1px solid #d1d5db;padding:5px;min-width:56px;">${t.tipo==='casa'?'🏠':'🏫'} ${esc2(t.titulo)}<br><span style="font-weight:400;color:#9ca3af;">${t.fecha||''}</span></th>`).join('')}
+<th style="border:1px solid #d1d5db;padding:5px;background:#eff6ff;">Promedio</th>
+</tr></thead><tbody>`;
+alumnos.forEach(s => {
+const calif = [];
+html += `<tr><td style="border:1px solid #d1d5db;padding:5px;font-weight:600;">${esc2(s.name)}</td>`;
+tareasGrupo.forEach(([id,t]) => {
+const e = (t.entregas || {})[s.id] || {};
+if (typeof e.calificacion === 'number') calif.push(e.calificacion);
+const val = e.calificacion != null ? e.calificacion : (e.cumplio ? '✔' : (e.cumplio === false ? '✘' : '—'));
+const bg = e.cumplio ? '#f0fdf4' : (e.cumplio === false ? '#fef2f2' : '#fff');
+html += `<td style="border:1px solid #d1d5db;padding:5px;text-align:center;background:${bg};">${val}</td>`;
+});
+const prom = calif.length ? (calif.reduce((a,b)=>a+b,0)/calif.length).toFixed(1) : '—';
+html += `<td style="border:1px solid #d1d5db;padding:5px;text-align:center;font-weight:700;background:#eff6ff;">${prom}</td></tr>`;
+});
+html += `</tbody></table></div>
+<p style="font-size:0.7em;color:#9ca3af;margin-top:10px;">✔ = cumplió sin calificación numérica · ✘ = no cumplió · — = sin registro</p>
+</div>`;
+return html;
+}
+function esc2(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function renderTareas(nivel) {
 const list = nivel === 'primaria' ? state.students : state.secStudents;
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
 const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
 if (!state.tareaFilterGrade) state.tareaFilterGrade = gradeOptions[0];
 if (nivel === 'secundaria' && !state.tareaFilterGrupo) state.tareaFilterGrupo = GRUPOS_SEC[0];
+if (state.tareaPrintMode) return renderTareasImprimible(nivel);
 let html = `<div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📝 Cumplimiento de Tareas — ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
 <div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -1873,7 +1918,10 @@ ${GRUPOS_SEC.map(g=>`<option value="${g}" ${state.tareaFilterGrupo===g?'selected
 </select>`;
 }
 html += `</div>
-<button class="btn btn-blue" style="width:100%;" onclick="openTareaForm('${nivel}')">➕ Nueva tarea</button>
+<div style="display:flex;gap:6px;">
+<button class="btn btn-blue" style="flex:1;" onclick="openTareaForm('${nivel}')">➕ Nueva tarea</button>
+<button class="btn btn-dark" style="flex:1;" onclick="state.tareaPrintMode=true;render();">📄 Descargar PDF (lista completa)</button>
+</div>
 </div>`;
 
 if (state.tareaNueva) {
