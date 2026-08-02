@@ -141,7 +141,7 @@ const FIREBASE_CONFIG = {
 };
 
 let auth = null, db = null, storage = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
@@ -188,6 +188,10 @@ tareaShareUrl: null,
 tareaShareLoading: false,
 tareaShareSelectedId: '',
 tareaPrintMode: false,
+disciplinaPri: {},
+disciplinaSec: {},
+disciplinaStudentId: null,
+disciplinaIncidenteNuevo: null,
 };
 function emptyExtra() {
 return {
@@ -254,6 +258,8 @@ formativosPriRef = db.ref(DB_ROOT + '/formativos/primaria');
 formativosSecRef = db.ref(DB_ROOT + '/formativos/secundaria');
 tareasPriRef = db.ref(DB_ROOT + '/tareas/primaria');
 tareasSecRef = db.ref(DB_ROOT + '/tareas/secundaria');
+disciplinaPriRef = db.ref(DB_ROOT + '/disciplina/primaria');
+disciplinaSecRef = db.ref(DB_ROOT + '/disciplina/secundaria');
 auth.onAuthStateChanged(u => {
 state.user = u;
 state.authError = '';
@@ -285,6 +291,8 @@ formativosPriRef.on('value', snap => { state.formativosPri = snap.val() || {}; r
 formativosSecRef.on('value', snap => { state.formativosSec = snap.val() || {}; render(); }, () => {});
 tareasPriRef.on('value', snap => { state.tareasPri = snap.val() || {}; render(); }, () => {});
 tareasSecRef.on('value', snap => { state.tareasSec = snap.val() || {}; render(); }, () => {});
+disciplinaPriRef.on('value', snap => { state.disciplinaPri = snap.val() || {}; render(); }, () => {});
+disciplinaSecRef.on('value', snap => { state.disciplinaSec = snap.val() || {}; render(); }, () => {});
 }
 function unsubscribeData() {
 if (studentsRef) studentsRef.off();
@@ -295,12 +303,16 @@ if (formativosPriRef) formativosPriRef.off();
 if (formativosSecRef) formativosSecRef.off();
 if (tareasPriRef) tareasPriRef.off();
 if (tareasSecRef) tareasSecRef.off();
+if (disciplinaPriRef) disciplinaPriRef.off();
+if (disciplinaSecRef) disciplinaSecRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
 state.formativosSec = {};
 state.tareasPri = {};
 state.tareasSec = {};
+state.disciplinaPri = {};
+state.disciplinaSec = {};
 }
 async function handleLoginSubmit() {
 state.authError = '';
@@ -843,13 +855,13 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['formativo','Formativa'],['tareas','Tareas']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -889,6 +901,7 @@ if (state.tab === 'diplomas') return nav + renderDiplomas();
 if (state.tab === 'honor') return nav + renderCuadroHonor();
 if (state.tab === 'formativo') return nav + renderFormativo('primaria');
 if (state.tab === 'tareas') return nav + renderTareas('primaria');
+if (state.tab === 'disciplina') return nav + renderDisciplina('primaria');
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
@@ -899,6 +912,7 @@ if (state.secTab === 'inicio') return renderSecInicio();
 if (state.secTab === 'alumnos') return nav + renderSecAlumnos();
 if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
 if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
+if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
 return '';
 }
 function renderInicio() {
@@ -2014,6 +2028,138 @@ html += `<div class="card" style="border:1px solid #bfdbfe;background:#eff6ff;ma
 <button class="btn btn-green" style="flex:1;" onclick="shareTareaWhatsappPrompt('${nivel}')">📲 WhatsApp</button>
 </div>
 </div>`;
+}
+html += `</div>`;
+return html;
+}
+// ---------------- Disciplina ----------------
+const FALTAS_PRIMARIA = ['No cumple con tareas.','No trae materiales solicitados.','Platica y juega en clase.','No termina sus trabajos.','Muestra conducta agresiva en clase o durante el recreo.','Utiliza vocabulario soez y altisonante al dirigirse a sus compañeros o maestros.'];
+const CAUSA_SEC = [['leve','Causa leve'],['grave','Causa grave'],['muygrave','Causa muy grave']];
+const PROTOCOLO_SEC = [['ninguno','No aplica'],['fisico_directo','Físico directo'],['fisico_indirecto','Físico indirecto'],['sexual','Sexual'],['psicologico','Psicológico'],['exclusion','Exclusión social'],['cyberbullying','Cyberbullying']];
+function selectDisciplinaStudent(id) {
+state.disciplinaStudentId = id || null;
+state.disciplinaIncidenteNuevo = null;
+render();
+}
+function openIncidenteForm(nivel) {
+state.disciplinaIncidenteNuevo = nivel === 'primaria'
+? { fecha: new Date().toISOString().slice(0,10), faltas: [], otros: '' }
+: { fecha: new Date().toISOString().slice(0,10), causa: 'leve', protocolo: 'ninguno', descripcion: '' };
+render();
+}
+function cancelarIncidenteNuevo() { state.disciplinaIncidenteNuevo = null; render(); }
+function toggleFaltaPrimaria(falta) {
+const arr = state.disciplinaIncidenteNuevo.faltas;
+const i = arr.indexOf(falta);
+if (i === -1) arr.push(falta); else arr.splice(i, 1);
+render();
+}
+function updateIncidenteField(field, value) { state.disciplinaIncidenteNuevo[field] = value; }
+function setIncidenteCausa(c) { state.disciplinaIncidenteNuevo.causa = c; render(); }
+function setIncidenteProtocolo(p) { state.disciplinaIncidenteNuevo.protocolo = p; render(); }
+function guardarIncidente(nivel, studentId) {
+const inc = state.disciplinaIncidenteNuevo;
+if (nivel === 'primaria' && inc.faltas.length === 0 && !inc.otros.trim()) { showToast('Marca al menos una falta o describe el incidente'); return; }
+if (nivel === 'secundaria' && !inc.descripcion.trim()) { showToast('Describe la causa del reporte'); return; }
+const ref = nivel === 'primaria' ? disciplinaPriRef : disciplinaSecRef;
+const incRef = ref.child(studentId).child('incidentes').push();
+incRef.set({ ...inc, createdAt: Date.now() }).then(() => {
+state.disciplinaIncidenteNuevo = null;
+showToast('📋 Incidente registrado');
+render();
+}).catch(() => showToast('No se pudo guardar el incidente'));
+}
+function deleteIncidente(nivel, studentId, incId) {
+if (!confirm('¿Eliminar este incidente del historial?')) return;
+const ref = nivel === 'primaria' ? disciplinaPriRef : disciplinaSecRef;
+ref.child(studentId).child('incidentes').child(incId).remove();
+}
+function setDisciplinaEstado(nivel, studentId, estado) {
+const ref = nivel === 'primaria' ? disciplinaPriRef : disciplinaSecRef;
+ref.child(studentId).child('estado').set(estado);
+}
+function renderDisciplina(nivel) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
+const sorted = [...list].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+let html = `<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">🧭 Disciplina — ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Selecciona un alumno para ver su historial y registrar incidentes.</p>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" onchange="selectDisciplinaStudent(this.value)">
+<option value="">— Selecciona un alumno —</option>
+${sorted.map(s => {
+const d = map[s.id];
+const estado = d && d.estado === 'mala' ? '🔴 Mala conducta' : (d && Object.keys(d.incidentes||{}).length ? '🟡 Con incidentes' : '🟢 Buena conducta');
+return `<option value="${s.id}" ${state.disciplinaStudentId===s.id?'selected':''}>${s.name||'(sin nombre)'} · ${estado}</option>`;
+}).join('')}
+</select>
+</div>`;
+if (!list.length) { html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">Aún no hay alumnos registrados en este nivel.</p></div>`; return html; }
+if (!state.disciplinaStudentId) return html;
+const s = list.find(x => x.id === state.disciplinaStudentId);
+if (!s) return html;
+const d = map[s.id] || {};
+const incidentes = Object.entries(d.incidentes || {}).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+const estadoActual = d.estado || (incidentes.length ? 'mala' : 'buena');
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.95em;margin-bottom:2px;">${s.name}</p>
+<p style="font-size:0.75em;color:#9ca3af;margin-bottom:10px;">${s.grade||''} ${s.grupo?('· Grupo '+s.grupo):''}</p>
+<p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">Estado general de conducta</p>
+<div style="display:flex;gap:6px;margin-bottom:12px;">
+<button style="flex:1;padding:10px;border-radius:8px;border:2px solid ${estadoActual==='buena'?'#16a34a':'#e5e7eb'};background:${estadoActual==='buena'?'#dcfce7':'#fff'};font-size:0.78em;font-weight:600;" onclick="setDisciplinaEstado('${nivel}','${s.id}','buena')">🟢 Buena conducta</button>
+<button style="flex:1;padding:10px;border-radius:8px;border:2px solid ${estadoActual==='mala'?'#dc2626':'#e5e7eb'};background:${estadoActual==='mala'?'#fee2e2':'#fff'};font-size:0.78em;font-weight:600;" onclick="setDisciplinaEstado('${nivel}','${s.id}','mala')">🔴 Mala conducta</button>
+</div>
+<button class="btn btn-blue" style="width:100%;" onclick="openIncidenteForm('${nivel}')">➕ Registrar incidente</button>
+</div>`;
+
+if (state.disciplinaIncidenteNuevo) {
+const inc = state.disciplinaIncidenteNuevo;
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">Nuevo incidente</p>
+<input type="date" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" value="${inc.fecha}" onchange="updateIncidenteField('fecha',this.value)" />`;
+if (nivel === 'primaria') {
+html += FALTAS_PRIMARIA.map(f => `<label style="display:flex;align-items:flex-start;gap:8px;font-size:0.8em;margin-bottom:6px;"><input type="checkbox" style="margin-top:2px;" ${inc.faltas.includes(f)?'checked':''} onchange="toggleFaltaPrimaria('${f.replace(/'/g,"\\'")}')" /> ${f}</label>`).join('');
+html += `<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-top:6px;text-transform:uppercase;" rows="2" placeholder="Otros (opcional)" oninput="forceUpper(this);updateIncidenteField('otros',this.value)">${inc.otros}</textarea>`;
+} else {
+html += `<p style="font-size:0.78em;font-weight:600;margin-bottom:6px;">Causa</p>
+<div style="display:flex;gap:6px;margin-bottom:10px;">
+${CAUSA_SEC.map(([val,lbl])=>`<button style="flex:1;padding:8px 2px;border-radius:8px;border:2px solid ${inc.causa===val?'#2563eb':'#e5e7eb'};background:${inc.causa===val?'#dbeafe':'#fff'};font-size:0.72em;font-weight:600;" onclick="setIncidenteCausa('${val}')">${lbl}</button>`).join('')}
+</div>
+<p style="font-size:0.78em;font-weight:600;margin-bottom:6px;">Protocolo (si aplica acoso)</p>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;margin-bottom:10px;" onchange="setIncidenteProtocolo(this.value)">
+${PROTOCOLO_SEC.map(([val,lbl])=>`<option value="${val}" ${inc.protocolo===val?'selected':''}>${lbl}</option>`).join('')}
+</select>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;text-transform:uppercase;" rows="3" placeholder="Causa por la que se reporta" oninput="forceUpper(this);updateIncidenteField('descripcion',this.value)">${inc.descripcion}</textarea>`;
+}
+html += `<div style="display:flex;gap:8px;margin-top:10px;">
+<button class="btn btn-green" style="flex:1;" onclick="guardarIncidente('${nivel}','${s.id}')">💾 Guardar incidente</button>
+<button class="btn btn-gray" style="flex:1;" onclick="cancelarIncidenteNuevo()">Cancelar</button>
+</div>
+</div>`;
+}
+
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">📜 Historial (${incidentes.length})</p>`;
+if (!incidentes.length) {
+html += `<p style="font-size:0.8em;color:#9ca3af;">Sin incidentes registrados.</p>`;
+} else {
+incidentes.forEach(([id, inc]) => {
+html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:6px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+<p style="font-size:0.72em;color:#9ca3af;">${inc.fecha||''}</p>
+<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:2px 6px;font-size:0.7em;" onclick="deleteIncidente('${nivel}','${s.id}','${id}')">✕</button>
+</div>`;
+if (nivel === 'primaria') {
+html += (inc.faltas||[]).map(f=>`<p style="font-size:0.78em;color:#334155;">• ${f}</p>`).join('');
+if (inc.otros) html += `<p style="font-size:0.78em;color:#334155;">• ${inc.otros}</p>`;
+} else {
+const causaLbl = (CAUSA_SEC.find(c=>c[0]===inc.causa)||[])[1] || '';
+const protLbl = (PROTOCOLO_SEC.find(p=>p[0]===inc.protocolo)||[])[1] || '';
+html += `<p style="font-size:0.78em;color:#334155;"><strong>${causaLbl}</strong>${inc.protocolo && inc.protocolo!=='ninguno' ? ' · '+protLbl : ''}</p>
+<p style="font-size:0.78em;color:#334155;">${inc.descripcion||''}</p>`;
+}
+html += `</div>`;
+});
 }
 html += `</div>`;
 return html;
