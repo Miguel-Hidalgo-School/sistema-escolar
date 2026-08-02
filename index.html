@@ -164,7 +164,7 @@ importSummary: null,
 honorGrade: '1°',
 honorPeriodo: 0,
 secStudents: [],
-secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '' },
+secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '', logoURL2: '' },
 secSelectedGrade: '1°',
 secSelectedGrupo: 'A',
 secEditingId: null,
@@ -551,6 +551,18 @@ if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con
 state.secSchoolInfo.logoURL = base64;
 secSchoolRef.update({ logoURL: base64 });
 showToast('✅ Logo actualizado');
+render();
+}, () => showToast('❌ Error al procesar la imagen'));
+}
+function uploadSecLogo2(event) {
+const file = event.target.files && event.target.files[0];
+if (!file) return;
+showToast('Procesando logo...');
+resizeImageToBase64(file, 300, 0.75, (base64) => {
+if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
+state.secSchoolInfo.logoURL2 = base64;
+secSchoolRef.update({ logoURL2: base64 });
+showToast('✅ Segundo logo actualizado');
 render();
 }, () => showToast('❌ Error al procesar la imagen'));
 }
@@ -1201,15 +1213,26 @@ function renderSecInicio() {
 const si = state.secSchoolInfo;
 return `
 <div class="inicio-hero" style="background:linear-gradient(135deg,#059669,#065f46);">
+<div style="display:flex;gap:10px;justify-content:center;">
 <div class="logo-box">
 ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2.2em;">🏫</span>`}
 </div>
+<div class="logo-box">
+${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2.2em;">🎖️</span>`}
+</div>
+</div>
 <p style="font-weight:700;font-size:1.1em;">${si.nombre || 'Secundaria'}</p>
 <p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Reportes por materia y grado</p>
+<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
 <label class="upload-label">
-📷 Subir logo de la secundaria
+📷 Logo 1 (izquierda)
 <input type="file" accept="image/*" style="display:none;" onchange="uploadSecLogo(event)" />
 </label>
+<label class="upload-label">
+📷 Logo 2 (derecha)
+<input type="file" accept="image/*" style="display:none;" onchange="uploadSecLogo2(event)" />
+</label>
+</div>
 </div>
 <div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Datos de Secundaria (para el reporte)</p>
@@ -2248,14 +2271,17 @@ const causaLbl = { leve: 'CAUSA LEVE', grave: 'CAUSA GRAVE', muygrave: 'CAUSA MU
 const protLbl = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO INDIRECTO', sexual: 'SEXUAL', psicologico: 'PSICOLÓGICO', exclusion: 'POR EXCLUSIÓN SOCIAL', cyberbullying: 'POR CYBERBULLYING' };
 const si = state.secSchoolInfo;
 html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
-<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
-<div style="font-weight:700;font-size:1.1em;">📖</div>
+<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
+<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
 <div style="text-align:center;flex:1;">
+<p style="font-weight:700;">DIRECCIÓN GENERAL DE SECUNDARIAS TÉCNICAS</p>
+<p>SECTOR 06</p>
 <p style="font-weight:700;font-size:1.05em;">${si.nombre || 'ESCUELA SECUNDARIA TÉCNICA'}</p>
-<p>${si.direccionReporte || ''}</p>
+<p>C.C.T. ${si.cct || ''}</p>
+<p>${si.direccionReporte || 'SAN MARCOS, MPIO. DE TONILA, JAL.'}</p>
 <p>CICLO ESCOLAR ${getCicloEscolar()}</p>
 </div>
-<div style="width:34px;"></div>
+<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
 </div>
 <p>PADRE DE FAMILIA O TUTOR: <input style="border:none;border-bottom:1px solid #000;width:220px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> &nbsp; FECHA: <input type="date" style="border:none;border-bottom:1px solid #000;font-size:1em;" value="${rm.fecha}" oninput="updateReporteField('fecha',this.value)"></p>
 <p style="text-align:center;font-weight:700;margin:12px 0;font-size:1.1em;">REPORTE DE INDISCIPLINA</p>
