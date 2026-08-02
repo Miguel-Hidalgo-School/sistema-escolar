@@ -141,7 +141,7 @@ const FIREBASE_CONFIG = {
 };
 
 let auth = null, db = null, storage = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
@@ -178,6 +178,14 @@ formativoShareUrl: null,
 formativoShareLoading: false,
 formativoShareTel: '',
 formativoAcuseInfo: null,
+tareasPri: {},
+tareasSec: {},
+tareaNueva: null,
+tareaSelectedId: null,
+tareaFilterGrade: '',
+tareaFilterGrupo: '',
+tareaShareUrl: null,
+tareaShareLoading: false,
 };
 function emptyExtra() {
 return {
@@ -242,6 +250,8 @@ secStudentsRef = db.ref(DB_ROOT + '/secStudents');
 secSchoolRef = db.ref(DB_ROOT + '/secSchoolInfo');
 formativosPriRef = db.ref(DB_ROOT + '/formativos/primaria');
 formativosSecRef = db.ref(DB_ROOT + '/formativos/secundaria');
+tareasPriRef = db.ref(DB_ROOT + '/tareas/primaria');
+tareasSecRef = db.ref(DB_ROOT + '/tareas/secundaria');
 auth.onAuthStateChanged(u => {
 state.user = u;
 state.authError = '';
@@ -271,6 +281,8 @@ render();
 });
 formativosPriRef.on('value', snap => { state.formativosPri = snap.val() || {}; render(); }, () => {});
 formativosSecRef.on('value', snap => { state.formativosSec = snap.val() || {}; render(); }, () => {});
+tareasPriRef.on('value', snap => { state.tareasPri = snap.val() || {}; render(); }, () => {});
+tareasSecRef.on('value', snap => { state.tareasSec = snap.val() || {}; render(); }, () => {});
 }
 function unsubscribeData() {
 if (studentsRef) studentsRef.off();
@@ -279,10 +291,14 @@ if (secStudentsRef) secStudentsRef.off();
 if (secSchoolRef) secSchoolRef.off();
 if (formativosPriRef) formativosPriRef.off();
 if (formativosSecRef) formativosSecRef.off();
+if (tareasPriRef) tareasPriRef.off();
+if (tareasSecRef) tareasSecRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
 state.formativosSec = {};
+state.tareasPri = {};
+state.tareasSec = {};
 }
 async function handleLoginSubmit() {
 state.authError = '';
@@ -697,6 +713,7 @@ function compartirBoleta(studentId) {
 const s = state.students.find(x => x.id === studentId);
 if (!s) return;
 state.shareLinkLoading = true; render();
+const doShare = () => {
 const ref = db.ref(DB_ROOT + '/reportesCompartidos').push();
 const token = ref.key;
 const now = Date.now();
@@ -713,15 +730,29 @@ cicloEscolar: getCicloEscolar(),
 createdAt: now, expiresAt
 };
 ref.set(snapshot).then(() => {
+studentsRef.child(studentId).update({ lastBoletaShareToken: token });
 const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
 state.shareLinkUrl = base + 'reporte.html?t=' + token;
 state.shareLinkLoading = false;
 render();
 }).catch(() => { state.shareLinkLoading = false; showToast('No se pudo generar el link'); render(); });
+};
+if (s.lastBoletaShareToken) {
+db.ref(DB_ROOT + '/reportesCompartidos/' + s.lastBoletaShareToken).update({ expiresAt: Date.now() }).catch(() => {}).then(doShare);
+} else {
+doShare();
+}
 }
 function copyShareLink() {
 if (!state.shareLinkUrl) return;
 navigator.clipboard.writeText(state.shareLinkUrl).then(() => showToast('Link copiado ✅'));
+}
+function enviarBoletaWhatsapp(telDigits, studentName) {
+if (!state.shareLinkUrl || !telDigits) return;
+let phone = telDigits.replace(/\D/g, '');
+if (phone.length === 10) phone = '52' + phone;
+const msg = `Hola, le comparto la boleta de calificaciones de ${studentName}: ${state.shareLinkUrl}`;
+window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
 function closeShareModal() { state.shareLinkUrl = null; render(); }
 function setHonorGrade(g) { state.honorGrade = g; render(); }
@@ -810,13 +841,13 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['formativo','Formativa']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['formativo','Formativa'],['tareas','Tareas']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -855,6 +886,7 @@ if (state.tab === 'boletas') return nav + (state.boletaStudentId ? renderBoletaD
 if (state.tab === 'diplomas') return nav + renderDiplomas();
 if (state.tab === 'honor') return nav + renderCuadroHonor();
 if (state.tab === 'formativo') return nav + renderFormativo('primaria');
+if (state.tab === 'tareas') return nav + renderTareas('primaria');
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
@@ -864,6 +896,7 @@ if (state.secReportGrade) return nav + renderSecReporte();
 if (state.secTab === 'inicio') return renderSecInicio();
 if (state.secTab === 'alumnos') return nav + renderSecAlumnos();
 if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
+if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
 return '';
 }
 function renderInicio() {
@@ -1106,13 +1139,16 @@ html += `<div class="no-print" style="margin-top:12px;display:flex;gap:8px;">
 <button class="btn btn-blue" style="flex:1;" onclick="compartirBoleta('${s.id}')" ${state.shareLinkLoading ? 'disabled' : ''}>🔗 ${state.shareLinkLoading ? 'Generando...' : 'Compartir con padre'}</button>
 </div>`;
 if (state.shareLinkUrl) {
+const contactBoleta = resolveContact(s, 'primaria');
 html += `<div class="no-print card" style="margin-top:10px;border:1px solid #bfdbfe;background:#eff6ff;">
 <p style="font-weight:700;font-size:0.85em;color:#1d4ed8;margin-bottom:6px;">✅ Link generado (válido 15 días)</p>
 <p style="font-size:0.78em;color:#374151;word-break:break-all;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:8px;margin-bottom:8px;">${state.shareLinkUrl}</p>
+<p style="font-size:0.72em;color:#6b7280;margin-bottom:8px;">${contactBoleta.tel ? `Contacto detectado — ${contactBoleta.label}: ${contactBoleta.tel}` : 'Sin teléfono registrado para este alumno.'}</p>
 <div style="display:flex;gap:8px;">
 <button class="btn btn-blue" style="flex:1;" onclick="copyShareLink()">📋 Copiar link</button>
-<button class="btn btn-gray" style="flex:1;" onclick="closeShareModal()">Cerrar</button>
+${contactBoleta.tel ? `<button class="btn btn-green" style="flex:1;" onclick="enviarBoletaWhatsapp('${contactBoleta.tel.replace(/[^0-9]/g,'')}','${(s.name||'').replace(/'/g,"\\'")}')">📲 WhatsApp</button>` : ''}
 </div>
+<button class="btn btn-gray" style="width:100%;margin-top:8px;" onclick="closeShareModal()">Cerrar</button>
 </div>`;
 }
 return html;
@@ -1530,6 +1566,7 @@ const s = list.find(x => x.id === id);
 const report = dataMap[id];
 if (!s || !report) return;
 state.formativoShareLoading = true; render();
+const doShare = () => {
 const ref = db.ref(DB_ROOT + '/reportesFormativosCompartidos').push();
 const token = ref.key;
 const now = Date.now();
@@ -1559,6 +1596,12 @@ state.formativoShareLoading = false;
 state.formativoAcuseInfo = null;
 render();
 }).catch(() => { state.formativoShareLoading = false; showToast('No se pudo generar el link'); render(); });
+};
+if (report.lastShareToken) {
+db.ref(DB_ROOT + '/reportesFormativosCompartidos/' + report.lastShareToken).update({ expiresAt: Date.now() }).catch(() => {}).then(doShare);
+} else {
+doShare();
+}
 }
 function copyFormativoLink() {
 if (!state.formativoShareUrl) return;
@@ -1684,6 +1727,240 @@ ${contact.tel ? `<button class="btn btn-green" style="flex:1;" onclick="enviarFo
 </div>`;
 }
 html += `</div>`;
+}
+html += `</div>`;
+return html;
+}
+// ---------------- Tareas ----------------
+function setTareaFilterGrade(nivel, g) { state.tareaFilterGrade = g; state.tareaSelectedId = null; render(); }
+function setTareaFilterGrupo(g) { state.tareaFilterGrupo = g; state.tareaSelectedId = null; render(); }
+function openTareaForm(nivel) {
+state.tareaNueva = {
+titulo: '', tipo: 'aula',
+materia: nivel === 'secundaria' ? (state.secSchoolInfo.materia || '') : MATERIAS[0],
+grade: state.tareaFilterGrade || (nivel === 'primaria' ? GRADOS[0] : GRADOS_SEC[0]),
+grupo: state.tareaFilterGrupo || (nivel === 'secundaria' ? GRUPOS_SEC[0] : ''),
+fecha: new Date().toISOString().slice(0, 10)
+};
+render();
+}
+function cancelarTareaNueva() { state.tareaNueva = null; render(); }
+function updateTareaNuevaField(field, value) { state.tareaNueva[field] = value; }
+function setTareaNuevaTipo(t) { state.tareaNueva.tipo = t; render(); }
+function guardarTareaNueva(nivel) {
+if (!state.tareaNueva.titulo.trim()) { showToast('Ponle un título a la tarea'); return; }
+const ref = nivel === 'primaria' ? tareasPriRef : tareasSecRef;
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const alumnosGrupo = list.filter(s => s.grade === state.tareaNueva.grade && (nivel === 'primaria' || s.grupo === state.tareaNueva.grupo));
+const entregas = {};
+alumnosGrupo.forEach(s => { entregas[s.id] = { cumplio: false, calificacion: null, observaciones: '' }; });
+ref.push().set({
+titulo: state.tareaNueva.titulo,
+tipo: state.tareaNueva.tipo,
+materia: state.tareaNueva.materia || '',
+grade: state.tareaNueva.grade,
+grupo: state.tareaNueva.grupo || '',
+fecha: state.tareaNueva.fecha || new Date().toISOString().slice(0, 10),
+entregas,
+createdAt: Date.now()
+}).then(() => {
+state.tareaNueva = null;
+showToast('📝 Tarea creada');
+render();
+}).catch(() => showToast('No se pudo crear la tarea'));
+}
+function deleteTarea(nivel, id) {
+if (!confirm('¿Eliminar esta tarea? Se perderá el registro de cumplimiento.')) return;
+const ref = nivel === 'primaria' ? tareasPriRef : tareasSecRef;
+ref.child(id).remove();
+if (state.tareaSelectedId === id) state.tareaSelectedId = null;
+}
+function selectTarea(id) { state.tareaSelectedId = state.tareaSelectedId === id ? null : id; render(); }
+function updateTareaEntregaLocal(nivel, tareaId, studentId, field, value) {
+const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
+if (!map[tareaId]) return;
+if (!map[tareaId].entregas) map[tareaId].entregas = {};
+if (!map[tareaId].entregas[studentId]) map[tareaId].entregas[studentId] = { cumplio: false, calificacion: null, observaciones: '' };
+map[tareaId].entregas[studentId][field] = value;
+}
+function setTareaCumplio(nivel, tareaId, studentId, checked) {
+updateTareaEntregaLocal(nivel, tareaId, studentId, 'cumplio', checked);
+render();
+}
+function setTareaCalificacion(nivel, tareaId, studentId, value) {
+updateTareaEntregaLocal(nivel, tareaId, studentId, 'calificacion', value === '' ? null : Number(value));
+}
+function setTareaObservaciones(nivel, tareaId, studentId, value) {
+updateTareaEntregaLocal(nivel, tareaId, studentId, 'observaciones', value);
+}
+function guardarTareaEntregas(nivel, tareaId) {
+const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
+const ref = nivel === 'primaria' ? tareasPriRef : tareasSecRef;
+ref.child(tareaId).child('entregas').set(map[tareaId].entregas || {}).then(() => showToast('💾 Cumplimiento guardado')).catch(() => showToast('No se pudo guardar'));
+}
+function compartirTareasAlumno(nivel, studentId) {
+if (!studentId) { showToast('Selecciona un alumno primero'); return; }
+const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === studentId);
+if (!s) return;
+const tareasAlumno = Object.values(map).filter(t => t.entregas && t.entregas[studentId]).map(t => ({
+titulo: t.titulo, tipo: t.tipo, materia: t.materia || '', fecha: t.fecha || '',
+cumplio: !!t.entregas[studentId].cumplio,
+calificacion: t.entregas[studentId].calificacion,
+observaciones: t.entregas[studentId].observaciones || ''
+})).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+if (!tareasAlumno.length) { showToast('Este alumno no tiene tareas registradas todavía'); return; }
+state.tareaShareLoading = true; render();
+const tokenPointerRef = db.ref(DB_ROOT + '/tareasShareTokens/' + nivel + '/' + studentId);
+const doShare = () => {
+const ref = db.ref(DB_ROOT + '/reportesTareasCompartidos').push();
+const token = ref.key;
+const now = Date.now();
+const expiresAt = now + 15 * 24 * 60 * 60 * 1000;
+const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
+ref.set({
+nivel, studentName: s.name || '', grade: s.grade || '', grupo: s.grupo || '',
+schoolName: si.nombre || '', tareas: tareasAlumno, createdAt: now, expiresAt
+}).then(() => {
+tokenPointerRef.set(token);
+const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
+state.tareaShareUrl = base + 'tareas.html?t=' + token;
+state.tareaShareLoading = false;
+render();
+}).catch(() => { state.tareaShareLoading = false; showToast('No se pudo generar el link'); render(); });
+};
+tokenPointerRef.once('value').then(snap => {
+const oldToken = snap.val();
+if (oldToken) {
+db.ref(DB_ROOT + '/reportesTareasCompartidos/' + oldToken).update({ expiresAt: Date.now() }).catch(() => {}).then(doShare);
+} else {
+doShare();
+}
+}).catch(doShare);
+}
+function copyTareaLink() {
+if (!state.tareaShareUrl) return;
+navigator.clipboard.writeText(state.tareaShareUrl).then(() => showToast('Link copiado ✅'));
+}
+function shareTareaWhatsappPrompt(nivel) {
+const sel = document.getElementById('tareaShareStudent');
+const id = sel ? sel.value : '';
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === id);
+if (!s || !state.tareaShareUrl) return;
+const contact = resolveContact(s, nivel);
+if (!contact.tel) { showToast('Sin teléfono registrado para este alumno'); return; }
+let phone = contact.tel.replace(/\D/g, ''); if (phone.length === 10) phone = '52' + phone;
+const msg = `Hola, le comparto el reporte de cumplimiento de tareas de ${s.name || ''}: ${state.tareaShareUrl}`;
+window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
+function renderTareas(nivel) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
+const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+if (!state.tareaFilterGrade) state.tareaFilterGrade = gradeOptions[0];
+if (nivel === 'secundaria' && !state.tareaFilterGrupo) state.tareaFilterGrupo = GRUPOS_SEC[0];
+let html = `<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📝 Cumplimiento de Tareas — ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
+<div style="display:flex;gap:6px;margin-bottom:8px;">
+<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setTareaFilterGrade('${nivel}',this.value)">
+${gradeOptions.map(g=>`<option value="${g}" ${state.tareaFilterGrade===g?'selected':''}>${g}</option>`).join('')}
+</select>`;
+if (nivel === 'secundaria') {
+html += `<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setTareaFilterGrupo(this.value)">
+${GRUPOS_SEC.map(g=>`<option value="${g}" ${state.tareaFilterGrupo===g?'selected':''}>Grupo ${g}</option>`).join('')}
+</select>`;
+}
+html += `</div>
+<button class="btn btn-blue" style="width:100%;" onclick="openTareaForm('${nivel}')">➕ Nueva tarea</button>
+</div>`;
+
+if (state.tareaNueva) {
+const tn = state.tareaNueva;
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">Nueva tarea</p>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:8px;text-transform:uppercase;" placeholder="Título de la tarea" value="${tn.titulo}" oninput="forceUpper(this);updateTareaNuevaField('titulo',this.value)" />
+<div style="display:flex;gap:6px;margin-bottom:8px;">
+<button style="flex:1;padding:8px;border-radius:8px;border:2px solid ${tn.tipo==='aula'?'#2563eb':'#e5e7eb'};background:${tn.tipo==='aula'?'#dbeafe':'#fff'};font-size:0.78em;font-weight:600;" onclick="setTareaNuevaTipo('aula')">🏫 De aula</button>
+<button style="flex:1;padding:8px;border-radius:8px;border:2px solid ${tn.tipo==='casa'?'#2563eb':'#e5e7eb'};background:${tn.tipo==='casa'?'#dbeafe':'#fff'};font-size:0.78em;font-weight:600;" onclick="setTareaNuevaTipo('casa')">🏠 Para casa</button>
+</div>`;
+if (nivel === 'primaria') {
+html += `<select style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;margin-bottom:8px;" onchange="updateTareaNuevaField('materia',this.value)">
+${MATERIAS.map(m=>`<option value="${m}" ${tn.materia===m?'selected':''}>${m}</option>`).join('')}
+</select>`;
+}
+html += `<div style="display:flex;gap:6px;margin-bottom:8px;">
+<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="updateTareaNuevaField('grade',this.value)">
+${gradeOptions.map(g=>`<option value="${g}" ${tn.grade===g?'selected':''}>${g}</option>`).join('')}
+</select>`;
+if (nivel === 'secundaria') {
+html += `<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="updateTareaNuevaField('grupo',this.value)">
+${GRUPOS_SEC.map(g=>`<option value="${g}" ${tn.grupo===g?'selected':''}>Grupo ${g}</option>`).join('')}
+</select>`;
+}
+html += `</div>
+<input type="date" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;" value="${tn.fecha||''}" onchange="updateTareaNuevaField('fecha',this.value)" />
+<div style="display:flex;gap:8px;">
+<button class="btn btn-green" style="flex:1;" onclick="guardarTareaNueva('${nivel}')">💾 Crear tarea</button>
+<button class="btn btn-gray" style="flex:1;" onclick="cancelarTareaNueva()">Cancelar</button>
+</div>
+</div>`;
+}
+
+const tareasFiltradas = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' || t.grupo === state.tareaFilterGrupo)).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+
+if (!tareasFiltradas.length) {
+html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">No hay tareas registradas para este grado${nivel==='secundaria'?'/grupo':''} todavía.</p></div>`;
+} else {
+tareasFiltradas.forEach(([id, t]) => {
+const entregas = t.entregas || {};
+const total = Object.keys(entregas).length;
+const cumplidas = Object.values(entregas).filter(e=>e.cumplio).length;
+html += `<div class="card" style="margin-bottom:8px;">
+<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="selectTarea('${id}')">
+<div>
+<p style="font-weight:600;font-size:0.85em;">${t.tipo==='casa'?'🏠':'🏫'} ${t.titulo}</p>
+<p style="font-size:0.7em;color:#9ca3af;">${t.materia||''} · ${t.fecha||''} · ${cumplidas}/${total} cumplieron</p>
+</div>
+<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:4px 8px;font-size:0.75em;" onclick="event.stopPropagation();deleteTarea('${nivel}','${id}')">✕</button>
+</div>`;
+if (state.tareaSelectedId === id) {
+const alumnos = list.filter(s => s.grade === t.grade && (nivel==='primaria' || s.grupo === t.grupo)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+html += `<div style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;">`;
+alumnos.forEach(s => {
+const e = entregas[s.id] || { cumplio:false, calificacion:null, observaciones:'' };
+html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:6px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px;">
+<label style="display:flex;align-items:center;gap:6px;font-size:0.8em;font-weight:600;flex:1;"><input type="checkbox" ${e.cumplio?'checked':''} onchange="setTareaCumplio('${nivel}','${id}','${s.id}',this.checked)" /> ${s.name}</label>
+<input type="number" min="0" max="10" step="0.1" style="width:60px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;font-size:0.78em;" placeholder="Cal." value="${e.calificacion!=null?e.calificacion:''}" oninput="setTareaCalificacion('${nivel}','${id}','${s.id}',this.value)" />
+</div>
+<input style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:0.75em;text-transform:uppercase;" placeholder="Observaciones (opcional)" value="${e.observaciones||''}" oninput="forceUpper(this);setTareaObservaciones('${nivel}','${id}','${s.id}',this.value)" />
+</div>`;
+});
+html += `<button class="btn btn-green" style="width:100%;margin-top:4px;" onclick="guardarTareaEntregas('${nivel}','${id}')">💾 Guardar cumplimiento</button>
+</div>`;
+}
+html += `</div>`;
+});
+}
+
+html += `<div class="card">
+<p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">📤 Compartir cumplimiento con un padre</p>
+<select id="tareaShareStudent" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;margin-bottom:8px;">
+<option value="">— Selecciona un alumno —</option>
+${[...list].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(s=>`<option value="${s.id}">${s.name} · ${s.grade||''}${s.grupo?(' '+s.grupo):''}</option>`).join('')}
+</select>
+<button class="btn btn-blue" style="width:100%;" onclick="compartirTareasAlumno('${nivel}', document.getElementById('tareaShareStudent').value)" ${state.tareaShareLoading?'disabled':''}>🔗 ${state.tareaShareLoading?'Generando...':'Generar link'}</button>`;
+if (state.tareaShareUrl) {
+html += `<div class="card" style="border:1px solid #bfdbfe;background:#eff6ff;margin-top:8px;">
+<p style="font-weight:700;font-size:0.8em;color:#1d4ed8;margin-bottom:6px;">✅ Link generado (válido 15 días)</p>
+<p style="font-size:0.75em;color:#374151;word-break:break-all;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:8px;margin-bottom:8px;">${state.tareaShareUrl}</p>
+<div style="display:flex;gap:8px;">
+<button class="btn btn-blue" style="flex:1;" onclick="copyTareaLink()">📋 Copiar</button>
+<button class="btn btn-green" style="flex:1;" onclick="shareTareaWhatsappPrompt('${nivel}')">📲 WhatsApp</button>
+</div>
+</div>`;
 }
 html += `</div>`;
 return html;

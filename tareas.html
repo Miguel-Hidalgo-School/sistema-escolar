@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cumplimiento de Tareas</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; max-width: 100vw; }
+body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
+main { max-width: 640px; width: 100%; margin: 0 auto; padding: 14px; }
+.center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.msg-icon { font-size: 2.4em; margin-bottom: 10px; }
+.msg-title { font-weight: 700; font-size: 1.1em; margin-bottom: 6px; }
+.msg-sub { color: #6b7280; font-size: 0.9em; }
+.card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 12px; border: 1px solid #e2e8f0; }
+h1 { font-size: 1.1em; color: #0f172a; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sub { font-size: 0.75em; color: #94a3b8; margin-bottom: 10px; }
+.resumen { display: flex; gap: 8px; margin-top: 10px; }
+.resumen .box { flex: 1; text-align: center; border-radius: 10px; padding: 10px; }
+.resumen .num { font-weight: 700; font-size: 1.3em; }
+.resumen .lbl { font-size: 0.68em; color: #64748b; }
+.tarea { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.tarea.cumplio { border-color: #bbf7d0; background: #f0fdf4; }
+.tarea.pendiente { border-color: #fecaca; background: #fef2f2; }
+.tarea .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.tarea .titulo { font-weight: 600; font-size: 0.85em; }
+.tarea .meta { font-size: 0.7em; color: #94a3b8; margin-top: 2px; }
+.pill { font-size: 0.68em; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.tarea .obs { font-size: 0.78em; color: #475569; margin-top: 6px; background: #fff; border-radius: 8px; padding: 6px 8px; }
+.tarea .cal { font-size: 0.75em; color: #334155; margin-top: 4px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const DB_ROOT = 'Sistema Escolar';
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+const app = document.getElementById('app');
+function renderMessage(icon, title, sub) {
+  app.innerHTML = `<div class="center-screen"><div>
+    <p class="msg-icon">${icon}</p>
+    <p class="msg-title">${title}</p>
+    <p class="msg-sub">${sub}</p>
+  </div></div>`;
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function renderTareas(data) {
+  const tareas = data.tareas || [];
+  const total = tareas.length;
+  const cumplidas = tareas.filter(t => t.cumplio).length;
+  let html = `<main>
+  <div class="card">
+  <h1>📝 Cumplimiento de Tareas</h1>
+  <p class="sub">${esc(data.schoolName)} · ${esc(data.grade)}${data.grupo?(' '+esc(data.grupo)):''} · ${data.nivel==='secundaria'?'Secundaria':'Primaria'}</p>
+  <p style="font-weight:700;font-size:1.05em;">${esc(data.studentName)}</p>
+  <div class="resumen">
+  <div class="box" style="background:#f0fdf4;"><div class="num" style="color:#16a34a;">${cumplidas}</div><div class="lbl">CUMPLIDAS</div></div>
+  <div class="box" style="background:#fef2f2;"><div class="num" style="color:#dc2626;">${total-cumplidas}</div><div class="lbl">PENDIENTES</div></div>
+  <div class="box" style="background:#eff6ff;"><div class="num" style="color:#2563eb;">${total}</div><div class="lbl">TOTAL</div></div>
+  </div>
+  </div>
+  <div class="card">`;
+  if (!tareas.length) {
+    html += `<p style="font-size:0.82em;color:#9ca3af;">Aún no hay tareas registradas.</p>`;
+  } else {
+    tareas.forEach(t => {
+      html += `<div class="tarea ${t.cumplio ? 'cumplio' : 'pendiente'}">
+      <div class="top">
+      <div>
+      <p class="titulo">${t.tipo==='casa'?'🏠':'🏫'} ${esc(t.titulo)}</p>
+      <p class="meta">${esc(t.materia)} ${t.fecha ? '· '+esc(t.fecha) : ''}</p>
+      </div>
+      <span class="pill" style="background:${t.cumplio?'#dcfce7':'#fee2e2'};color:${t.cumplio?'#166534':'#991b1b'};">${t.cumplio?'✅ Cumplió':'⏳ Pendiente'}</span>
+      </div>
+      ${t.calificacion != null ? `<p class="cal">Calificación: ${t.calificacion}</p>` : ''}
+      ${t.observaciones ? `<p class="obs">${esc(t.observaciones)}</p>` : ''}
+      </div>`;
+    });
+  }
+  html += `</div></main>`;
+  app.innerHTML = html;
+}
+
+function init() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('t');
+  if (!token) {
+    renderMessage('⚠️', 'Link no válido', 'Falta la información necesaria para mostrar el reporte. Pide a la escuela que te comparta el link nuevamente.');
+    return;
+  }
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const db = firebase.database();
+  db.ref(DB_ROOT + '/reportesTareasCompartidos/' + token).once('value').then(snap => {
+    const data = snap.val();
+    if (!data) {
+      renderMessage('🔒', 'Link no encontrado', 'Este link no existe o ya fue eliminado. Solicita uno nuevo a la escuela.');
+      return;
+    }
+    if (data.expiresAt && data.expiresAt < Date.now()) {
+      renderMessage('⏰', 'Este link ya expiró', 'Los links de consulta son válidos por 15 días. Pide a la escuela que te comparta uno nuevo.');
+      return;
+    }
+    renderTareas(data);
+  }).catch(() => {
+    renderMessage('⚠️', 'No se pudo cargar el reporte', 'Verifica tu conexión a internet e intenta de nuevo.');
+  });
+}
+init();
+</script>
+</body>
+</html>
