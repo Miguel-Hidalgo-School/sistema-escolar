@@ -1213,23 +1213,24 @@ function renderSecInicio() {
 const si = state.secSchoolInfo;
 return `
 <div class="inicio-hero" style="background:linear-gradient(135deg,#059669,#065f46);">
-<div style="display:flex;gap:10px;justify-content:center;">
 <div class="logo-box">
 ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2.2em;">🏫</span>`}
 </div>
-<div class="logo-box">
-${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:2.2em;">🎖️</span>`}
-</div>
-</div>
 <p style="font-weight:700;font-size:1.1em;">${si.nombre || 'Secundaria'}</p>
 <p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Reportes por materia y grado</p>
-<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-<label class="upload-label">
-📷 Logo 1 (izquierda)
+</div>
+<div class="card">
+<p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🖼️ Logos</p>
+<p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">El logo de la escuela aparece en el panel principal y del lado derecho de los reportes. El segundo logo solo aparece del lado izquierdo de los reportes impresos.</p>
+<div style="display:flex;gap:8px;">
+<label class="upload-label" style="flex:1;text-align:center;">
+${si.logoURL ? `<img src="${si.logoURL}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;margin:0 auto 4px;display:block;" />` : ''}
+📷 Logo de la escuela
 <input type="file" accept="image/*" style="display:none;" onchange="uploadSecLogo(event)" />
 </label>
-<label class="upload-label">
-📷 Logo 2 (derecha)
+<label class="upload-label" style="flex:1;text-align:center;">
+${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;margin:0 auto 4px;display:block;" />` : ''}
+📷 2do logo (reportes)
 <input type="file" accept="image/*" style="display:none;" onchange="uploadSecLogo2(event)" />
 </label>
 </div>
@@ -2272,7 +2273,7 @@ const protLbl = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO 
 const si = state.secSchoolInfo;
 html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
 <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
-<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
+<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
 <div style="text-align:center;flex:1;">
 <p style="font-weight:700;">DIRECCIÓN GENERAL DE SECUNDARIAS TÉCNICAS</p>
 <p>SECTOR 06</p>
@@ -2281,7 +2282,7 @@ html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
 <p>${si.direccionReporte || 'SAN MARCOS, MPIO. DE TONILA, JAL.'}</p>
 <p>CICLO ESCOLAR ${getCicloEscolar()}</p>
 </div>
-<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
+<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
 </div>
 <p>PADRE DE FAMILIA O TUTOR: <input style="border:none;border-bottom:1px solid #000;width:220px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> &nbsp; FECHA: <input type="date" style="border:none;border-bottom:1px solid #000;font-size:1em;" value="${rm.fecha}" oninput="updateReporteField('fecha',this.value)"></p>
 <p style="text-align:center;font-weight:700;margin:12px 0;font-size:1.1em;">REPORTE DE INDISCIPLINA</p>
