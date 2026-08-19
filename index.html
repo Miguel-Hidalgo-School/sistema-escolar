@@ -2059,7 +2059,7 @@ html += `<div class="card">
 <p style="font-weight:600;font-size:0.85em;margin-bottom:8px;">📤 Compartir cumplimiento con un padre</p>
 <select id="tareaShareStudent" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;margin-bottom:8px;" onchange="state.tareaShareSelectedId=this.value;state.tareaShareUrl=null;">
 <option value="">— Selecciona un alumno —</option>
-${[...list].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(s=>`<option value="${s.id}" ${state.tareaShareSelectedId===s.id?'selected':''}>${s.name} · ${s.grade||''}${s.grupo?(' '+s.grupo):''}</option>`).join('')}
+${[...list].filter(s => s.grade === state.tareaFilterGrade && (nivel==='primaria' || s.grupo === state.tareaFilterGrupo)).sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(s=>`<option value="${s.id}" ${state.tareaShareSelectedId===s.id?'selected':''}>${s.name}</option>`).join('')}
 </select>
 <button class="btn btn-blue" style="width:100%;" onclick="compartirTareasAlumno('${nivel}', state.tareaShareSelectedId)" ${state.tareaShareLoading?'disabled':''}>🔗 ${state.tareaShareLoading?'Generando...':'Generar link'}</button>`;
 if (state.tareaShareUrl) {
