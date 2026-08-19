@@ -178,6 +178,8 @@ formativoShareUrl: null,
 formativoShareLoading: false,
 formativoShareTel: '',
 formativoAcuseInfo: null,
+formativoFilterGrade: '',
+formativoFilterGrupo: '',
 tareasPri: {},
 tareasSec: {},
 tareaNueva: null,
@@ -194,6 +196,8 @@ disciplinaSec: {},
 disciplinaStudentId: null,
 disciplinaIncidenteNuevo: null,
 disciplinaReportMode: null,
+disciplinaFilterGrade: '',
+disciplinaFilterGrupo: '',
 };
 function emptyExtra() {
 return {
@@ -1530,6 +1534,8 @@ function setFormativoPeriodo(p) {
 state.formativoForm.periodo = p;
 render();
 }
+function setFormativoFilterGrade(g) { state.formativoFilterGrade = g; state.formativoStudentId = null; state.formativoForm = null; render(); }
+function setFormativoFilterGrupo(g) { state.formativoFilterGrupo = g; state.formativoStudentId = null; state.formativoForm = null; render(); }
 function selectFormativoStudent(nivel, id) {
 if (!id) { state.formativoStudentId = null; state.formativoForm = null; state.formativoShareUrl = null; render(); return; }
 const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
@@ -1669,19 +1675,33 @@ return `<button style="flex:1;padding:8px 2px;border-radius:8px;border:2px solid
 function renderFormativo(nivel) {
 const list = nivel === 'primaria' ? state.students : state.secStudents;
 const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
-const sorted = [...list].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+if (!state.formativoFilterGrade) state.formativoFilterGrade = gradeOptions[0];
+if (nivel === 'secundaria' && !state.formativoFilterGrupo) state.formativoFilterGrupo = GRUPOS_SEC[0];
+const filtered = list.filter(s => s.grade === state.formativoFilterGrade && (nivel==='primaria' || (s.grupo||'A') === state.formativoFilterGrupo));
+const sorted = [...filtered].sort((a,b) => (a.name||'').localeCompare(b.name||''));
 let html = `<div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📋 Evaluación Formativa — ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
-<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Selecciona un alumno para llenar o revisar su reporte.</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Elige el grado${nivel==='secundaria'?'/grupo':''} y luego selecciona un alumno.</p>
+<div style="display:flex;gap:6px;margin-bottom:8px;">
+<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setFormativoFilterGrade(this.value)">
+${gradeOptions.map(g=>`<option value="${g}" ${state.formativoFilterGrade===g?'selected':''}>${g}</option>`).join('')}
+</select>`;
+if (nivel === 'secundaria') {
+html += `<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setFormativoFilterGrupo(this.value)">
+${GRUPOS_SEC.map(g=>`<option value="${g}" ${state.formativoFilterGrupo===g?'selected':''}>Grupo ${g}</option>`).join('')}
+</select>`;
+}
+html += `</div>
 <select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" onchange="selectFormativoStudent('${nivel}', this.value)">
 <option value="">— Selecciona un alumno —</option>
 ${sorted.map(s => {
 const done = !!dataMap[s.id];
-const label = `${s.name || '(sin nombre)'} · ${s.grade||''}${s.grupo?(' '+s.grupo):''} ${done?'✅ Evaluado':'⏳ Pendiente'}`;
+const label = `${s.name || '(sin nombre)'} ${done?'✅ Evaluado':'⏳ Pendiente'}`;
 return `<option value="${s.id}" ${state.formativoStudentId===s.id?'selected':''}>${label}</option>`;
 }).join('')}
 </select>
-<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${sorted.filter(s=>dataMap[s.id]).length} de ${sorted.length} alumnos evaluados</p>
+<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${sorted.filter(s=>dataMap[s.id]).length} de ${sorted.length} alumnos evaluados en este grupo</p>
 </div>`;
 if (!list.length) { html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">Aún no hay alumnos registrados en este nivel.</p></div>`; return html; }
 if (!state.formativoStudentId || !state.formativoForm) return html;
@@ -1853,7 +1873,7 @@ if (!s) return;
 const tareasAlumno = Object.values(map).filter(t => t.entregas && t.entregas[studentId]).map(t => ({
 titulo: t.titulo, tipo: t.tipo, materia: t.materia || '', fecha: t.fecha || '',
 cumplio: !!t.entregas[studentId].cumplio,
-calificacion: t.entregas[studentId].calificacion,
+calificacion: t.entregas[studentId].calificacion === undefined ? null : t.entregas[studentId].calificacion,
 observaciones: t.entregas[studentId].observaciones || ''
 })).sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
 if (!tareasAlumno.length) { showToast('Este alumno no tiene tareas registradas todavía'); return; }
@@ -2079,6 +2099,8 @@ return html;
 const FALTAS_PRIMARIA = ['No cumple con tareas.','No trae materiales solicitados.','Platica y juega en clase.','No termina sus trabajos.','Muestra conducta agresiva en clase o durante el recreo.','Utiliza vocabulario soez y altisonante al dirigirse a sus compañeros o maestros.'];
 const CAUSA_SEC = [['leve','Causa leve'],['grave','Causa grave'],['muygrave','Causa muy grave']];
 const PROTOCOLO_SEC = [['ninguno','No aplica'],['fisico_directo','Físico directo'],['fisico_indirecto','Físico indirecto'],['sexual','Sexual'],['psicologico','Psicológico'],['exclusion','Exclusión social'],['cyberbullying','Cyberbullying']];
+function setDisciplinaFilterGrade(g) { state.disciplinaFilterGrade = g; state.disciplinaStudentId = null; render(); }
+function setDisciplinaFilterGrupo(g) { state.disciplinaFilterGrupo = g; state.disciplinaStudentId = null; render(); }
 function selectDisciplinaStudent(id) {
 state.disciplinaStudentId = id || null;
 state.disciplinaIncidenteNuevo = null;
@@ -2125,10 +2147,24 @@ function renderDisciplina(nivel) {
 if (state.disciplinaReportMode && state.disciplinaReportMode.nivel === nivel) return renderReporteImprimible();
 const list = nivel === 'primaria' ? state.students : state.secStudents;
 const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
-const sorted = [...list].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+if (!state.disciplinaFilterGrade) state.disciplinaFilterGrade = gradeOptions[0];
+if (nivel === 'secundaria' && !state.disciplinaFilterGrupo) state.disciplinaFilterGrupo = GRUPOS_SEC[0];
+const filtered = list.filter(s => s.grade === state.disciplinaFilterGrade && (nivel==='primaria' || (s.grupo||'A') === state.disciplinaFilterGrupo));
+const sorted = [...filtered].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
 let html = `<div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">🧭 Disciplina — ${nivel==='primaria'?'Primaria':'Secundaria'}</p>
-<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Selecciona un alumno para ver su historial y registrar incidentes.</p>
+<p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Elige el grado${nivel==='secundaria'?'/grupo':''} y luego selecciona un alumno.</p>
+<div style="display:flex;gap:6px;margin-bottom:8px;">
+<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setDisciplinaFilterGrade(this.value)">
+${gradeOptions.map(g=>`<option value="${g}" ${state.disciplinaFilterGrade===g?'selected':''}>${g}</option>`).join('')}
+</select>`;
+if (nivel === 'secundaria') {
+html += `<select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setDisciplinaFilterGrupo(this.value)">
+${GRUPOS_SEC.map(g=>`<option value="${g}" ${state.disciplinaFilterGrupo===g?'selected':''}>Grupo ${g}</option>`).join('')}
+</select>`;
+}
+html += `</div>
 <select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" onchange="selectDisciplinaStudent(this.value)">
 <option value="">— Selecciona un alumno —</option>
 ${sorted.map(s => {
