@@ -196,6 +196,8 @@ disciplinaSec: {},
 disciplinaStudentId: null,
 disciplinaIncidenteNuevo: null,
 disciplinaReportMode: null,
+disciplinaShareUrl: null,
+disciplinaShareLoading: false,
 disciplinaFilterGrade: '',
 disciplinaFilterGrupo: '',
 };
@@ -2263,11 +2265,64 @@ accionIntervenga: true, accionAcudir: false, accionResguardo: false,
 citaFecha: '', citaHora: '', resguardoDias: '',
 orientadorNombre: state.secSchoolInfo.orientadorNombre || ''
 };
+state.disciplinaShareUrl = null;
 render();
 }
-function cerrarReporte() { state.disciplinaReportMode = null; render(); }
+function cerrarReporte() { state.disciplinaReportMode = null; state.disciplinaShareUrl = null; render(); }
 function updateReporteField(field, value) { state.disciplinaReportMode[field] = value; }
 function toggleReporteAccion(field) { state.disciplinaReportMode[field] = !state.disciplinaReportMode[field]; render(); }
+function compartirDisciplina() {
+const rm = state.disciplinaReportMode;
+const nivel = rm.nivel;
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === rm.studentId);
+const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
+const inc = map[rm.studentId] && map[rm.studentId].incidentes && map[rm.studentId].incidentes[rm.incId];
+if (!s || !inc) return;
+state.disciplinaShareLoading = true; render();
+const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
+const snapshot = {
+nivel,
+studentName: s.name || '', grade: s.grade || '', grupo: s.grupo || '',
+padreNombre: rm.padreNombre || '',
+maestroNombre: rm.maestroNombre || '',
+fecha: rm.fecha || '',
+inc: {
+faltas: inc.faltas || [], otros: inc.otros || '',
+causa: inc.causa || '', protocolo: inc.protocolo || '', descripcion: inc.descripcion || ''
+},
+accionIntervenga: !!rm.accionIntervenga, accionAcudir: !!rm.accionAcudir, accionResguardo: !!rm.accionResguardo,
+citaFecha: rm.citaFecha || '', citaHora: rm.citaHora || '', resguardoDias: rm.resguardoDias || '',
+orientadorNombre: rm.orientadorNombre || '',
+schoolInfo: {
+nombre: si.nombre || '', cct: si.cct || '',
+direccionReporte: si.direccionReporte || '',
+logoURL: nivel === 'secundaria' ? (si.logoURL || '') : '',
+logoURL2: nivel === 'secundaria' ? (si.logoURL2 || '') : ''
+},
+cicloEscolar: getCicloEscolar(),
+createdAt: Date.now(),
+expiresAt: Date.now() + 15 * 24 * 60 * 60 * 1000
+};
+const ref = db.ref(DB_ROOT + '/reportesDisciplinaCompartidos').push();
+ref.set(snapshot).then(() => {
+const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
+state.disciplinaShareUrl = base + 'disciplina.html?t=' + ref.key;
+state.disciplinaShareLoading = false;
+render();
+}).catch(() => { state.disciplinaShareLoading = false; showToast('No se pudo generar el link'); render(); });
+}
+function copyDisciplinaLink() {
+if (!state.disciplinaShareUrl) return;
+navigator.clipboard.writeText(state.disciplinaShareUrl).then(() => showToast('Link copiado ✅'));
+}
+function enviarDisciplinaWhatsapp(telDigits, studentName) {
+if (!state.disciplinaShareUrl || !telDigits) return;
+let phone = telDigits.replace(/\D/g, '');
+if (phone.length === 10) phone = '52' + phone;
+const msg = `Hola, le comparto el reporte de disciplina de ${studentName}: ${state.disciplinaShareUrl}`;
+window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+}
 function renderReporteImprimible() {
 const rm = state.disciplinaReportMode;
 const nivel = rm.nivel;
@@ -2332,6 +2387,21 @@ html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
 <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">ACEPTA EL REPORTE<br>NOMBRE Y FIRMA DEL ALUMNO(A)</div>
 </div>
 <p style="margin-top:36px;border-top:1px solid #000;padding-top:4px;text-align:center;">L.T.S. <input style="border:none;border-bottom:1px solid #000;text-align:center;font-size:1em;" value="${rm.orientadorNombre}" oninput="updateReporteField('orientadorNombre',this.value)"></p>
+</div>`;
+}
+const contactDisc = resolveContact(s, nivel);
+html += `<div class="no-print" style="margin-top:12px;">
+<button class="btn btn-blue" style="width:100%;" onclick="compartirDisciplina()" ${state.disciplinaShareLoading ? 'disabled' : ''}>🔗 ${state.disciplinaShareLoading ? 'Generando...' : 'Compartir con el padre'}</button>
+</div>`;
+if (state.disciplinaShareUrl) {
+html += `<div class="no-print card" style="margin-top:10px;border:1px solid #bfdbfe;background:#eff6ff;">
+<p style="font-weight:700;font-size:0.85em;color:#1d4ed8;margin-bottom:6px;">✅ Link generado (válido 15 días)</p>
+<p style="font-size:0.78em;color:#374151;word-break:break-all;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:8px;margin-bottom:8px;">${state.disciplinaShareUrl}</p>
+<p style="font-size:0.72em;color:#6b7280;margin-bottom:8px;">${contactDisc.tel ? `Contacto detectado — ${contactDisc.label}: ${contactDisc.tel}` : 'Sin teléfono registrado para este alumno.'}</p>
+<div style="display:flex;gap:8px;">
+<button class="btn btn-blue" style="flex:1;" onclick="copyDisciplinaLink()">📋 Copiar link</button>
+${contactDisc.tel ? `<button class="btn btn-green" style="flex:1;" onclick="enviarDisciplinaWhatsapp('${contactDisc.tel.replace(/[^0-9]/g,'')}','${(s.name||'').replace(/'/g,"\\'")}')">📲 WhatsApp</button>` : ''}
+</div>
 </div>`;
 }
 return html;

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Reporte de Disciplina</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; max-width: 100vw; }
+body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; }
+main { max-width: 640px; width: 100%; margin: 0 auto; padding: 14px; }
+.center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.msg-icon { font-size: 2.4em; margin-bottom: 10px; }
+.msg-title { font-weight: 700; font-size: 1.1em; margin-bottom: 6px; }
+.msg-sub { color: #6b7280; font-size: 0.9em; }
+.card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; font-size: 13px; line-height: 1.6; }
+.btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95em; cursor: pointer; margin-top: 14px; background: #1f2937; color: #fff; }
+@media print { .no-print { display: none !important; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const DB_ROOT = 'Sistema Escolar';
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+const app = document.getElementById('app');
+const FALTAS_PRIMARIA = ['No cumple con tareas.','No trae materiales solicitados.','Platica y juega en clase.','No termina sus trabajos.','Muestra conducta agresiva en clase o durante el recreo.','Utiliza vocabulario soez y altisonante al dirigirse a sus compañeros o maestros.'];
+const CAUSA_LBL = { leve: 'CAUSA LEVE', grave: 'CAUSA GRAVE', muygrave: 'CAUSA MUY GRAVE' };
+const PROTOCOLO_LBL = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO INDIRECTO', sexual: 'SEXUAL', psicologico: 'PSICOLÓGICO', exclusion: 'POR EXCLUSIÓN SOCIAL', cyberbullying: 'POR CYBERBULLYING' };
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function getCicloEscolar() {
+  const now = new Date(); const y = now.getFullYear(); const m = now.getMonth();
+  return m >= 7 ? (y + '-' + (y+1)) : ((y-1) + '-' + y);
+}
+function renderMessage(icon, title, sub) {
+  app.innerHTML = `<div class="center-screen"><div>
+    <p class="msg-icon">${icon}</p>
+    <p class="msg-title">${title}</p>
+    <p class="msg-sub">${sub}</p>
+  </div></div>`;
+}
+function renderReporte(d) {
+  let html = `<main>`;
+  if (d.nivel === 'primaria') {
+    html += `<div class="card">
+    <p style="text-align:center;font-weight:800;font-size:1.4em;margin-bottom:18px;">Reporte escolar</p>
+    <p>Sr(a) <strong>${esc(d.padreNombre)}</strong> por medio del presente se le informa que su</p>
+    <p style="margin-top:4px;">hijo(a): <strong>${esc(d.studentName)}</strong>, el cual asiste al grupo de <strong>${esc(d.grade)}${d.grupo?(' '+esc(d.grupo)):''}</strong> a cargo del</p>
+    <p style="margin-top:4px;">maestro(a): <strong>${esc(d.maestroNombre)}</strong>, ha incurrido en las siguientes faltas:</p>
+    <div style="margin:16px 0;">
+    ${FALTAS_PRIMARIA.map(f => `<p style="margin:4px 0;">${(d.inc.faltas||[]).includes(f) ? '☑' : '☐'} ${f}</p>`).join('')}
+    <p style="margin:4px 0;">☐ Otros: ${d.inc.otros ? esc(d.inc.otros) : '_________________________________'}</p>
+    </div>
+    <p style="margin-top:16px;">Por lo anterior es necesario que:</p>
+    <p style="margin:6px 0;">${d.accionIntervenga?'☑':'☐'} Intervenga desde casa valorando la conducta de su hijo(a) y estableciendo límites y reglas claros.</p>
+    <p style="margin:6px 0;">${d.accionAcudir?'☑':'☐'} Acuda a nuestra institución el día: <strong>${esc(d.citaFecha)}</strong> a las <strong>${esc(d.citaHora)}</strong> horas para firmar acuerdos y compromisos.</p>
+    <p style="margin:6px 0;">${d.accionResguardo?'☑':'☐'} El alumno(a) queda bajo resguardo familiar por <strong>${esc(d.resguardoDias)}</strong> días, como medida precautoria para su seguridad.</p>
+    <div style="display:flex;justify-content:space-between;margin-top:60px;">
+    <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del docente</div>
+    <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del padre/madre</div>
+    </div>
+    </div>`;
+  } else {
+    const si = d.schoolInfo || {};
+    html += `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
+    <div style="width:52px;height:52px;flex-shrink:0;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
+    <div style="text-align:center;flex:1;">
+    <p style="font-weight:700;">DIRECCIÓN GENERAL DE SECUNDARIAS TÉCNICAS</p>
+    <p>SECTOR 06</p>
+    <p style="font-weight:700;font-size:1.05em;">${esc(si.nombre) || 'ESCUELA SECUNDARIA TÉCNICA'}</p>
+    <p>C.C.T. ${esc(si.cct)}</p>
+    <p>${esc(si.direccionReporte) || 'SAN MARCOS, MPIO. DE TONILA, JAL.'}</p>
+    <p>CICLO ESCOLAR ${d.cicloEscolar || getCicloEscolar()}</p>
+    </div>
+    <div style="width:52px;height:52px;flex-shrink:0;">${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
+    </div>
+    <p>PADRE DE FAMILIA O TUTOR: <strong>${esc(d.padreNombre)}</strong> &nbsp; FECHA: <strong>${esc(d.fecha)}</strong></p>
+    <p style="text-align:center;font-weight:700;margin:12px 0;font-size:1.05em;">REPORTE DE INDISCIPLINA</p>
+    <p>POR ESTE MEDIO SE LE NOTIFICA A USTED QUE SU HIJO(A): <strong>${esc((d.studentName||'').toUpperCase())}</strong> DEL GRUPO <strong>${esc(d.grade)}${esc(d.grupo)}</strong> TIENE REPORTE DE INDISCIPLINA POR LOS ACTOS QUE AMERITAN MEDIDAS DISCIPLINARIAS A LOS ALUMNOS POR FALTAR AL REGLAMENTO ESCOLAR Y QUE SE CLASIFICAN EN EL SIGUIENTE PUNTO:</p>
+    <p style="margin-top:10px;">${Object.entries(CAUSA_LBL).map(([k,v]) => `${d.inc.causa===k?'☑':'☐'} ${v}`).join(' &nbsp; &nbsp; ')}</p>
+    <p style="margin-top:10px;">PROTOCOLO EN CASO DE VIOLENCIA (si aplica): ${Object.entries(PROTOCOLO_LBL).map(([k,v]) => `${d.inc.protocolo===k?'☑':'☐'} ${v}`).join(' &nbsp; ')}</p>
+    <p style="margin-top:12px;">CAUSA POR LO QUE SE LE REPORTA:</p>
+    <p style="border:1px solid #000;min-height:50px;padding:6px;margin-top:4px;">${esc((d.inc.descripcion||'').toUpperCase())}</p>
+    <div style="display:flex;justify-content:space-between;margin-top:44px;">
+    <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">PROFR(A). DEL MÓDULO<br>NOMBRE Y FIRMA</div>
+    <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">ACEPTA EL REPORTE<br>NOMBRE Y FIRMA DEL ALUMNO(A)</div>
+    </div>
+    <p style="margin-top:30px;border-top:1px solid #000;padding-top:4px;text-align:center;">L.T.S. ${esc(d.orientadorNombre)}</p>
+    </div>`;
+  }
+  html += `<button class="btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button></main>`;
+  app.innerHTML = html;
+}
+function init() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('t');
+  if (!token) {
+    renderMessage('⚠️', 'Link no válido', 'Falta la información necesaria para mostrar el reporte. Pide a la escuela que te comparta el link nuevamente.');
+    return;
+  }
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const db = firebase.database();
+  db.ref(DB_ROOT + '/reportesDisciplinaCompartidos/' + token).once('value').then(snap => {
+    const data = snap.val();
+    if (!data) {
+      renderMessage('🔒', 'Link no encontrado', 'Este link no existe o ya fue eliminado. Solicita uno nuevo a la escuela.');
+      return;
+    }
+    if (data.expiresAt && data.expiresAt < Date.now()) {
+      renderMessage('⏰', 'Este link ya expiró', 'Los links de consulta son válidos por 15 días. Pide a la escuela que te comparta uno nuevo.');
+      return;
+    }
+    renderReporte(data);
+  }).catch(() => {
+    renderMessage('⚠️', 'No se pudo cargar el reporte', 'Verifica tu conexión a internet e intenta de nuevo.');
+  });
+}
+init();
+</script>
+</body>
+</html>
