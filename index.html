@@ -2304,13 +2304,19 @@ cicloEscolar: getCicloEscolar(),
 createdAt: Date.now(),
 expiresAt: Date.now() + 15 * 24 * 60 * 60 * 1000
 };
+try {
 const ref = db.ref(DB_ROOT + '/reportesDisciplinaCompartidos').push();
 ref.set(snapshot).then(() => {
 const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
 state.disciplinaShareUrl = base + 'disciplina.html?t=' + ref.key;
 state.disciplinaShareLoading = false;
 render();
-}).catch(() => { state.disciplinaShareLoading = false; showToast('No se pudo generar el link'); render(); });
+}).catch(err => { state.disciplinaShareLoading = false; showToast('No se pudo generar el link: ' + (err && err.message ? err.message : 'error desconocido')); render(); });
+} catch (err) {
+state.disciplinaShareLoading = false;
+showToast('No se pudo generar el link: ' + (err && err.message ? err.message : 'error desconocido'));
+render();
+}
 }
 function copyDisciplinaLink() {
 if (!state.disciplinaShareUrl) return;
@@ -2320,7 +2326,7 @@ function enviarDisciplinaWhatsapp(telDigits, studentName) {
 if (!state.disciplinaShareUrl || !telDigits) return;
 let phone = telDigits.replace(/\D/g, '');
 if (phone.length === 10) phone = '52' + phone;
-const msg = `Hola, le comparto el reporte de disciplina de ${studentName}: ${state.disciplinaShareUrl}`;
+const msg = `Hola, le comparto el reporte de indisciplina / incumplimiento del reglamento escolar de ${studentName}: ${state.disciplinaShareUrl}`;
 window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
 function renderReporteImprimible() {
