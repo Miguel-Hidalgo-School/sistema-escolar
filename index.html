@@ -954,16 +954,16 @@ function renderSecTabContent() {
     if (state.secReportGrade) return nav + renderSecReporte();
     if (state.secTab === 'inicio') return renderSecInicio();
     
-// Y AQUÍ AGREGAMOS: Una nueva pestaña 'alumnos' que usa el módulo idéntico al de primaria
-    if (state.secTab === 'alumnos') return nav + renderAlumnosSecundariaModulo(); 
-
-    // AQUÍ CAMBIAMOS: La antigua pestaña 'alumnos' ahora muestra las calificaciones (p1, p2, p3)
-    if (state.secTab === 'calificaciones') return nav + renderSecCalificaciones(); 
-      
+    // 1. Si el botón presionado es 'alumnos', carga el nuevo módulo de alumnos:
+    if (state.secTab === 'alumnos') return nav + renderAlumnosSecundariaModulo();
+    
+    // 2. Si el botón presionado es 'calificaciones', carga tus calificaciones por periodos (P1, P2, P3):
+    if (state.secTab === 'calificaciones') return nav + renderSecCalificaciones();
+    
     if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
     if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
     if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
-    // ... resto de tus condiciones de secundaria ...
+    // ... resto de tus condiciones ...
 }
 
 // ---------------- Módulo de Alumnos (Secundaria) - Idéntico a Primaria ----------------
