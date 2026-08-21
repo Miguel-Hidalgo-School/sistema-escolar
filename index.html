@@ -897,25 +897,20 @@ return `
 </div>
 </header>`;
 }
-function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina'],['datos','Datos']];
-return '<nav class="tabs">' + tabs.map(([id,label]) =>
-`<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
-).join('') + '</nav>';
-}
 
-function renderSecTabs() {
+function renderTabs() {
     const tabs = [
         ['inicio', 'Inicio'],
         ['alumnos', 'Alumnos'],
         ['calificaciones', 'Calificaciones'],
+        ['descargas', 'Descargas'],
         ['formativo', 'Formativa'],
         ['tareas', 'Tareas'],
-        ['disciplina', 'Disciplina']
+        ['disciplina', 'Disciplina'],
+        ['datos', 'Datos']
     ];
-    
     return '<nav class="tabs">' + tabs.map(([id, label]) => 
-        `<button class="${state.secTab === id ? 'active' : ''}" onclick="setSecTab('${id}')">${label}</button>`
+        `<button class="${state.tab === id ? 'active' : ''}" onclick="setTab('${id}')">${label}</button>`
     ).join('') + '</nav>';
 }
 
