@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Sistema Escolar</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icons/icon-se-192.png">
+<link rel="apple-touch-icon" href="icons/icon-se-192.png">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -121,7 +125,6 @@ body { background: #fff; }
 <script>
 // ---------------- Config ----------------
 const GRADOS = ['1°','2°','3°','4°','5°','6°'];
-const GRUPOS_PRIM = ['A','B','C'];
 const GRADOS_SEC = ['1°','2°','3°'];
 const GRUPOS_SEC = ['A','B','C','D','E','F'];
 const MATERIAS = ['Lenguajes','Saberes y Pensamiento Científico','Ética, Naturaleza y Sociedades','De lo Humano y lo Comunitario'];
@@ -155,7 +158,6 @@ tabHistory: [],
 students: [],
 schoolInfo: { nombre: '', cct: '', autoridadNombre: '', autoridadCargo: 'DIRECTOR(A)' },
 selectedGrade: '1°',
-selectedGrupo: 'A',
 diplomaGrade: '1°',
 editingStudentId: null,
 obsPeriodo: {},
@@ -205,7 +207,7 @@ disciplinaFilterGrupo: '',
 };
 function emptyExtra() {
 return {
-foto:'', curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', fechaNacimiento:'',
+foto:'', curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'',
 madreNombre:'', madreCurp:'', madreTelefono:'', madreDireccion:'',
 padreNombre:'', padreCurp:'', padreTelefono:'', padreDireccion:'',
 tutorNombre:'', tutorCurp:'', tutorTelefono:'', tutorDireccion:''
@@ -354,7 +356,7 @@ const name = input.value.trim();
 if (!name) return;
 if (btn) { btn.textContent = 'Agregando...'; btn.disabled = true; }
 const id = studentsRef.push().key;
-studentsRef.child(id).set({ name, grade: state.selectedGrade, grupo: state.selectedGrupo, grades: {}, observaciones: {}, ...emptyExtra() })
+studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra() })
 .then(() => showToast('✅ Alumno agregado'))
 .catch(() => showToast('❌ Error al agregar alumno'))
 .finally(() => { if (btn) { btn.textContent = 'Agregar'; btn.disabled = false; } });
@@ -706,6 +708,9 @@ state.nivel = null;
 state.tabHistory = [];
 render();
 }
+function goToCheckinKids() {
+window.location.href = 'checkin-kids.html';
+}
 function setTab(t) {
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
 state.tab = t;
@@ -737,7 +742,6 @@ return `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
 </div>`;
 }
 function setGrade(g) { state.selectedGrade = g; render(); }
-function setGrupo(g) { state.selectedGrupo = g; render(); }
 function setDiplomaGrade(g) { state.diplomaGrade = g; render(); }
 function openBoleta(id) {
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
@@ -862,6 +866,11 @@ return `
 <p style="font-weight:700;font-size:1.2em;">SECUNDARIA</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 3° · Reporte por materia</p>
 </div>
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#F2A93B,#D9910F);color:#fff;text-align:center;padding:28px;" onclick="goToCheckinKids()">
+<p style="font-size:2.2em;margin-bottom:6px;">🧒👧 🧑‍🎓👩‍🎓</p>
+<p style="font-weight:700;font-size:1.2em;">CHECKIN KIDS</p>
+<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Primaria y secundaria · Registro de asistencia</p>
+</div>
 </div>
 </main>`;
 }
@@ -884,7 +893,7 @@ return '<nav class="tabs">' + tabs.map(([id,label]) =>
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
@@ -932,8 +941,7 @@ function renderSecTabContent() {
 const nav = renderNavBar();
 if (state.secReportGrade) return nav + renderSecReporte();
 if (state.secTab === 'inicio') return renderSecInicio();
-if (state.secTab === 'alumnos') return nav + renderSecDatos();
-if (state.secTab === 'calificaciones') return nav + renderSecCalificaciones();
+if (state.secTab === 'alumnos') return nav + renderSecAlumnos();
 if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
 if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
 if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
@@ -970,18 +978,17 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 `;
 }
 function renderAlumnos() {
-const list = state.students.filter(s => s.grade === state.selectedGrade && (s.grupo || 'A') === state.selectedGrupo);
+const list = state.students.filter(s => s.grade === state.selectedGrade);
 let html = renderGradePills('', state.selectedGrade, 'setGrade');
-html += `<div class="grade-pills purple">` + GRUPOS_PRIM.map(gr => `<button class="${gr===state.selectedGrupo?'active':''}" onclick="setGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
 html += `
 <div class="card">
 <div class="row-flex">
-<input id="newStudentName" placeholder="Nombre del alumno (${state.selectedGrade} ${state.selectedGrupo})" onkeydown="if(event.key==='Enter')addStudent()" />
+<input id="newStudentName" placeholder="Nombre del alumno (${state.selectedGrade})" onkeydown="if(event.key==='Enter')addStudent()" />
 <button class="btn btn-blue" id="addStudentBtn" style="width:auto;padding:10px 16px;" onclick="addStudent()">Agregar</button>
 </div>
 </div>`;
 if (!list.length) {
-html += `<p class="empty-note">Sin alumnos en ${state.selectedGrade} Grupo ${state.selectedGrupo} aún.</p>`;
+html += `<p class="empty-note">Sin alumnos en ${state.selectedGrade} aún.</p>`;
 } else {
 list.forEach(s => {
 const avg = studentAverage(s);
@@ -1010,9 +1017,7 @@ Subir foto del alumno
 <select onchange="updateStudentField('${s.id}','grade',this.value); setTimeout(render,300);">
 ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('')}
 </select>
-<select onchange="updateStudentField('${s.id}','grupo',this.value); setTimeout(render,300);">
-${GRUPOS_PRIM.map(g => `<option value="${g}" ${(s.grupo||'A')===g?'selected':''}>Grupo ${g}</option>`).join('')}
-</select>
+<input placeholder="Grupo (A/B)" value="${s.grupo||''}" oninput="updateStudentFieldLocal('${s.id}','grupo',this.value)" />
 <input placeholder="CURP" value="${s.curp||''}" oninput="updateStudentFieldLocal('${s.id}','curp',this.value)" />
 <input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateStudentFieldLocal('${s.id}','matricula',this.value)" />
 <select onchange="updateStudentFieldLocal('${s.id}','turno',this.value)">
@@ -1026,6 +1031,7 @@ ${GRUPOS_PRIM.map(g => `<option value="${g}" ${(s.grupo||'A')===g?'selected':''}
 </div>
 <input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentFieldLocal('${s.id}','lenguaIndigena',this.value)" />
 <input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
+<input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentFieldLocal('${s.id}','folio',this.value)" class="full" />
 <p class="section-title">👩 Datos de la madre</p>
 <input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentFieldLocal('${s.id}','madreNombre',this.value)" />
 <input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateStudentFieldLocal('${s.id}','madreCurp',this.value)" />
@@ -1053,11 +1059,10 @@ html += '</div>';
 return html;
 }
 function renderCalificaciones() {
-const list = state.students.filter(s => s.grade === state.selectedGrade && (s.grupo || 'A') === state.selectedGrupo);
+const list = state.students.filter(s => s.grade === state.selectedGrade);
 let html = renderGradePills('', state.selectedGrade, 'setGrade');
-html += `<div class="grade-pills purple">` + GRUPOS_PRIM.map(gr => `<button class="${gr===state.selectedGrupo?'active':''}" onclick="setGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
 html += `<div class="info-banner"><strong>Periodos evaluativos</strong><br/>P1: ${PERIODOS_FECHAS[0]} · P2: ${PERIODOS_FECHAS[1]} · P3: ${PERIODOS_FECHAS[2]}</div>`;
-if (!list.length) { html += `<p class="empty-note">Agrega alumnos a ${state.selectedGrade} Grupo ${state.selectedGrupo} primero.</p>`; return html; }
+if (!list.length) { html += `<p class="empty-note">Agrega alumnos a ${state.selectedGrade} primero.</p>`; return html; }
 list.forEach(s => {
 const obsP = state.obsPeriodo[s.id] ?? 0;
 html += `<div class="card">
@@ -1163,7 +1168,7 @@ ${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MA
 <div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
 <div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
 <div class="box"><p class="l">ASISTENCIAS</p><p class="v">${s.asistencias||'—'}</p></div>
-<div class="box"><p class="l">GRUPO</p><p class="v" style="word-break:break-all;">${s.grupo||'—'}</p></div>
+<div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;">${s.folio||'—'}</p></div>
 </div>
 </div>
 <table style="margin-bottom:10px;">
@@ -1267,7 +1272,7 @@ ${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-
 <button class="btn btn-gray" style="margin-top:8px;" onclick="backToNivelSelector()">🔀 Cambiar nivel educativo</button>
 `;
 }
-function renderSecCalificaciones() {
+function renderSecAlumnos() {
 const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade && (s.grupo || 'A') === state.secSelectedGrupo);
 let html = `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
 html += `<div class="grade-pills purple">` + GRUPOS_SEC.map(gr => `<button class="${gr===state.secSelectedGrupo?'active':''}" onclick="setSecGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
@@ -1318,64 +1323,6 @@ ${GRUPOS_SEC.map(g => `<option value="${g}" ${(s.grupo||'A')===g?'selected':''}>
 html += '</div>';
 });
 }
-return html;
-}
-function renderSecDatos() {
-const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade && (s.grupo || 'A') === state.secSelectedGrupo);
-let html = `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
-html += `<div class="grade-pills purple">` + GRUPOS_SEC.map(gr => `<button class="${gr===state.secSelectedGrupo?'active':''}" onclick="setSecGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
-html += `<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Aquí se capturan los datos generales y de padres/madres de los alumnos ya dados de alta. Para agregar un alumno nuevo o capturar calificaciones, usa la pestaña <strong>Calificaciones</strong>.</p>`;
-if (!list.length) {
-html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} Grupo ${state.secSelectedGrupo} de Secundaria aún. Agrégalos desde la pestaña Calificaciones.</p>`;
-return html;
-}
-list.forEach(s => {
-const editing = state.secDatosEditingId === s.id;
-html += `<div class="card">
-<div class="student-row">
-<div class="info" onclick="toggleSecDatosEdit('${s.id}')" style="width:100%;">
-<p class="name">${s.name}</p>
-<p class="avg">${s.matricula ? 'Matrícula: '+s.matricula : 'Sin matrícula'} ${editing?'▲':'▼ datos'}</p>
-</div>
-</div>`;
-if (editing) {
-html += `<div class="edit-panel">
-<input placeholder="CURP" value="${s.curp||''}" oninput="updateSecStudentFieldLocal('${s.id}','curp',this.value)" />
-<input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateSecStudentFieldLocal('${s.id}','matricula',this.value)" />
-<select onchange="updateSecStudentFieldLocal('${s.id}','turno',this.value)">
-<option value="">Turno</option>
-<option value="MATUTINO" ${s.turno==='MATUTINO'?'selected':''}>Matutino</option>
-<option value="VESPERTINO" ${s.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
-</select>
-<div class="full">
-<label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
-<input type="date" value="${s.fechaNacimiento||''}" oninput="updateSecStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
-</div>
-<input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateSecStudentFieldLocal('${s.id}','lenguaIndigena',this.value)" />
-<input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateSecStudentFieldLocal('${s.id}','asistencias',this.value)" />
-<p class="section-title">👩 Datos de la madre</p>
-<input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreNombre',this.value)" />
-<input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreCurp',this.value)" />
-<input placeholder="Teléfono" value="${s.madreTelefono||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreTelefono',this.value)" />
-<input class="full" placeholder="Dirección" value="${s.madreDireccion||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreDireccion',this.value)" />
-<p class="section-title">👨 Datos del padre</p>
-<input class="full" placeholder="Nombre completo" value="${s.padreNombre||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreNombre',this.value)" />
-<input placeholder="CURP" value="${s.padreCurp||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreCurp',this.value)" />
-<input placeholder="Teléfono" value="${s.padreTelefono||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreTelefono',this.value)" />
-<input class="full" placeholder="Dirección" value="${s.padreDireccion||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreDireccion',this.value)" />
-<p class="section-title">🧑 Datos del tutor (si aplica)</p>
-<input class="full" placeholder="Nombre completo" value="${s.tutorNombre||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorNombre',this.value)" />
-<input placeholder="CURP" value="${s.tutorCurp||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorCurp',this.value)" />
-<input placeholder="Teléfono" value="${s.tutorTelefono||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorTelefono',this.value)" />
-<input class="full" placeholder="Dirección" value="${s.tutorDireccion||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorDireccion',this.value)" />
-<div class="full row-flex" style="margin-top:6px;">
-<button class="btn btn-green" style="width:auto;flex:1;" onclick="saveSecStudentEdits('${s.id}')">💾 Guardar cambios</button>
-<button class="btn btn-red" style="width:auto;flex:1;" onclick="deleteSecStudentConfirm('${s.id}','${s.name.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
-</div>
-</div>`;
-}
-html += '</div>';
-});
 return html;
 }
 function renderSecReporte() {
@@ -2478,7 +2425,33 @@ ${contactDisc.tel ? `<button class="btn btn-green" style="flex:1;" onclick="envi
 return html;
 }
 // ---------------- Init ----------------
+// ---------------- Mayúsculas automáticas en toda la app ----------------
+// Aplica a inputs de texto sin tipo especial y a textareas (no afecta
+// email, password, date, number, etc.), incluso en campos creados
+// dinámicamente vía innerHTML.
+document.addEventListener('input', function (e) {
+var el = e.target;
+if (!el || typeof el.matches !== 'function') return;
+if (!el.matches('input[type="text"], input:not([type]), textarea')) return;
+var start = el.selectionStart, end = el.selectionEnd;
+var upper = el.value.toUpperCase();
+if (upper !== el.value) {
+el.value = upper;
+if (start !== null && typeof el.setSelectionRange === 'function') {
+try { el.setSelectionRange(start, end); } catch (err) {}
+}
+}
+});
+
 initFirebase();
+
+// Registro del service worker: hace que el sitio se pueda "Instalar"
+// como app de verdad (ícono + pantalla completa), no solo como acceso directo.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
