@@ -918,7 +918,7 @@ function renderSecTabs() {
         `<button class="${state.secTab === id ? 'active' : ''}" onclick="setSecTab('${id}')">${label}</button>`
     ).join('') + '</nav>';
 }
-}
+
 function renderGradePills(cssClass, activeGrade, onclickFn) {
 return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
 `<button class="${g===activeGrade?'active':''}" onclick="${onclickFn}('${g}')">${g}</button>`
