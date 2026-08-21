@@ -704,6 +704,9 @@ state.nivel = null;
 state.tabHistory = [];
 render();
 }
+function goToCheckinKids() {
+window.location.href = 'checkin-kids.html';
+}
 function setTab(t) {
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
 state.tab = t;
@@ -858,6 +861,11 @@ return `
 <p style="font-size:2.2em;margin-bottom:6px;">🏫</p>
 <p style="font-weight:700;font-size:1.2em;">SECUNDARIA</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 3° · Reporte por materia</p>
+</div>
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#F2A93B,#D9910F);color:#fff;text-align:center;padding:28px;" onclick="goToCheckinKids()">
+<p style="font-size:2.2em;margin-bottom:6px;">🧒👧 🧑‍🎓👩‍🎓</p>
+<p style="font-weight:700;font-size:1.2em;">CHECKIN KIDS</p>
+<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Primaria y secundaria · Registro de asistencia</p>
 </div>
 </div>
 </main>`;
@@ -2413,6 +2421,24 @@ ${contactDisc.tel ? `<button class="btn btn-green" style="flex:1;" onclick="envi
 return html;
 }
 // ---------------- Init ----------------
+// ---------------- Mayúsculas automáticas en toda la app ----------------
+// Aplica a inputs de texto sin tipo especial y a textareas (no afecta
+// email, password, date, number, etc.), incluso en campos creados
+// dinámicamente vía innerHTML.
+document.addEventListener('input', function (e) {
+var el = e.target;
+if (!el || typeof el.matches !== 'function') return;
+if (!el.matches('input[type="text"], input:not([type]), textarea')) return;
+var start = el.selectionStart, end = el.selectionEnd;
+var upper = el.value.toUpperCase();
+if (upper !== el.value) {
+el.value = upper;
+if (start !== null && typeof el.setSelectionRange === 'function') {
+try { el.setSelectionRange(start, end); } catch (err) {}
+}
+}
+});
+
 initFirebase();
 </script>
 </body>
