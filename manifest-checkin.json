@@ -1,0 +1,17 @@
+{
+  "name": "CheckIn Kids",
+  "short_name": "CheckIn Kids",
+  "description": "Registro de asistencia escolar con escáner QR",
+  "start_url": "./checkin-kids.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF7F2",
+  "theme_color": "#F2A93B",
+  "icons": [
+    { "src": "icons/icon-ck-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-ck-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-ck-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-ck-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

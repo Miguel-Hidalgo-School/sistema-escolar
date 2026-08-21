@@ -1,0 +1,17 @@
+{
+  "name": "Sistema Escolar",
+  "short_name": "Sist. Escolar",
+  "description": "Sistema de gestión escolar: primaria, secundaria y CheckIn Kids",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef2ff",
+  "theme_color": "#2563eb",
+  "icons": [
+    { "src": "icons/icon-se-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-se-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-se-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-se-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

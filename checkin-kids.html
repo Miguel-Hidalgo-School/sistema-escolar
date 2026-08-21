@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CheckIn Kids · Sistema de asistencia escolar</title>
+<link rel="manifest" href="manifest-checkin.json">
+<meta name="theme-color" content="#F2A93B">
+<link rel="icon" href="icons/icon-ck-192.png">
+<link rel="apple-touch-icon" href="icons/icon-ck-192.png">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -160,6 +164,7 @@
 
   <header class="top">
     <div class="brand">
+      <button class="btn btn-ghost btn-sm" style="margin-right:8px;" onclick="window.location.href='index.html'">← Sistema Escolar</button>
       <div class="brand-mark">CK</div>
       <div>
         <h1>CheckIn Kids</h1>
@@ -202,12 +207,19 @@
             <input id="inName" placeholder="Ej. Sofía Ramírez">
           </div>
           <div class="field">
+            <label>Nivel educativo</label>
+            <select id="inNivel" onchange="updateNivelOptions('in')">
+              <option value="primaria">Primaria</option>
+              <option value="secundaria">Secundaria</option>
+            </select>
+          </div>
+          <div class="field">
             <label>Grado</label>
-            <select id="inGrade"><option>1°</option><option>2°</option><option>3°</option><option>4°</option><option>5°</option><option>6°</option></select>
+            <select id="inGrade"></select>
           </div>
           <div class="field">
             <label>Grupo</label>
-            <select id="inGroup"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+            <select id="inGroup"></select>
           </div>
           <div class="field">
             <label>Matrícula (opcional)</label>
@@ -439,8 +451,15 @@
     </div>
     <div class="grid3">
       <div class="field"><label>Nombre del alumno/a <span class="req">*</span></label><input id="editName"></div>
-      <div class="field"><label>Grado</label><select id="editGrade"><option>1°</option><option>2°</option><option>3°</option><option>4°</option><option>5°</option><option>6°</option></select></div>
-      <div class="field"><label>Grupo</label><select id="editGroup"><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+      <div class="field">
+        <label>Nivel educativo</label>
+        <select id="editNivel" onchange="updateNivelOptions('edit')">
+          <option value="primaria">Primaria</option>
+          <option value="secundaria">Secundaria</option>
+        </select>
+      </div>
+      <div class="field"><label>Grado</label><select id="editGrade"></select></div>
+      <div class="field"><label>Grupo</label><select id="editGroup"></select></div>
       <div class="field"><label>Matrícula (opcional)</label><input id="editEnroll"></div>
     </div>
     <div class="grid3">
@@ -12950,9 +12969,13 @@ function saveJSON(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }
   catch(e){ showToast('No hay espacio suficiente para guardar (fotos muy pesadas). Prueba con una foto más ligera.', 'err'); return false; }
   if(ckSyncReady && key === STUDENTS_KEY){
-    const obj = {};
-    val.forEach(s => { obj[s.id] = ckToFirebaseStudent(s); });
-    ckStudentsRef.set(obj).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
+    const pri = {}, sec = {};
+    val.forEach(s => {
+      if((s.nivel||'primaria') === 'secundaria') sec[s.id] = ckToFirebaseStudent(s);
+      else pri[s.id] = ckToFirebaseStudent(s);
+    });
+    ckStudentsRef.set(pri).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
+    ckSecStudentsRef.set(sec).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
   } else if(ckSyncReady && key === ATTEND_KEY){
     const obj = {};
     val.forEach(a => { const { id, ...rest } = a; obj[id] = rest; });
@@ -12963,6 +12986,18 @@ function saveJSON(key, val){
 
 let students = [];
 let attendance = [];
+
+/* ---------- Nivel educativo (primaria/secundaria): grado y grupo dinámicos ---------- */
+const CK_GRADOS_POR_NIVEL = { primaria: ['1°','2°','3°','4°','5°','6°'], secundaria: ['1°','2°','3°'] };
+const CK_GRUPOS_POR_NIVEL = { primaria: ['A','B','C','D'], secundaria: ['A','B','C','D','E','F'] };
+function updateNivelOptions(prefix){
+  const nivel = document.getElementById(prefix+'Nivel').value;
+  const gradeSel = document.getElementById(prefix+'Grade');
+  const groupSel = document.getElementById(prefix+'Group');
+  const curGrade = gradeSel.value, curGroup = groupSel.value;
+  gradeSel.innerHTML = CK_GRADOS_POR_NIVEL[nivel].map(g=>`<option${g===curGrade?' selected':''}>${g}</option>`).join('');
+  groupSel.innerHTML = CK_GRUPOS_POR_NIVEL[nivel].map(g=>`<option${g===curGroup?' selected':''}>${g}</option>`).join('');
+}
 
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
 // Mismo proyecto/config que Sistema Escolar: los alumnos de nivel
@@ -12984,6 +13019,7 @@ firebase.initializeApp(CK_FIREBASE_CONFIG);
 const ckAuth = firebase.auth();
 const ckDb = firebase.database();
 const ckStudentsRef = ckDb.ref(CK_DB_ROOT + '/students');
+const ckSecStudentsRef = ckDb.ref(CK_DB_ROOT + '/secStudents');
 const ckAttendanceRef = ckDb.ref(CK_DB_ROOT + '/checkinAttendance');
 let ckSyncReady = false;
 
@@ -13004,10 +13040,10 @@ function ckToFirebaseStudent(s){
   };
 }
 // Convierte un alumno del formato compartido (o creado en Sistema Escolar) al formato de CheckIn Kids
-function ckFromFirebaseStudent(id, v){
+function ckFromFirebaseStudent(id, v, nivel){
   v = v || {};
   return {
-    id,
+    id, nivel: nivel || 'primaria',
     name: v.name || '', grade: v.grade || '1°', group: v.grupo || '',
     curp: v.curp || '', enroll: v.matricula || '', birthDate: v.fechaNacimiento || '',
     address: v.address || '', photo: v.foto || '',
@@ -13019,11 +13055,18 @@ function ckFromFirebaseStudent(id, v){
   };
 }
 
+let ckPriStudents = [];
+let ckSecStudentsArr = [];
+function ckMergeStudents(){
+  students = [...ckPriStudents, ...ckSecStudentsArr];
+  renderAll();
+}
+
 function ckStartSync(){
   ckSyncReady = true;
   ckStudentsRef.on('value', snap => {
     const val = snap.val() || {};
-    students = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id]));
+    ckPriStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'primaria'));
     // A los alumnos creados desde Sistema Escolar (sin folio/QR) se les
     // asigna folio y token la primera vez que aparecen aquí.
     Object.keys(val).forEach(id => {
@@ -13033,7 +13076,19 @@ function ckStartSync(){
         ckStudentsRef.child(id).update({ folio, token });
       }
     });
-    renderAll();
+    ckMergeStudents();
+  });
+  ckSecStudentsRef.on('value', snap => {
+    const val = snap.val() || {};
+    ckSecStudentsArr = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'secundaria'));
+    Object.keys(val).forEach(id => {
+      if(!val[id].folio || !val[id].token){
+        const folio = nextFolio();
+        const token = `${QR_PREFIX}|${folio}|${randomSuffix()}`;
+        ckSecStudentsRef.child(id).update({ folio, token });
+      }
+    });
+    ckMergeStudents();
   });
   ckAttendanceRef.on('value', snap => {
     const val = snap.val() || {};
@@ -13109,6 +13164,8 @@ schoolInput.addEventListener('change', ()=> saveJSON(SCHOOL_KEY, schoolInput.val
 
 const cycleInput = document.getElementById('cycleStartInput');
 cycleInput.value = loadJSON(CYCLE_KEY, '2026-08-01');
+updateNivelOptions('in');
+updateNivelOptions('edit');
 cycleInput.addEventListener('change', ()=> saveJSON(CYCLE_KEY, cycleInput.value));
 
 const monthPicker = document.getElementById('monthPicker');
@@ -13241,6 +13298,7 @@ function capturePhoto(){
 
 /* ---------- Registro de alumnos ---------- */
 function registerStudent(){
+  const nivel = document.getElementById('inNivel').value;
   const name = document.getElementById('inName').value.trim();
   const curp = document.getElementById('inCurp').value.trim();
   const grade = document.getElementById('inGrade').value;
@@ -13268,7 +13326,7 @@ function registerStudent(){
   const token = `${QR_PREFIX}|${folio}|${randomSuffix()}`;
   const student = {
     id: uid(), folio, token, altCodes: [],
-    name, grade, group, curp, birthDate, address,
+    nivel, name, grade, group, curp, birthDate, address,
     motherName, motherCurp, motherPhone,
     fatherName, fatherCurp, fatherPhone,
     pickupAuthorized: regPickupList.filter(p=>p.name.trim()!==''),
@@ -13283,6 +13341,8 @@ function registerStudent(){
    'inFatherName','inFatherCurp','inFatherPhone','inEnroll','inAllergy'].forEach(id=>{
     document.getElementById(id).value='';
   });
+  document.getElementById('inNivel').value = 'primaria';
+  updateNivelOptions('in');
   regPickupList = [];
   renderPickupEditor('register');
   regPhotoData = '';
@@ -13300,6 +13360,8 @@ function openEditModal(studentId){
   if(!s) return;
   document.getElementById('editStudentId').value = s.id;
   document.getElementById('editName').value = s.name;
+  document.getElementById('editNivel').value = s.nivel || 'primaria';
+  updateNivelOptions('edit');
   document.getElementById('editGrade').value = s.grade;
   document.getElementById('editGroup').value = s.group;
   document.getElementById('editCurp').value = s.curp || '';
@@ -13336,6 +13398,7 @@ function saveEditStudent(){
 
   s.name = name;
   s.curp = curp;
+  s.nivel = document.getElementById('editNivel').value;
   s.grade = document.getElementById('editGrade').value;
   s.group = document.getElementById('editGroup').value;
   s.birthDate = document.getElementById('editBirth').value;
@@ -13367,7 +13430,7 @@ function showCredential(student){
     <img src="${dataUrl}" class="qr" alt="QR ${student.folio}">
     <div class="cname">${escapeHtml(student.name)}</div>
     <div class="cfolio">FOLIO ${student.folio}</div>
-    <div class="cmeta">${student.grade} ${student.group} · ${escapeHtml(primaryContactName(student))}</div>
+    <div class="cmeta">${student.nivel==='secundaria'?'Secundaria':'Primaria'} · ${student.grade} ${student.group} · ${escapeHtml(primaryContactName(student))}</div>
   `;
   box.dataset.dataUrl = dataUrl;
   box.dataset.folio = student.folio;
@@ -13375,6 +13438,30 @@ function showCredential(student){
   document.getElementById('qrModal').classList.add('show');
 }
 function reissueCredential(studentId){ const s = students.find(x=>x.id===studentId); if(s) showCredential(s); }
+
+/* ---------- Cambiar código QR (de temporal a credencial oficial SEJAL, o viceversa) ---------- */
+function changeStudentQR(studentId){
+  const s = students.find(x=>x.id===studentId);
+  if(!s) return;
+  const input = prompt(
+    `Alumno: ${s.name}\n\nEscanea o escribe el nuevo código QR (por ejemplo, el de su credencial oficial SEJAL).\n\nDeja el campo vacío para generar automáticamente un nuevo código temporal.`,
+    ''
+  );
+  if(input === null) return; // canceló
+  const newCode = input.trim();
+  const oldToken = s.token;
+  if(newCode){
+    s.token = newCode;
+  } else {
+    const folio = nextFolio();
+    s.token = `${QR_PREFIX}|${folio}|${randomSuffix()}`;
+  }
+  if(oldToken && !s.altCodes.includes(oldToken)) s.altCodes.push(oldToken);
+  saveJSON(STUDENTS_KEY, students);
+  showToast(`Código QR actualizado para ${s.name}`, 'ok');
+  showCredential(s);
+  renderAll();
+}
 function printCredential(){ window.print(); }
 function downloadCredential(){
   const box = document.getElementById('credentialBox');
@@ -13517,7 +13604,13 @@ async function toggleScanner(){
   if(scannerActive){ stopScanner(); return; }
   const video = document.getElementById('scanVideo');
   try{ scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
-  catch(e){ showToast('No se pudo acceder a la cámara. Revisa los permisos.', 'err'); return; }
+  catch(e){
+    const why = e && e.name === 'NotAllowedError'
+      ? 'Permiso de cámara bloqueado para esta app instalada. Ve a Ajustes del teléfono → Apps → CheckIn Kids (o Sistema Escolar) → Permisos → Cámara → Permitir.'
+      : (e && e.message) ? e.message : 'Revisa los permisos.';
+    showToast('No se pudo acceder a la cámara. ' + why, 'err');
+    return;
+  }
   video.srcObject = scannerStream;
   await video.play();
   scannerActive = true;
@@ -13649,7 +13742,7 @@ function renderEntradas(){
     <tr>
       <td class="folio">${a.student.folio}</td>
       <td><div class="name-cell">${avatarHtml(a.student)}<span><b>${escapeHtml(a.student.name)}</b>${a.student.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
-      <td>${a.student.grade} ${a.student.group}</td>
+      <td>${a.student.nivel==='secundaria'?'Sec.':'Prim.'} ${a.student.grade} ${a.student.group}</td>
       <td>${fmtTime(a.checkin)}</td>
       <td>${a.checkout ? fmtTime(a.checkout) : '—'}</td>
       <td>${a.checkout ? '<span class="badge out">Salió</span>' : '<span class="badge in">En plantel</span>'}</td>
@@ -13683,13 +13776,14 @@ function renderAlumnos(){
     <tr>
       <td class="folio">${s.folio}</td>
       <td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
-      <td>${s.grade} ${s.group}</td>
+      <td>${s.nivel==='secundaria'?'Sec.':'Prim.'} ${s.grade} ${s.group}</td>
       <td>${escapeHtml(primaryContactName(s))}</td>
       <td class="mono-small">${escapeHtml(s.curp||'—')}</td>
       <td>${escapeHtml(contactPhone)}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" onclick="openEditModal('${s.id}')">Editar</button>
         <button class="btn btn-ghost btn-sm" onclick="reissueCredential('${s.id}')">Ver QR</button>
+        <button class="btn btn-ghost btn-sm" onclick="changeStudentQR('${s.id}')">Cambiar QR</button>
         <button class="btn btn-danger btn-sm" onclick="deleteStudent('${s.id}')">Eliminar</button>
       </td>
     </tr>
@@ -13899,6 +13993,12 @@ async function exportMonthlyList(){
 }
 
 renderAll();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
