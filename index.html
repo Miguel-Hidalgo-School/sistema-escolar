@@ -903,11 +903,21 @@ return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
 ).join('') + '</nav>';
 }
+
 function renderSecTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina']];
-return '<nav class="tabs">' + tabs.map(([id,label]) =>
-`<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
-).join('') + '</nav>';
+    const tabs = [
+        ['inicio', 'Inicio'],
+        ['alumnos', 'Alumnos'],
+        ['calificaciones', 'Calificaciones'],
+        ['formativo', 'Formativa'],
+        ['tareas', 'Tareas'],
+        ['disciplina', 'Disciplina']
+    ];
+    
+    return '<nav class="tabs">' + tabs.map(([id, label]) => 
+        `<button class="${state.secTab === id ? 'active' : ''}" onclick="setSecTab('${id}')">${label}</button>`
+    ).join('') + '</nav>';
+}
 }
 function renderGradePills(cssClass, activeGrade, onclickFn) {
 return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
@@ -933,6 +943,7 @@ return `
 <p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Los mejores promedios de la escuela</p>
 </div>`;
 }
+
 function renderTabContent() {
 const nav = renderNavBar();
 if (state.tab === 'inicio') return renderInicio();
@@ -967,6 +978,7 @@ function renderSecTabContent() {
 }
 
 // ---------------- Módulo de Alumnos (Secundaria) - Idéntico a Primaria ----------------
+
 function setAlumnosSecFilterGrade(g) { state.alumnosSecFilterGrade = g; state.alumnosSecStudentId = null; render(); }
 function setAlumnosSecFilterGrupo(g) { state.alumnosSecFilterGrupo = g; state.alumnosSecStudentId = null; render(); }
 
