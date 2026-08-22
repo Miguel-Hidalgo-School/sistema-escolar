@@ -36,6 +36,8 @@
   .brand input#schoolName:focus{outline:none;border-bottom:1px dashed var(--marigold-deep);}
   .stats{display:flex;gap:10px;flex-wrap:wrap;}
   .stat-chip{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:8px 14px;text-align:center;min-width:74px;}
+  #statInChip{transition:.15s;}
+  #statInChip:hover{border-color:var(--sage);background:var(--paper-dim);transform:translateY(-1px);}
   .stat-chip b{display:block;font-family:'Baloo 2',sans-serif;font-size:19px;color:var(--ink);}
   .stat-chip span{font-size:11px;color:var(--slate);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
 
@@ -188,7 +190,7 @@
     </div>
     <div class="stats">
       <div class="stat-chip" style="min-width:100px;"><b id="clockDisplay">--:--:--</b><span>Hora del sistema</span></div>
-      <div class="stat-chip"><b id="statIn">0</b><span>En plantel</span></div>
+      <div class="stat-chip" id="statInChip" style="cursor:pointer;" onclick="openEnPlantelModal()" title="Ver quiénes siguen en el plantel"><b id="statIn">0</b><span>En plantel</span></div>
       <div class="stat-chip"><b id="statToday">0</b><span>Hoy</span></div>
       <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
     </div>
@@ -511,6 +513,28 @@
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="closeModal('editModal')">Cancelar</button>
       <button class="btn btn-primary btn-sm" onclick="saveEditStudent()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alumnos actualmente en el plantel -->
+<div class="modal-bg" id="enPlantelModal">
+  <div class="modal wide">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">Alumnos en el plantel</b>
+    <p class="note">Alumnos que ya marcaron entrada hoy y aún no marcan salida (pueden estar en el baño, en un salón u otra área).</p>
+    <input id="enPlantelSearch" placeholder="Buscar por nombre, grado o folio..." style="margin:12px 0;" oninput="renderEnPlantelList()">
+    <div style="max-height:55vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Alumno</th><th>Grado/Grupo</th><th>Entrada</th><th>Tiempo dentro</th><th></th></tr></thead>
+        <tbody id="enPlantelBody"></tbody>
+      </table>
+      <div class="empty" id="enPlantelEmpty" style="display:none;">
+        <b>Nadie pendiente 🎉</b>
+        Todos los que entraron hoy ya marcaron salida.
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-sm" onclick="closeModal('enPlantelModal')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -13926,6 +13950,42 @@ function manualCheckout(entryId){
   renderAll();
   const s = students.find(x=>x.id===e.studentId);
   if(s) maybeOfferNotify({ok:true, action:'out', student:s});
+}
+
+/* ---------- Modal: alumnos actualmente en el plantel ---------- */
+function fmtElapsed(iso){
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime())/60000));
+  if(mins < 60) return `${mins} min`;
+  const h = Math.floor(mins/60), m = mins%60;
+  return `${h} h ${m} min`;
+}
+function openEnPlantelModal(){
+  document.getElementById('enPlantelSearch').value = '';
+  renderEnPlantelList();
+  document.getElementById('enPlantelModal').classList.add('show');
+}
+function renderEnPlantelList(){
+  const q = (document.getElementById('enPlantelSearch').value || '').toLowerCase();
+  const today = todayStr();
+  const inNow = attendance.filter(a => a.date===today && !a.checkout)
+    .map(a => ({...a, student: students.find(s=>s.id===a.studentId)}))
+    .filter(a => a.student && studentMatchesQuery(a.student, q))
+    .sort((a,b) => new Date(a.checkin) - new Date(b.checkin));
+
+  const body = document.getElementById('enPlantelBody');
+  const empty = document.getElementById('enPlantelEmpty');
+  if(inNow.length===0){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+
+  body.innerHTML = inNow.map(a => `
+    <tr>
+      <td><div class="name-cell">${avatarHtml(a.student)}<span><b>${escapeHtml(a.student.name)}</b>${a.student.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
+      <td>${a.student.nivel==='secundaria'?'Sec.':'Prim.'} ${a.student.grade} ${a.student.group}</td>
+      <td>${fmtTime(a.checkin)}</td>
+      <td>${fmtElapsed(a.checkin)}</td>
+      <td><button class="btn btn-sage btn-sm" onclick="manualCheckout('${a.id}'); renderEnPlantelList();">Salida</button></td>
+    </tr>
+  `).join('');
 }
 
 function ckStudentRowHtml(s){
