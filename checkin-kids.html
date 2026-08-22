@@ -150,6 +150,21 @@
   .manual-fallback{display:flex;gap:8px;margin-top:6px;}
   .manual-fallback input{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;letter-spacing:.05em;}
 
+  /* ---------- Selector de nivel / grado / grupo ---------- */
+  .class-selector{background:var(--paper-dim);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;text-align:left;}
+  .class-selector .cs-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .class-selector .cs-row:last-child{margin-bottom:0;}
+  .class-selector .cs-label{font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;width:100%;margin-bottom:1px;}
+  .chip{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;border:1.5px solid var(--line);background:var(--white);color:var(--ink-soft);padding:7px 15px;border-radius:20px;cursor:pointer;transition:.15s;}
+  .chip:hover{border-color:var(--marigold-deep);}
+  .chip.active{background:var(--ink);color:var(--marigold);border-color:var(--ink);}
+  .chip.all{border-style:dashed;color:var(--slate);}
+  .chip.all.active{border-style:solid;color:var(--marigold);}
+  .cs-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--white);border:1.5px solid var(--line);border-radius:12px;padding:11px 16px;margin-bottom:16px;font-size:13.5px;color:var(--slate);}
+  .cs-summary b{font-family:'Baloo 2',sans-serif;color:var(--ink);font-weight:700;}
+  .cs-summary .cs-count{margin-left:auto;font-weight:700;color:var(--marigold-deep);white-space:nowrap;}
+  .group-row td{background:var(--paper-dim)!important;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;border-bottom:1px solid var(--line);}
+
   .cam-frame{position:relative;width:100%;aspect-ratio:1/1;background:var(--ink);border-radius:16px;overflow:hidden;margin-bottom:14px;max-width:320px;margin-left:auto;margin-right:auto;}
   .cam-frame video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
 
@@ -285,6 +300,7 @@
   <!-- ESCÁNER -->
   <section class="panel active" id="panel-escaner">
     <div class="scan-wrap">
+      <div class="class-selector" id="scanClassSelector"></div>
       <div class="scan-frame" id="scanFrame">
         <video id="scanVideo" playsinline muted></video>
         <div class="reticle" id="reticle"></div>
@@ -323,6 +339,7 @@
 
   <!-- ALUMNOS -->
   <section class="panel" id="panel-alumnos">
+    <div class="class-selector" id="alumnosClassSelector"></div>
     <div class="toolbar">
       <div class="left-group" style="flex:1;">
         <input id="alumnosSearch" placeholder="Buscar por nombre, madre, padre, tutor, folio o CURP..." oninput="renderAlumnos()" style="min-width:260px;">
@@ -12999,6 +13016,101 @@ function updateNivelOptions(prefix){
   groupSel.innerHTML = CK_GRUPOS_POR_NIVEL[nivel].map(g=>`<option${g===curGroup?' selected':''}>${g}</option>`).join('');
 }
 
+/* ---------- Selector de nivel + grado + grupo (Escáner y Alumnos) ----------
+   Cada pantalla (scope: 'scan' o 'alumnos') mantiene su propio contexto:
+   nivel (siempre uno), grado (null = "todos los grados") y grupo (null =
+   "todos los grupos", solo aplica si hay un grado específico elegido).
+   Primaria puede verse completa por grados o en una sola lista con todos
+   los grados; Secundaria se ve por grado (1°/2°/3°) y grupo (A-F), o
+   también puede verse en una sola lista completa. */
+const ckFilters = {
+  scan:    { nivel: 'primaria', grado: null, grupo: null },
+  alumnos: { nivel: 'primaria', grado: null, grupo: null }
+};
+
+function ckFilterStudents(list, f){
+  return list.filter(s=>{
+    const nivel = s.nivel || 'primaria';
+    if(nivel !== f.nivel) return false;
+    if(f.grado && s.grade !== f.grado) return false;
+    if(f.grado && f.grupo && s.group !== f.grupo) return false;
+    return true;
+  });
+}
+
+function ckFilterLabel(f){
+  const nivelTxt = f.nivel === 'secundaria' ? 'Secundaria' : 'Primaria';
+  if(!f.grado) return `${nivelTxt} · todos los grados`;
+  if(!f.grupo) return `${nivelTxt} · ${f.grado} · todos los grupos`;
+  return `${nivelTxt} · ${f.grado} ${f.grupo}`;
+}
+
+function ckClassSelectorHtml(scope){
+  const f = ckFilters[scope];
+  const grados = CK_GRADOS_POR_NIVEL[f.nivel];
+  const grupos = CK_GRUPOS_POR_NIVEL[f.nivel];
+
+  let html = '<div class="cs-row">';
+  html += '<span class="cs-label">Nivel educativo</span>';
+  html += `<button type="button" class="chip${f.nivel==='primaria'?' active':''}" onclick="ckSetNivel('${scope}','primaria')">Primaria</button>`;
+  html += `<button type="button" class="chip${f.nivel==='secundaria'?' active':''}" onclick="ckSetNivel('${scope}','secundaria')">Secundaria</button>`;
+  html += '</div>';
+
+  html += '<div class="cs-row">';
+  html += '<span class="cs-label">Grado</span>';
+  html += `<button type="button" class="chip all${!f.grado?' active':''}" onclick="ckSetGrado('${scope}', null)">Todos los grados</button>`;
+  grados.forEach(g=>{
+    html += `<button type="button" class="chip${f.grado===g?' active':''}" onclick="ckSetGrado('${scope}', '${g}')">${g}</button>`;
+  });
+  html += '</div>';
+
+  if(f.grado){
+    html += '<div class="cs-row">';
+    html += '<span class="cs-label">Grupo</span>';
+    html += `<button type="button" class="chip all${!f.grupo?' active':''}" onclick="ckSetGrupo('${scope}', null)">Todos los grupos</button>`;
+    grupos.forEach(gr=>{
+      html += `<button type="button" class="chip${f.grupo===gr?' active':''}" onclick="ckSetGrupo('${scope}', '${gr}')">${gr}</button>`;
+    });
+    html += '</div>';
+  }
+
+  if(scope === 'scan'){
+    const count = ckFilterStudents(students, f).length;
+    html += `<div class="cs-summary" style="margin-top:12px;"><span>Escaneando para <b>${ckFilterLabel(f)}</b></span><span class="cs-count">${count} alumno${count===1?'':'s'}</span></div>`;
+  }
+
+  return html;
+}
+
+function ckRenderClassSelector(scope){
+  const containerId = scope === 'scan' ? 'scanClassSelector' : 'alumnosClassSelector';
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  el.innerHTML = ckClassSelectorHtml(scope);
+}
+
+function ckSetNivel(scope, nivel){
+  ckFilters[scope].nivel = nivel;
+  ckFilters[scope].grado = null;
+  ckFilters[scope].grupo = null;
+  ckRenderClassSelector(scope);
+  ckOnFilterChanged(scope);
+}
+function ckSetGrado(scope, grado){
+  ckFilters[scope].grado = grado;
+  ckFilters[scope].grupo = null;
+  ckRenderClassSelector(scope);
+  ckOnFilterChanged(scope);
+}
+function ckSetGrupo(scope, grupo){
+  ckFilters[scope].grupo = grupo;
+  ckRenderClassSelector(scope);
+  ckOnFilterChanged(scope);
+}
+function ckOnFilterChanged(scope){
+  if(scope === 'alumnos') renderAlumnos();
+}
+
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
 // Mismo proyecto/config que Sistema Escolar: los alumnos de nivel
 // primaria (nodo "students") se comparten entre ambas apps. Registrar
@@ -13222,6 +13334,8 @@ function renderPickupEditor(target){
 }
 renderPickupEditor('register');
 renderPickupEditor('edit');
+ckRenderClassSelector('scan');
+ckRenderClassSelector('alumnos');
 
 /* ---------- Foto: subir archivo o tomar con cámara ---------- */
 let regPhotoData = '';
@@ -13592,7 +13706,20 @@ function openLinkModal(rawCode){
   if(students.length===0){
     select.innerHTML = '<option value="">No hay alumnos registrados</option>';
   } else {
-    select.innerHTML = students.map(s=>`<option value="${s.id}">${s.folio?('MATRÍCULA '+s.folio):'SIN MATRÍCULA'} — ${escapeHtml(s.name)}</option>`).join('');
+    const opt = s => `<option value="${s.id}">${s.folio?('MATRÍCULA '+s.folio):'SIN MATRÍCULA'} — ${escapeHtml(s.name)}</option>`;
+    const f = ckFilters.scan;
+    const inGroup = ckFilterStudents(students, f);
+    // Si hay un grupo específico seleccionado en el Escáner, se prioriza mostrando
+    // primero a los alumnos de ese grupo (lo más probable al vincular un código nuevo),
+    // y el resto de alumnos queda disponible debajo por si hace falta.
+    if(f.grado && inGroup.length > 0 && inGroup.length < students.length){
+      const rest = students.filter(s => !inGroup.includes(s));
+      select.innerHTML =
+        `<optgroup label="${escapeHtml(ckFilterLabel(f))}">${inGroup.map(opt).join('')}</optgroup>` +
+        `<optgroup label="Otros alumnos">${rest.map(opt).join('')}</optgroup>`;
+    } else {
+      select.innerHTML = students.map(opt).join('');
+    }
   }
   document.getElementById('linkModal').classList.add('show');
 }
@@ -13684,7 +13811,21 @@ function reportScanResult(res){
     reticle.classList.add('ok');
     resultEl.style.color = 'var(--sage-deep)';
     resultEl.textContent = res.msg;
-    showToast(res.msg, 'ok');
+    // Si hay un grupo específico seleccionado en el selector del Escáner y el alumno
+    // escaneado pertenece a otro grupo, se registra igual (no se bloquea la asistencia)
+    // pero se avisa para evitar confusiones al pasar lista.
+    const f = ckFilters.scan;
+    const s = res.student;
+    const mismatch = f.grado && s && (
+      (s.nivel||'primaria') !== f.nivel || s.grade !== f.grado || (f.grupo && s.group !== f.grupo)
+    );
+    if(mismatch){
+      const suyo = `${(s.nivel==='secundaria')?'Secundaria':'Primaria'} · ${s.grade} ${s.group}`;
+      resultEl.textContent += ` (⚠ es de ${suyo})`;
+      showToast(`${res.msg} — ⚠ ${s.name} es de ${suyo}, no de ${ckFilterLabel(f)}`, 'err');
+    } else {
+      showToast(res.msg, 'ok');
+    }
   } else {
     reticle.classList.add('err');
     resultEl.style.color = 'var(--coral)';
@@ -13787,18 +13928,9 @@ function manualCheckout(entryId){
   if(s) maybeOfferNotify({ok:true, action:'out', student:s});
 }
 
-function renderAlumnos(){
-  const q = (document.getElementById('alumnosSearch').value || '').toLowerCase();
-  const list = students.filter(s => studentMatchesQuery(s, q));
-
-  const body = document.getElementById('alumnosBody');
-  const empty = document.getElementById('alumnosEmpty');
-  if(list.length===0){ body.innerHTML=''; empty.style.display='block'; return; }
-  empty.style.display='none';
-
-  body.innerHTML = list.map(s => {
-    const contactPhone = s.motherPhone || s.fatherPhone || (s.pickupAuthorized && s.pickupAuthorized[0] && s.pickupAuthorized[0].phone) || '—';
-    return `
+function ckStudentRowHtml(s){
+  const contactPhone = s.motherPhone || s.fatherPhone || (s.pickupAuthorized && s.pickupAuthorized[0] && s.pickupAuthorized[0].phone) || '—';
+  return `
     <tr>
       <td class="folio">${s.folio || '<span style="color:var(--coral);">⚠ falta</span>'}</td>
       <td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
@@ -13813,7 +13945,47 @@ function renderAlumnos(){
         <button class="btn btn-danger btn-sm" onclick="deleteStudent('${s.id}')">Eliminar</button>
       </td>
     </tr>
-  `;}).join('');
+  `;
+}
+
+function renderAlumnos(){
+  ckRenderClassSelector('alumnos');
+  const q = (document.getElementById('alumnosSearch').value || '').toLowerCase();
+  const f = ckFilters.alumnos;
+  let list = students.filter(s => studentMatchesQuery(s, q));
+  list = ckFilterStudents(list, f);
+  list.sort((a,b)=>
+    (a.grade||'').localeCompare(b.grade||'', 'es', {numeric:true}) ||
+    (a.group||'').localeCompare(b.group||'', 'es') ||
+    (a.name||'').localeCompare(b.name||'', 'es')
+  );
+
+  const body = document.getElementById('alumnosBody');
+  const empty = document.getElementById('alumnosEmpty');
+  if(list.length===0){
+    body.innerHTML='';
+    empty.style.display='block';
+    empty.querySelector('b').textContent = 'Sin alumnos en esta selección';
+    return;
+  }
+  empty.style.display='none';
+
+  if(!f.grado){
+    // "Todos los grados": agrupar visualmente por grado para que se vea completo y organizado
+    let html = '';
+    let lastGrade = null;
+    list.forEach(s=>{
+      if(s.grade !== lastGrade){
+        lastGrade = s.grade;
+        const nivelTxt = f.nivel === 'secundaria' ? 'Secundaria' : 'Primaria';
+        html += `<tr class="group-row"><td colspan="7">${nivelTxt} · ${s.grade}</td></tr>`;
+      }
+      html += ckStudentRowHtml(s);
+    });
+    body.innerHTML = html;
+  } else {
+    body.innerHTML = list.map(ckStudentRowHtml).join('');
+  }
 }
 
 function renderHistory(){
@@ -13844,6 +14016,7 @@ function renderAll(){
   renderEntradas();
   renderAlumnos();
   renderHistory();
+  ckRenderClassSelector('scan');
 }
 
 /* ---------- Descarga de archivos Excel (ExcelJS, con bordes y formato) ---------- */

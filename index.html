@@ -1340,13 +1340,17 @@ return html;
 function toggleSecDatosEdit(id) { state.secDatosEditingId = state.secDatosEditingId === id ? null : id; render(); }
 function renderSecDatos() {
 const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade && (s.grupo || 'A') === state.secSelectedGrupo);
-let html = `<div class="card">
-<p style="font-size:0.8em;color:#6b7280;">📇 Aquí se completan los datos de contacto (madre, padre, tutor) de los alumnos ya registrados en <strong>Calificaciones</strong>, igual que en Primaria. Si el alumno aún no existe, agrégalo primero desde la pestaña Calificaciones.</p>
-</div>`;
-html += `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
+let html = `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
 html += `<div class="grade-pills purple">` + GRUPOS_SEC.map(gr => `<button class="${gr===state.secSelectedGrupo?'active':''}" onclick="setSecGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
+html += `
+<div class="card">
+<div class="row-flex">
+<input id="newSecStudentName" placeholder="Nombre del alumno (${state.secSelectedGrade} ${state.secSelectedGrupo})" onkeydown="if(event.key==='Enter')addSecStudent()" />
+<button class="btn btn-blue" id="addSecStudentBtn" style="width:auto;padding:10px 16px;" onclick="addSecStudent()">Agregar</button>
+</div>
+</div>`;
 if (!list.length) {
-html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} Grupo ${state.secSelectedGrupo} de Secundaria aún. Agrégalos desde la pestaña <strong>Calificaciones</strong>.</p>`;
+html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} Grupo ${state.secSelectedGrupo} de Secundaria aún.</p>`;
 return html;
 }
 list.forEach(s => {
