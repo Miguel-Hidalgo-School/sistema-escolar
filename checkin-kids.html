@@ -222,8 +222,8 @@
             <select id="inGroup"></select>
           </div>
           <div class="field">
-            <label>Matrícula (opcional)</label>
-            <input id="inEnroll" placeholder="Clave interna de la escuela">
+            <label>Matrícula <span class="req">*</span></label>
+            <input id="inEnroll" placeholder="Matrícula oficial del alumno (identificador único)">
           </div>
         </div>
       </div>
@@ -314,7 +314,7 @@
     </div>
     <div class="card">
       <table>
-        <thead><tr><th>Folio</th><th>Alumno</th><th>Grado/Grupo</th><th>Entrada</th><th>Salida</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Matrícula</th><th>Alumno</th><th>Grado/Grupo</th><th>Entrada</th><th>Salida</th><th>Estado</th><th></th></tr></thead>
         <tbody id="entradasBody"></tbody>
       </table>
       <div id="entradasEmpty" class="empty" style="display:none;"><b>Sin entradas registradas hoy</b>Usa el escáner o el folio manual para marcar la primera.</div>
@@ -331,7 +331,7 @@
     </div>
     <div class="card">
       <table>
-        <thead><tr><th>Folio</th><th>Alumno</th><th>Grado/Grupo</th><th>Madre/Padre</th><th>CURP</th><th>Tel. contacto</th><th></th></tr></thead>
+        <thead><tr><th>Matrícula</th><th>Alumno</th><th>Grado/Grupo</th><th>Madre/Padre</th><th>CURP</th><th>Tel. contacto</th><th></th></tr></thead>
         <tbody id="alumnosBody"></tbody>
       </table>
       <div id="alumnosEmpty" class="empty" style="display:none;"><b>Sin alumnos registrados</b>Ve a "Registro nuevo" para agregar el primero.</div>
@@ -460,7 +460,7 @@
       </div>
       <div class="field"><label>Grado</label><select id="editGrade"></select></div>
       <div class="field"><label>Grupo</label><select id="editGroup"></select></div>
-      <div class="field"><label>Matrícula (opcional)</label><input id="editEnroll"></div>
+      <div class="field"><label>Matrícula <span class="req">*</span></label><input id="editEnroll"></div>
     </div>
     <div class="grid3">
       <div class="field"><label>CURP del alumno/a <span class="req">*</span></label><input id="editCurp" maxlength="18"></div>
@@ -13067,13 +13067,16 @@ function ckStartSync(){
   ckStudentsRef.on('value', snap => {
     const val = snap.val() || {};
     ckPriStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'primaria'));
-    // A los alumnos creados desde Sistema Escolar (sin folio/QR) se les
-    // asigna folio y token la primera vez que aparecen aquí.
+    // A los alumnos creados desde Sistema Escolar se les genera el
+    // código QR (token) a partir de su matrícula, no de un folio
+    // autoincrementable (que se duplicaba entre dispositivos). Si aún
+    // no tienen matrícula capturada, se quedan sin QR hasta que se
+    // les agregue (se muestra "Falta matrícula" en la interfaz).
     Object.keys(val).forEach(id => {
-      if(!val[id].folio || !val[id].token){
-        const folio = nextFolio();
-        const token = `${QR_PREFIX}|${folio}|${randomSuffix()}`;
-        ckStudentsRef.child(id).update({ folio, token });
+      const matricula = val[id].matricula;
+      if(matricula && (val[id].folio !== matricula || !val[id].token)){
+        const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
+        ckStudentsRef.child(id).update({ folio: matricula, token });
       }
     });
     ckMergeStudents();
@@ -13082,10 +13085,10 @@ function ckStartSync(){
     const val = snap.val() || {};
     ckSecStudentsArr = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'secundaria'));
     Object.keys(val).forEach(id => {
-      if(!val[id].folio || !val[id].token){
-        const folio = nextFolio();
-        const token = `${QR_PREFIX}|${folio}|${randomSuffix()}`;
-        ckSecStudentsRef.child(id).update({ folio, token });
+      const matricula = val[id].matricula;
+      if(matricula && (val[id].folio !== matricula || !val[id].token)){
+        const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
+        ckSecStudentsRef.child(id).update({ folio: matricula, token });
       }
     });
     ckMergeStudents();
@@ -13319,11 +13322,16 @@ function registerStudent(){
   const missing = [];
   if(!name) missing.push('nombre del alumno');
   if(!curp) missing.push('CURP del alumno');
+  if(!enroll) missing.push('matrícula del alumno');
   if(!motherName && !fatherName) missing.push('nombre de la madre o del padre');
   if(missing.length){ showToast('Falta: ' + missing.join(', '), 'err'); return; }
+  if(students.some(s => s.enroll && s.enroll === enroll)){
+    showToast('Ya existe un alumno registrado con esa matrícula (' + enroll + ')', 'err');
+    return;
+  }
 
-  const folio = nextFolio();
-  const token = `${QR_PREFIX}|${folio}|${randomSuffix()}`;
+  const folio = enroll; // La matrícula es el identificador oficial (evita folios duplicados)
+  const token = `${QR_PREFIX}|${enroll}|${randomSuffix()}`;
   const student = {
     id: uid(), folio, token, altCodes: [],
     nivel, name, grade, group, curp, birthDate, address,
@@ -13390,11 +13398,17 @@ function saveEditStudent(){
   const curp = document.getElementById('editCurp').value.trim();
   const motherName = document.getElementById('editMotherName').value.trim();
   const fatherName = document.getElementById('editFatherName').value.trim();
+  const enroll = document.getElementById('editEnroll').value.trim();
   const missing = [];
   if(!name) missing.push('nombre del alumno');
   if(!curp) missing.push('CURP del alumno');
+  if(!enroll) missing.push('matrícula del alumno');
   if(!motherName && !fatherName) missing.push('nombre de la madre o del padre');
   if(missing.length){ showToast('Falta: ' + missing.join(', '), 'err'); return; }
+  if(students.some(x => x.id !== id && x.enroll && x.enroll === enroll)){
+    showToast('Ya existe otro alumno registrado con esa matrícula (' + enroll + ')', 'err');
+    return;
+  }
 
   s.name = name;
   s.curp = curp;
@@ -13410,7 +13424,8 @@ function saveEditStudent(){
   s.fatherCurp = document.getElementById('editFatherCurp').value.trim();
   s.fatherPhone = document.getElementById('editFatherPhone').value.trim();
   s.pickupAuthorized = editPickupList.filter(p=>p.name.trim()!=='');
-  s.enroll = document.getElementById('editEnroll').value.trim();
+  s.enroll = enroll;
+  s.folio = enroll; // La matrícula es el identificador oficial (evita folios duplicados)
   s.allergy = document.getElementById('editAllergy').value.trim();
   s.photo = editPhotoData || null;
   saveJSON(STUDENTS_KEY, students);
@@ -13421,15 +13436,26 @@ function saveEditStudent(){
 
 function showCredential(student){
   const box = document.getElementById('credentialBox');
+  if(!student.token){
+    box.innerHTML = `
+      <p style="padding:20px;text-align:center;color:var(--coral);font-weight:700;">
+        ⚠ Este alumno todavía no tiene matrícula capturada.<br>
+        Agrégala en "Editar" para generar su código QR.
+      </p>`;
+    box.dataset.dataUrl = '';
+    box.dataset.folio = '';
+    document.getElementById('qrModal').classList.add('show');
+    return;
+  }
   const qr = qrcode(0, 'M');
   qr.addData(student.token);
   qr.make();
   const dataUrl = qr.createDataURL(6, 8);
   box.innerHTML = `
     ${student.photo ? `<img src="${student.photo}" class="cphoto" alt="">` : ''}
-    <img src="${dataUrl}" class="qr" alt="QR ${student.folio}">
+    <img src="${dataUrl}" class="qr" alt="QR ${student.folio||'sin matrícula'}">
     <div class="cname">${escapeHtml(student.name)}</div>
-    <div class="cfolio">FOLIO ${student.folio}</div>
+    <div class="cfolio">${student.folio ? 'MATRÍCULA ' + student.folio : '⚠ FALTA MATRÍCULA'}</div>
     <div class="cmeta">${student.nivel==='secundaria'?'Secundaria':'Primaria'} · ${student.grade} ${student.group} · ${escapeHtml(primaryContactName(student))}</div>
   `;
   box.dataset.dataUrl = dataUrl;
@@ -13566,7 +13592,7 @@ function openLinkModal(rawCode){
   if(students.length===0){
     select.innerHTML = '<option value="">No hay alumnos registrados</option>';
   } else {
-    select.innerHTML = students.map(s=>`<option value="${s.id}">FOLIO ${s.folio} — ${escapeHtml(s.name)}</option>`).join('');
+    select.innerHTML = students.map(s=>`<option value="${s.id}">${s.folio?('MATRÍCULA '+s.folio):'SIN MATRÍCULA'} — ${escapeHtml(s.name)}</option>`).join('');
   }
   document.getElementById('linkModal').classList.add('show');
 }
@@ -13721,7 +13747,7 @@ function studentMatchesQuery(s, q){
   if((s.motherName||'').toLowerCase().includes(q)) return true;
   if((s.fatherName||'').toLowerCase().includes(q)) return true;
   if((s.curp||'').toLowerCase().includes(q)) return true;
-  if(s.folio.includes(q)) return true;
+  if((s.folio||'').includes(q)) return true;
   if((s.pickupAuthorized||[]).some(p=>(p.name||'').toLowerCase().includes(q))) return true;
   return false;
 }
@@ -13774,7 +13800,7 @@ function renderAlumnos(){
     const contactPhone = s.motherPhone || s.fatherPhone || (s.pickupAuthorized && s.pickupAuthorized[0] && s.pickupAuthorized[0].phone) || '—';
     return `
     <tr>
-      <td class="folio">${s.folio}</td>
+      <td class="folio">${s.folio || '<span style="color:var(--coral);">⚠ falta</span>'}</td>
       <td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
       <td>${s.nivel==='secundaria'?'Sec.':'Prim.'} ${s.grade} ${s.group}</td>
       <td>${escapeHtml(primaryContactName(s))}</td>
@@ -13851,7 +13877,7 @@ async function exportStudentsExcel(){
   if(students.length===0){ showToast('No hay alumnos registrados todavía', 'err'); return; }
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Alumnos y padres');
-  const headers = ['FOLIO','ALUMNO','GRADO','GRUPO','CURP ALUMNO','FECHA DE NACIMIENTO','DOMICILIO',
+  const headers = ['MATRÍCULA','ALUMNO','GRADO','GRUPO','CURP ALUMNO','FECHA DE NACIMIENTO','DOMICILIO',
     'NOMBRE DE LA MADRE','CURP MADRE','TELÉFONO MADRE',
     'NOMBRE DEL PADRE','CURP PADRE','TELÉFONO PADRE',
     'PERSONAS AUTORIZADAS PARA RECOGER (TUTOR)','MATRÍCULA','ALERGIAS / NOTAS MÉDICAS'];
@@ -13923,7 +13949,7 @@ async function exportMonthlyList(){
   if(weeks.length===0){ showToast('No se encontraron semanas hábiles para ese mes con el ciclo indicado', 'err'); return; }
   const allDays = weeks.flat();
   const todayIso = todayStr();
-  const fixedHeaders = ['FOLIO','ALUMNO','MADRE/PADRE','GRADO/GRUPO'];
+  const fixedHeaders = ['MATRÍCULA','ALUMNO','MADRE/PADRE','GRADO/GRUPO'];
   const totalCols = fixedHeaders.length + allDays.length;
   const schoolName = (loadJSON(SCHOOL_KEY,'') || '').toUpperCase();
 

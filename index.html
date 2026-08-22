@@ -172,6 +172,7 @@ secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '', log
 secSelectedGrade: '1°',
 secSelectedGrupo: 'A',
 secEditingId: null,
+secDatosEditingId: null,
 secReportGrade: null,
 formativosPri: {},
 formativosSec: {},
@@ -609,9 +610,16 @@ if (!confirm('¿Seguro que quieres borrar TODOS los alumnos? Esta acción no se 
 studentsRef.remove();
 showToast('Todos los alumnos fueron eliminados');
 }
-
-
-
+function uploadSecStudentPhoto(id, event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  showToast('Procesando foto...');
+  resizeImageToBase64(file, 200, 0.7, (base64) => {
+    if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
+    secStudentsRef.child(id).update({ foto: base64 });
+    showToast('✅ Foto actualizada');
+  }, () => showToast('❌ Error al procesar la imagen'));
+}
 // ---------------- Secundaria ----------------
 function setSecGrade(g) { state.secSelectedGrade = g; render(); }
 function setSecGrupo(g) { state.secSelectedGrupo = g; render(); }
@@ -806,8 +814,6 @@ const vals = [];
 MATERIAS.forEach(m => { const v = s.grades && s.grades[m] && s.grades[m][periodoIdx]; if (typeof v === 'number') vals.push(v); });
 return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
 }
-
-
 // ---------------- Render ----------------
 function render() {
 const app = document.getElementById('app');
@@ -834,7 +840,6 @@ return `
 <div class="avatar" style="margin:0;">JC</div>
 <div id="loginInitialBadge" style="width:52px;height:52px;border-radius:14px;background:#fdf2f8;display:flex;align-items:center;justify-content:center;font-size:1.3em;font-weight:700;color:#be185d;">🧒👧</div>
 </div>
-
 <h1>Sistema Escolar</h1>
 <p class="sub">Matrícula · Calificaciones · Diplomas</p>
 <div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarria.edu.com" oninput="updateLoginInitial()" /></div>
@@ -842,7 +847,6 @@ return `
 <button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
 ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
 <p class="hint">Solo cuentas creadas por el administrador pueden entrar. Si no tienes una, pídesela al administrador del sistema.</p>
-
 </div>
 </div>`;
 }
@@ -868,15 +872,11 @@ return `
 <p style="font-weight:700;font-size:1.2em;">PRIMARIA</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 6° · Boletas y diplomas</p>
 </div>
-
 <div class="card" style="cursor:pointer;background:linear-gradient(135deg,#059669,#065f46);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('secundaria')">
 <p style="font-size:2.2em;margin-bottom:6px;">🏫</p>
-
-
 <p style="font-weight:700;font-size:1.2em;">SECUNDARIA</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 3° · Reporte por materia</p>
 </div>
-
 <div class="card" style="cursor:pointer;background:linear-gradient(135deg,#F2A93B,#D9910F);color:#fff;text-align:center;padding:28px;" onclick="goToCheckinKids()">
 <p style="font-size:2.2em;margin-bottom:6px;">🧒👧 🧑‍🎓👩‍🎓</p>
 <p style="font-weight:700;font-size:1.2em;">CHECKIN KIDS</p>
@@ -897,23 +897,18 @@ return `
 </div>
 </header>`;
 }
-
 function renderTabs() {
-    const tabs = [
-        ['inicio', 'Inicio'],
-        ['alumnos', 'Alumnos'],
-        ['calificaciones', 'Calificaciones'],
-        ['descargas', 'Descargas'],
-        ['formativo', 'Formativa'],
-        ['tareas', 'Tareas'],
-        ['disciplina', 'Disciplina'],
-        ['datos', 'Datos']
-    ];
-    return '<nav class="tabs">' + tabs.map(([id, label]) => 
-        `<button class="${state.tab === id ? 'active' : ''}" onclick="setTab('${id}')">${label}</button>`
-    ).join('') + '</nav>';
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina'],['datos','Datos']];
+return '<nav class="tabs">' + tabs.map(([id,label]) =>
+`<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
+).join('') + '</nav>';
 }
-
+function renderSecTabs() {
+  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina']];
+  return '<nav class="tabs">' + tabs.map(([id,label]) =>
+    `<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
+  ).join('') + '</nav>';
+}
 function renderGradePills(cssClass, activeGrade, onclickFn) {
 return `<div class="grade-pills ${cssClass||''}">` + GRADOS.map(g =>
 `<button class="${g===activeGrade?'active':''}" onclick="${onclickFn}('${g}')">${g}</button>`
@@ -938,7 +933,6 @@ return `
 <p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Los mejores promedios de la escuela</p>
 </div>`;
 }
-
 function renderTabContent() {
 const nav = renderNavBar();
 if (state.tab === 'inicio') return renderInicio();
@@ -954,123 +948,17 @@ if (state.tab === 'disciplina') return nav + renderDisciplina('primaria');
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
-
 function renderSecTabContent() {
-    const nav = renderNavBar();
-    if (state.secReportGrade) return nav + renderSecReporte();
-    if (state.secTab === 'inicio') return renderSecInicio();
-    
-    // 1. Si el botón presionado es 'alumnos', carga el nuevo módulo de alumnos:
-    if (state.secTab === 'alumnos') return nav + renderAlumnosSecundariaModulo();
-    
-    // 2. Si el botón presionado es 'calificaciones', carga tus calificaciones por periodos (P1, P2, P3):
-    if (state.secTab === 'calificaciones') return nav + renderSecCalificaciones();
-    
-    if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
-    if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
-    if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
-    // ... resto de tus condiciones ...
+const nav = renderNavBar();
+if (state.secReportGrade) return nav + renderSecReporte();
+if (state.secTab === 'inicio') return renderSecInicio();
+if (state.secTab === 'datos') return nav + renderSecDatos();
+if (state.secTab === 'alumnos') return nav + renderSecAlumnos();
+if (state.secTab === 'formativo') return nav + renderFormativo('secundaria');
+if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
+if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
+return '';
 }
-
-// ---------------- Módulo de Alumnos (Secundaria) - Idéntico a Primaria ----------------
-
-function setAlumnosSecFilterGrade(g) { state.alumnosSecFilterGrade = g; state.alumnosSecStudentId = null; render(); }
-function setAlumnosSecFilterGrupo(g) { state.alumnosSecFilterGrupo = g; state.alumnosSecStudentId = null; render(); }
-
-function selectAlumnosSecStudent(id) {
-    state.alumnosSecStudentId = id || null;
-    render();
-}
-
-function updateAlumnosSecStudentField(id, field, value) {
-    const s = state.secStudents.find(x => x.id === id);
-    if (!s) return;
-    s[field] = value;
-    if (typeof secStudentsRef !== 'undefined' && secStudentsRef) {
-        secStudentsRef.child(id).update({ [field]: value });
-    }
-}
-
-function renderAlumnosSecundariaModulo() {
-    const list = state.secStudents || [];
-    
-    // Usamos un respaldo seguro por si GRADOS_SEC no está definido exactamente con ese nombre en tu app
-    const gradosDisponibles = (typeof GRADOS_SEC !== 'undefined') ? GRADOS_SEC : ['1°', '2°', '3°'];
-    const gruposDisponibles = (typeof GRUPOS_SEC !== 'undefined') ? GRUPOS_SEC : ['A', 'B', 'C'];
-
-    if (!state.alumnosSecFilterGrade) state.alumnosSecFilterGrade = gradosDisponibles[0];
-    if (!state.alumnosSecFilterGrupo) state.alumnosSecFilterGrupo = gruposDisponibles[0];
-    
-    const filtered = list.filter(s => s.grade === state.alumnosSecFilterGrade && (s.grupo || 'A') === state.alumnosSecFilterGrupo);
-    const sorted = [...filtered].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    
-    let html = `<div class="card">
-        <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">👥 Directorio y Datos de Alumnos — Secundaria</p>
-        <p style="font-size:0.78em;color:#9ca3af;margin-bottom:10px;">Gestión de matrícula, datos personales y familiares.</p>
-        <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setAlumnosSecFilterGrade(this.value)">
-                ${gradosDisponibles.map(g => `<option value="${g}" ${state.alumnosSecFilterGrade === g ? 'selected' : ''}>${g}</option>`).join('')}
-            </select>
-            <select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setAlumnosSecFilterGrupo(this.value)">
-                ${gruposDisponibles.map(g => `<option value="${g}" ${state.alumnosSecFilterGrupo === g ? 'selected' : ''}>Grupo ${g}</option>`).join('')}
-            </select>
-        </div>
-        <select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;" onchange="selectAlumnosSecStudent(this.value)">
-            <option value="">— Selecciona un alumno para ver/editar sus datos —</option>
-            ${sorted.map(s => `<option value="${s.id}" ${state.alumnosSecStudentId === s.id ? 'selected' : ''}>${s.name || '(sin nombre)'} — Matrícula: ${s.matricula || 'S/N'}</option>`).join('')}
-        </select>
-    </div>`;
-
-    if (!state.alumnosSecStudentId) return html;
-    
-    const s = sorted.find(x => x.id === state.alumnosSecStudentId);
-    if (!s) return html;
-
-    html += `<div class="card">
-        <p style="font-weight:600;font-size:0.95em;margin-bottom:8px;">✏️ Datos Generales y de Contacto</p>
-        
-        <label style="font-size:0.78em;font-weight:600;color:#374151;">Nombre completo del alumno</label>
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:8px;text-transform:uppercase;" value="${s.name || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'name', this.value)" />
-        
-        <label style="font-size:0.78em;font-weight:600;color:#374151;">Matrícula</label>
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:8px;text-transform:uppercase;" value="${s.matricula || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'matricula', this.value)" />
-        
-        <p style="font-weight:600;font-size:0.85em;margin:12px 0 6px;">👨‍👩‍👧 Datos de Familiares / Tutores</p>
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre del padre" value="${s.padreNombre || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'padreNombre', this.value)" />
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Teléfono del padre" value="${s.padreTelefono || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'padreTelefono', this.value)" />
-        
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre de la madre" value="${s.madreNombre || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'madreNombre', this.value)" />
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Teléfono de la madre" value="${s.madreTelefono || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'madreTelefono', this.value)" />
-        
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre del tutor" value="${s.tutorNombre || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'tutorNombre', this.value)" />
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:10px;" placeholder="Teléfono del tutor" value="${s.tutorTelefono || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'tutorTelefono', this.value)" />
-    </div>`;
-
-    return html;
-}
-    html += `<div class="card">
-        <p style="font-weight:600;font-size:0.95em;margin-bottom:8px;">✏️ Datos Generales y de Contacto</p>
-        
-        <label style="font-size:0.78em;font-weight:600;color:#374151;">Nombre completo del alumno</label>
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:8px;text-transform:uppercase;" value="${s.name || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'name', this.value)" />
-        
-        <label style="font-size:0.78em;font-weight:600;color:#374151;">Matrícula</label>
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:8px;text-transform:uppercase;" value="${s.matricula || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'matricula', this.value)" />
-        
-        <p style="font-weight:600;font-size:0.85em;margin:12px 0 6px;">👨‍👩‍👧 Datos de Familiares / Tutores</p>
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre del padre" value="${s.padreNombre || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'padreNombre', this.value)" />
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Teléfono del padre" value="${s.padreTelefono || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'padreTelefono', this.value)" />
-        
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre de la madre" value="${s.madreNombre || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'madreNombre', this.value)" />
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Teléfono de la madre" value="${s.madreTelefono || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'madreTelefono', this.value)" />
-        
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:6px;" placeholder="Nombre del tutor" value="${s.tutorNombre || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'tutorNombre', this.value)" />
-        <input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.8em;margin-bottom:10px;" placeholder="Teléfono del tutor" value="${s.tutorTelefono || ''}" oninput="updateAlumnosSecStudentField('${s.id}', 'tutorTelefono', this.value)" />
-    </div>`;
-
-    return html;
-}
-
 function renderInicio() {
 const si = state.schoolInfo;
 return `
@@ -1097,8 +985,8 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 <button class="btn btn-red" style="width:auto;flex:1;" onclick="clearSchoolInfo()">🧹 Limpiar</button>
 </div>
 </div>
-
-<button onclick="switchTab('alumnosSec')">👤 Alumnos (Directorio y Datos)</button><button onclick="switchTab('calificacionesSec')">📊 Calificaciones</button><button class="btn btn-gray" style="margin-top:8px;" onclick="backToNivelSelector()">🔀 Cambiar nivel educativo</button>
+<button class="btn btn-blue" onclick="setTab('alumnos')">Continuar a Alumnos →</button>
+<button class="btn btn-gray" style="margin-top:8px;" onclick="backToNivelSelector()">🔀 Cambiar nivel educativo</button>
 `;
 }
 function renderAlumnos() {
@@ -1137,7 +1025,6 @@ Subir foto del alumno
 <input type="file" accept="image/*" style="display:none;" onchange="uploadStudentPhoto('${s.id}', event)" />
 </label>
 </div>
-
 <input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateStudentFieldLocal('${s.id}','name',this.value)" />
 <select onchange="updateStudentField('${s.id}','grade',this.value); setTimeout(render,300);">
 ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</option>`).join('')}
@@ -1151,7 +1038,6 @@ ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</optio
 <option value="VESPERTINO" ${s.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
 </select>
 <div class="full">
-
 <label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
 <input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
 </div>
@@ -1177,7 +1063,6 @@ ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</optio
 <button class="btn btn-green" style="width:auto;flex:1;" onclick="saveStudentEdits('${s.id}')">💾 Guardar cambios</button>
 <button class="btn btn-red" style="width:auto;flex:1;" onclick="deleteStudentConfirm('${s.id}','${s.name.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
 </div>
-
 </div>`;
 }
 html += '</div>';
@@ -1395,7 +1280,7 @@ ${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre de orientador(a) (L.T.S.)" value="${si.orientadorNombre||''}" oninput="updateSecSchoolFieldLocal('orientadorNombre',this.value)" />
 <button class="btn btn-green" onclick="saveSecSchoolInfo()">💾 Guardar datos</button>
 </div>
-<button class="btn btn-blue" onclick="setSecTab('alumnos')">Continuar a Alumnos →</button>
+<button class="btn btn-blue" onclick="setSecTab('datos')">Continuar a Alumnos →</button>
 <button class="btn btn-gray" style="margin-top:8px;" onclick="backToNivelSelector()">🔀 Cambiar nivel educativo</button>
 `;
 }
@@ -1450,6 +1335,72 @@ ${GRUPOS_SEC.map(g => `<option value="${g}" ${(s.grupo||'A')===g?'selected':''}>
 html += '</div>';
 });
 }
+return html;
+}
+function toggleSecDatosEdit(id) { state.secDatosEditingId = state.secDatosEditingId === id ? null : id; render(); }
+function renderSecDatos() {
+const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade && (s.grupo || 'A') === state.secSelectedGrupo);
+let html = `<div class="card">
+<p style="font-size:0.8em;color:#6b7280;">📇 Aquí se completan los datos de contacto (madre, padre, tutor) de los alumnos ya registrados en <strong>Calificaciones</strong>, igual que en Primaria. Si el alumno aún no existe, agrégalo primero desde la pestaña Calificaciones.</p>
+</div>`;
+html += `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
+html += `<div class="grade-pills purple">` + GRUPOS_SEC.map(gr => `<button class="${gr===state.secSelectedGrupo?'active':''}" onclick="setSecGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
+if (!list.length) {
+html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} Grupo ${state.secSelectedGrupo} de Secundaria aún. Agrégalos desde la pestaña <strong>Calificaciones</strong>.</p>`;
+return html;
+}
+list.forEach(s => {
+const edad = calcularEdad(s.fechaNacimiento, s.curp);
+const editing = state.secDatosEditingId === s.id;
+html += `<div class="card">
+<div class="student-row">
+${s.foto ? `<img src="${s.foto}" style="width:36px;height:36px;border-radius:999px;object-fit:cover;margin-right:10px;flex-shrink:0;" />` : ''}
+<div class="info" onclick="toggleSecDatosEdit('${s.id}')" style="width:100%;">
+<p class="name">${s.name}</p>
+<p class="avg">${s.grade} ${s.grupo||'A'} ${edad!==null?`· ${edad} años`:''} ${editing?'▲':'▼ datos'}</p>
+</div>
+</div>`;
+if (editing) {
+html += `<div class="edit-panel">
+<div class="full" style="display:flex;align-items:center;gap:10px;">
+<div style="width:48px;height:48px;border-radius:999px;overflow:hidden;background:#f3f4f6;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+${s.foto ? `<img src="${s.foto}" style="width:100%;height:100%;object-fit:cover;" />` : '📷'}
+</div>
+<label style="font-size:0.75em;color:#2563eb;cursor:pointer;">
+Subir foto del alumno
+<input type="file" accept="image/*" style="display:none;" onchange="uploadSecStudentPhoto('${s.id}', event)" />
+</label>
+</div>
+<input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateSecStudentFieldLocal('${s.id}','name',this.value)" />
+<input placeholder="CURP" value="${s.curp||''}" oninput="updateSecStudentFieldLocal('${s.id}','curp',this.value)" />
+<input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateSecStudentFieldLocal('${s.id}','matricula',this.value)" />
+<div class="full">
+<label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
+<input type="date" value="${s.fechaNacimiento||''}" oninput="updateSecStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
+</div>
+<p class="section-title">👩 Datos de la madre</p>
+<input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreNombre',this.value)" />
+<input placeholder="CURP" value="${s.madreCurp||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.madreTelefono||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.madreDireccion||''}" oninput="updateSecStudentFieldLocal('${s.id}','madreDireccion',this.value)" />
+<p class="section-title">👨 Datos del padre</p>
+<input class="full" placeholder="Nombre completo" value="${s.padreNombre||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreNombre',this.value)" />
+<input placeholder="CURP" value="${s.padreCurp||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.padreTelefono||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.padreDireccion||''}" oninput="updateSecStudentFieldLocal('${s.id}','padreDireccion',this.value)" />
+<p class="section-title">🧑 Datos del tutor (si aplica)</p>
+<input class="full" placeholder="Nombre completo" value="${s.tutorNombre||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorNombre',this.value)" />
+<input placeholder="CURP" value="${s.tutorCurp||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorCurp',this.value)" />
+<input placeholder="Teléfono" value="${s.tutorTelefono||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorTelefono',this.value)" />
+<input class="full" placeholder="Dirección" value="${s.tutorDireccion||''}" oninput="updateSecStudentFieldLocal('${s.id}','tutorDireccion',this.value)" />
+<div class="full row-flex" style="margin-top:6px;">
+<button class="btn btn-green" style="width:auto;flex:1;" onclick="saveSecStudentEdits('${s.id}')">💾 Guardar cambios</button>
+<button class="btn btn-red" style="width:auto;flex:1;" onclick="deleteSecStudentConfirm('${s.id}','${s.name.replace(/'/g,"\\'")}')">🗑️ Eliminar</button>
+</div>
+</div>`;
+}
+html += '</div>';
+});
 return html;
 }
 function renderSecReporte() {
