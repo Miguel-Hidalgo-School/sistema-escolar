@@ -133,6 +133,7 @@ const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - J
 const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
+const ADMIN_EMAIL = 'educacion@chavarria.edu.com'; // única cuenta que es administradora de todo el sistema
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
 const FIREBASE_CONFIG = {
@@ -213,6 +214,7 @@ isAdmin: false,
 forcePasswordChange: false,
 perfilActual: null,
 showUserAdmin: false,
+userAdminScope: 'all', // 'all' = administrador global ve/gestiona a todos; 'own' = usuario delegado solo ve los suyos
 adminUsersList: null,
 adminUsersLoading: false,
 newUserPhone: '',
@@ -220,6 +222,10 @@ pwForm: { current: '', pass1: '', pass2: '' },
 pwSaving: false,
 pwError: '',
 showCambiarPassword: false,
+deleteConfirmUid: null,
+deleteConfirmPassword: '',
+deleteConfirmError: '',
+deleteConfirmBusy: false,
 };
 function emptyExtra() {
 return {
@@ -281,7 +287,9 @@ setTimeout(()=>{ box.innerHTML=''; }, 2600);
 //  - Cada cuenta nueva creada desde "Usuarios" usa su propia carpeta
 //    "usuarios/<uid>/...", que solo esa persona (y el administrador) pueden ver.
 function dbBase() {
-return state.isAdmin ? DB_ROOT : ('usuarios/' + currentUid);
+if (state.isAdmin) return DB_ROOT;
+const espacio = (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
+return 'usuarios/' + espacio;
 }
 function bindRefs() {
 const base = dbBase();
@@ -308,27 +316,34 @@ state.isAdmin = false;
 state.perfilActual = null;
 if (u) {
 currentUid = u.uid;
-try {
-const adminSnap = await db.ref('admins/' + currentUid).once('value');
-if (adminSnap.val() === true) {
-state.isAdmin = true;
-} else {
-// Intentamos auto-reclamarnos como administrador. La regla de seguridad
-// solo deja que esto funcione si todavía no existe ningún administrador;
-// si ya hay uno (y no eres tú), este intento simplemente falla y no pasa nada.
-try {
-await db.ref('admins/' + currentUid).set(true);
-state.isAdmin = true;
-} catch (e2) { /* ya existe un administrador distinto */ }
-}
-} catch (e) { /* si las reglas aún no están configuradas, seguimos sin bloquear */ }
+// Primero cargamos el perfil (si existe) para saber si la cuenta está
+// deshabilitada/eliminada y para conocer sus permisos de nivel.
 try {
 const perfilSnap = await db.ref('perfiles/' + currentUid).once('value');
 state.perfilActual = perfilSnap.val();
+} catch (e) { /* sin perfil = cuenta antigua / administrador original */ }
+if (state.perfilActual && (state.perfilActual.eliminado || state.perfilActual.deshabilitado)) {
+state.authError = state.perfilActual.eliminado
+? 'Esta cuenta fue eliminada. Contacta al administrador si crees que es un error.'
+: 'Esta cuenta está deshabilitada temporalmente. Contacta al administrador.';
+await auth.signOut();
+render();
+return;
+}
+// Solo la cuenta oficial del administrador (por correo) puede tener privilegios
+// de administrador; ninguna otra cuenta puede auto-otorgárselos.
+if (u.email && u.email.toLowerCase() === ADMIN_EMAIL) {
+state.isAdmin = true;
+try { await db.ref('admins/' + currentUid).set(true); } catch (e2) { /* las reglas ya lo protegen */ }
+} else {
+try {
+const adminSnap = await db.ref('admins/' + currentUid).once('value');
+state.isAdmin = adminSnap.val() === true;
+} catch (e) { state.isAdmin = false; }
+}
 if (state.perfilActual && state.perfilActual.mustChangePassword) {
 state.forcePasswordChange = true;
 }
-} catch (e) { /* sin perfil = cuenta antigua / administrador original */ }
 bindRefs();
 if (!state.forcePasswordChange) subscribeData();
 } else {
@@ -426,21 +441,43 @@ return out;
 function openUserAdmin() {
 if (!state.isAdmin) return;
 state.showUserAdmin = true;
+state.userAdminScope = 'all';
+state.adminUsersList = null;
+render();
+cargarListaUsuarios();
+}
+function openMisUsuarios() {
+if (!state.perfilActual || !state.perfilActual.puedeGestionarUsuarios) return;
+state.showUserAdmin = true;
+state.userAdminScope = 'own';
 state.adminUsersList = null;
 render();
 cargarListaUsuarios();
 }
 function closeUserAdmin() {
 state.showUserAdmin = false;
+state.deleteConfirmUid = null;
 render();
 }
 async function cargarListaUsuarios() {
 state.adminUsersLoading = true;
 render();
 try {
+if (state.userAdminScope === 'own') {
+// Un usuario delegado nunca lee el nodo global "perfiles"; solo consulta su propio
+// índice "gestores/<su-uid>/misUsuarios" y luego lee, uno por uno, únicamente los
+// perfiles que él mismo creó (cada uno con permiso propio a nivel de reglas).
+const idxSnap = await db.ref('gestores/' + currentUid + '/misUsuarios').once('value');
+const uids = Object.keys(idxSnap.val() || {});
+const perfiles = await Promise.all(uids.map(uid => db.ref('perfiles/' + uid).once('value')));
+state.adminUsersList = perfiles
+.map((snap, i) => snap.val() ? { uid: uids[i], ...snap.val() } : null)
+.filter(Boolean);
+} else {
 const snap = await db.ref('perfiles').once('value');
 const val = snap.val() || {};
 state.adminUsersList = Object.keys(val).map(uid => ({ uid, ...val[uid] }));
+}
 } catch (e) {
 showToast('❌ No se pudo cargar la lista de usuarios (revisa las reglas de la base de datos).');
 state.adminUsersList = [];
@@ -462,6 +499,17 @@ if (emailInput.includes('@') && emailInput.toLowerCase() !== email) {
 showToast('❌ El correo de acceso debe terminar en ' + REQUIRED_EMAIL_DOMAIN);
 return;
 }
+const accesoPrimaria = !!document.getElementById('newUserAccesoPrimaria').checked;
+const accesoSecundaria = !!document.getElementById('newUserAccesoSecundaria').checked;
+const accesoCheckin = !!document.getElementById('newUserAccesoCheckin').checked;
+const elGestionarUsuarios = document.getElementById('newUserPuedeGestionar');
+// Solo el administrador global puede otorgar el permiso de gestionar usuarios;
+// un usuario delegado nunca puede crear más sub-administradores.
+const puedeGestionarUsuarios = state.isAdmin && elGestionarUsuarios ? !!elGestionarUsuarios.checked : false;
+// El "espacio" (carpeta de datos) del nuevo usuario:
+//  - Si lo crea el administrador global: el nuevo usuario tiene su propio espacio aislado (su propio uid).
+//  - Si lo crea un usuario delegado: el nuevo usuario comparte el mismo espacio de datos que su creador,
+//    sin tocar el espacio del administrador ni el de ningún otro usuario independiente.
 const btn = document.getElementById('crearUsuarioBtn');
 if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
 const tempPass = randomTempPassword();
@@ -469,25 +517,99 @@ try {
 const secAuth = getSecondaryAuth();
 const cred = await secAuth.createUserWithEmailAndPassword(email, tempPass);
 const newUid = cred.user.uid;
-await db.ref('perfiles/' + newUid).set({
+const espacioUid = state.isAdmin ? newUid : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
+const nuevoPerfil = {
 email, nombre: nombre || '', telefono: telefono || '',
 correoContacto: correoContacto || '',
 mustChangePassword: true,
 tempPasswordActual: tempPass,
 creadoPor: currentUid,
-creadoEn: new Date().toISOString()
-});
+creadoEn: new Date().toISOString(),
+espacioUid,
+accesoPrimaria, accesoSecundaria, accesoCheckin,
+puedeGestionarUsuarios,
+deshabilitado: false,
+eliminado: false
+};
+const escrituras = { ['perfiles/' + newUid]: nuevoPerfil };
+if (!state.isAdmin) {
+// Índice propio del usuario delegado: le permite después volver a listar
+// exactamente a quién creó, sin necesitar leer el nodo "perfiles" completo.
+escrituras['gestores/' + currentUid + '/misUsuarios/' + newUid] = true;
+}
+await db.ref().update(escrituras);
 await secAuth.signOut();
 showToast('✅ Usuario creado. Comparte su contraseña temporal por WhatsApp.');
 document.getElementById('newUserEmail').value = '';
 document.getElementById('newUserNombre').value = '';
 document.getElementById('newUserPhone').value = '';
 document.getElementById('newUserCorreoContacto').value = '';
+document.getElementById('newUserAccesoPrimaria').checked = false;
+document.getElementById('newUserAccesoSecundaria').checked = false;
+document.getElementById('newUserAccesoCheckin').checked = false;
+if (elGestionarUsuarios) elGestionarUsuarios.checked = false;
 cargarListaUsuarios();
 } catch (e) {
 showToast('❌ No se pudo crear: ' + traducirErrorAuth(e.code));
 }
 if (btn) { btn.disabled = false; btn.textContent = '➕ Crear usuario'; }
+}
+function actualizarPermisoUsuario(uid, campo, valor) {
+db.ref('perfiles/' + uid).update({ [campo]: valor });
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+if (u) u[campo] = valor;
+render();
+}
+function toggleDeshabilitarUsuario(u) {
+const nuevoValor = !u.deshabilitado;
+const mensaje = nuevoValor
+? `¿Deshabilitar a ${u.nombre || u.email}? No podrá iniciar sesión hasta que lo vuelvas a habilitar.`
+: `¿Habilitar de nuevo a ${u.nombre || u.email}?`;
+if (!confirm(mensaje)) return;
+db.ref('perfiles/' + u.uid).update({ deshabilitado: nuevoValor });
+u.deshabilitado = nuevoValor;
+render();
+showToast(nuevoValor ? '🚫 Usuario deshabilitado' : '✅ Usuario habilitado');
+}
+function pedirEliminarUsuario(uid) {
+state.deleteConfirmUid = uid;
+state.deleteConfirmPassword = '';
+state.deleteConfirmError = '';
+render();
+}
+function cancelarEliminarUsuario() {
+state.deleteConfirmUid = null;
+state.deleteConfirmPassword = '';
+state.deleteConfirmError = '';
+render();
+}
+async function confirmarEliminarUsuario(u) {
+state.deleteConfirmError = '';
+if (!state.deleteConfirmPassword) {
+state.deleteConfirmError = 'Escribe tu contraseña para confirmar.';
+render();
+return;
+}
+state.deleteConfirmBusy = true;
+render();
+try {
+// Se vuelve a pedir la contraseña de quien está eliminando (administrador o usuario
+// delegado) para evitar que se borre a alguien por accidente.
+const cred = firebase.auth.EmailAuthProvider.credential(state.user.email, state.deleteConfirmPassword);
+await auth.currentUser.reauthenticateWithCredential(cred);
+// No es posible borrar la cuenta de acceso (Firebase Auth) de otra persona desde
+// el navegador; en su lugar la marcamos como eliminada para que ya no pueda
+// volver a entrar, y la quitamos de la lista visible.
+await db.ref('perfiles/' + u.uid).update({ eliminado: true, deshabilitado: true });
+showToast('🗑️ Usuario eliminado');
+state.deleteConfirmUid = null;
+state.deleteConfirmPassword = '';
+cargarListaUsuarios();
+} catch (e) {
+state.deleteConfirmError = e.code === 'auth/wrong-password' ? 'Contraseña incorrecta.' : 'No se pudo confirmar: ' + (e.code ? traducirErrorAuth(e.code) : e.message);
+}
+state.deleteConfirmBusy = false;
+render();
 }
 function whatsappLinkParaUsuario(u) {
 const texto = encodeURIComponent(
@@ -883,7 +1005,12 @@ state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab
 state.secReportGrade = { grade, grupo };
 render();
 }
+function tieneAccesoPrimaria() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoPrimaria !== false; }
+function tieneAccesoSecundaria() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoSecundaria !== false; }
+function tieneAccesoCheckin() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoCheckin !== false; }
 function selectNivel(n) {
+if (n === 'primaria' && !tieneAccesoPrimaria()) return;
+if (n === 'secundaria' && !tieneAccesoSecundaria()) return;
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
 state.nivel = n;
 state.tab = 'inicio';
@@ -896,6 +1023,7 @@ state.tabHistory = [];
 render();
 }
 function goToCheckinKids() {
+if (!tieneAccesoCheckin()) return;
 window.location.href = 'checkin-kids.html';
 }
 function goToBitacora(nivel) {
@@ -1076,29 +1204,40 @@ return `
 </header>`;
 }
 function renderNivelSelector() {
+const permPrim = tieneAccesoPrimaria();
+const permSec = tieneAccesoSecundaria();
+const permCheckin = tieneAccesoCheckin();
+if (!permPrim && !permSec && !permCheckin) {
+return `<main><div class="card" style="text-align:center;padding:28px;">
+<p style="font-size:1.8em;margin-bottom:8px;">🔒</p>
+<p style="font-weight:700;">Aún no tienes acceso a ningún módulo</p>
+<p style="font-size:0.85em;color:#6b7280;margin-top:6px;">Pídele al administrador que te dé acceso a Primaria, Secundaria o CheckIn Kids.</p>
+</div></main>`;
+}
 return `
 <main>
 <p style="text-align:center;color:#6b7280;font-size:0.85em;margin-bottom:16px;">¿Con qué nivel educativo quieres trabajar?</p>
 <div style="display:flex;flex-direction:column;gap:14px;">
-<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('primaria')">
+${permPrim ? `<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('primaria')">
 <p style="font-size:2.2em;margin-bottom:6px;">🎒</p>
 <p style="font-weight:700;font-size:1.2em;">PRIMARIA</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 6° · Boletas y diplomas</p>
-</div>
-<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#059669,#065f46);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('secundaria')">
+</div>` : ''}
+${permSec ? `<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#059669,#065f46);color:#fff;text-align:center;padding:28px;" onclick="selectNivel('secundaria')">
 <p style="font-size:2.2em;margin-bottom:6px;">🏫</p>
 <p style="font-weight:700;font-size:1.2em;">SECUNDARIA</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">1° a 3° · Reporte por materia</p>
-</div>
-<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#F2A93B,#D9910F);color:#fff;text-align:center;padding:28px;" onclick="goToCheckinKids()">
+</div>` : ''}
+${permCheckin ? `<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#F2A93B,#D9910F);color:#fff;text-align:center;padding:28px;" onclick="goToCheckinKids()">
 <p style="font-size:2.2em;margin-bottom:6px;">🧒👧 🧑‍🎓👩‍🎓</p>
 <p style="font-weight:700;font-size:1.2em;">CHECKIN KIDS</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Primaria y secundaria · Registro de asistencia</p>
-</div>
+</div>` : ''}
 </div>
 <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
 <button class="btn btn-ghost btn-sm" onclick="openCambiarPasswordVoluntario()">🔑 Cambiar mi contraseña</button>
 ${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openUserAdmin()">👥 Gestionar usuarios</button>` : ''}
+${!state.isAdmin && state.perfilActual && state.perfilActual.puedeGestionarUsuarios ? `<button class="btn btn-ghost btn-sm" onclick="openMisUsuarios()">👥 Gestionar mis usuarios</button>` : ''}
 </div>
 </main>`;
 }
@@ -1130,10 +1269,12 @@ ${!forced ? `<button class="btn btn-ghost btn-sm" onclick="closeCambiarPassword(
 </main>`;
 }
 function renderAdminUsuarios() {
+const scope = state.userAdminScope;
+const tituloScope = scope === 'own' ? '👥 Mis usuarios' : '👥 Usuarios del sistema';
 let html = `
 <main>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-<p style="font-weight:700;font-size:1.15em;">👥 Usuarios del sistema</p>
+<p style="font-weight:700;font-size:1.15em;">${tituloScope}</p>
 <button class="btn btn-ghost btn-sm" onclick="closeUserAdmin()">← Volver</button>
 </div>
 <div class="card">
@@ -1142,8 +1283,13 @@ let html = `
 <div class="field"><label>Nombre (opcional)</label><input id="newUserNombre" type="text" placeholder="Nombre para identificarlo"/></div>
 <div class="field"><label>Correo real de contacto (privado, opcional)</label><input id="newUserCorreoContacto" type="email" placeholder="su_correo_real@gmail.com"/></div>
 <div class="field"><label>WhatsApp (opcional, con lada, solo números)</label><input id="newUserPhone" type="text" placeholder="521XXXXXXXXXX"/></div>
+<p style="font-size:0.8em;font-weight:600;color:#374151;margin-top:12px;margin-bottom:6px;">¿A qué le das acceso? (solo si tú se lo permites)</p>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoPrimaria" type="checkbox"/> Primaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoSecundaria" type="checkbox"/> Secundaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoCheckin" type="checkbox"/> CheckIn Kids</label>
+${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserPuedeGestionar" type="checkbox"/> Puede gestionar sus propios usuarios (tendrá su propio botón "Gestionar usuarios")</label>` : ''}
 <button id="crearUsuarioBtn" class="btn btn-blue btn-sm" style="margin-top:8px;" onclick="crearUsuarioNuevo()">➕ Crear usuario</button>
-<p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} (ese dominio no recibe ni envía correos reales) — por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla. Cada usuario ve y agrega solo sus propios alumnos.</p>
+<p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} (ese dominio no recibe ni envía correos reales) — por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla.${scope === 'own' ? ' Los usuarios que crees aquí trabajarán dentro de tu propio espacio de datos, sin tocar el del administrador ni el de nadie más.' : ' Cada usuario ve y agrega solo los datos de su propio espacio.'}</p>
 </div>
 <p style="font-weight:600;margin:18px 0 8px;">Usuarios creados</p>`;
 if (state.adminUsersLoading) {
@@ -1151,16 +1297,43 @@ html += `<p class="empty-note">Cargando...</p>`;
 } else if (!state.adminUsersList || !state.adminUsersList.length) {
 html += `<p class="empty-note">Aún no has creado ningún usuario.</p>`;
 } else {
-html += state.adminUsersList.map(u => `
-<div class="card" style="margin-bottom:10px;">
-<p style="font-weight:600;">${esc2(u.nombre || u.email)}</p>
+html += state.adminUsersList.filter(u => !u.eliminado).map(u => {
+const puedeEditarPermisos = state.isAdmin || u.creadoPor === currentUid;
+const enConfirmacion = state.deleteConfirmUid === u.uid;
+return `
+<div class="card" style="margin-bottom:10px;${u.deshabilitado ? 'opacity:0.6;' : ''}">
+<p style="font-weight:600;">${esc2(u.nombre || u.email)} ${u.deshabilitado ? '<span style="color:#b91c1c;font-size:0.75em;">(deshabilitado)</span>' : ''}</p>
 <p style="font-size:0.82em;color:#6b7280;">${esc2(u.email)}</p>
 ${u.correoContacto ? `<p style="font-size:0.78em;color:#6b7280;">📧 Contacto real: ${esc2(u.correoContacto)}</p>` : ''}
 <p style="font-size:0.82em;margin-top:4px;">Contraseña actual: <b>${esc2(u.tempPasswordActual || '—')}</b> <button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="copiarPassword('${esc2(u.tempPasswordActual || '')}')">Copiar</button></p>
 <p style="font-size:0.78em;color:${u.mustChangePassword ? '#b45309' : '#059669'};margin-top:2px;">${u.mustChangePassword ? '⏳ Pendiente de cambiar su contraseña' : '✅ Ya cambió su contraseña'}</p>
 <a href="${whatsappLinkParaUsuario(u)}" target="_blank" class="btn btn-sage btn-sm" style="margin-top:8px;text-decoration:none;display:inline-block;">📲 Enviar por WhatsApp</a>
+${puedeEditarPermisos ? `
+<div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb;">
+<p style="font-size:0.78em;font-weight:600;color:#374151;margin-bottom:6px;">Acceso:</p>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoPrimaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoPrimaria',this.checked)"/> Primaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoSecundaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoSecundaria',this.checked)"/> Secundaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoCheckin !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoCheckin',this.checked)"/> CheckIn Kids</label>
+${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.puedeGestionarUsuarios ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','puedeGestionarUsuarios',this.checked)"/> Puede gestionar sus propios usuarios</label>` : ''}
 </div>
-`).join('');
+<div style="display:flex;gap:8px;margin-top:10px;">
+<button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;" onclick='toggleDeshabilitarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>${u.deshabilitado ? '✅ Habilitar' : '🚫 Deshabilitar'}</button>
+<button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;color:#b91c1c;" onclick="pedirEliminarUsuario('${u.uid}')">🗑️ Eliminar</button>
+</div>
+${enConfirmacion ? `
+<div style="margin-top:10px;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
+<p style="font-size:0.8em;color:#991b1b;margin-bottom:6px;">Para eliminar a ${esc2(u.nombre || u.email)}, confirma tu propia contraseña:</p>
+<input type="password" value="${esc2(state.deleteConfirmPassword)}" placeholder="Tu contraseña" oninput="state.deleteConfirmPassword=this.value" onkeydown="if(event.key==='Enter')confirmarEliminarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})" style="width:100%;padding:6px;border:1px solid #fca5a5;border-radius:6px;margin-bottom:6px;"/>
+${state.deleteConfirmError ? `<p class="errtext" style="font-size:0.78em;">${esc2(state.deleteConfirmError)}</p>` : ''}
+<div style="display:flex;gap:8px;">
+<button class="btn btn-ghost btn-sm" onclick="cancelarEliminarUsuario()">Cancelar</button>
+<button class="btn btn-sm" style="background:#dc2626;color:#fff;" ${state.deleteConfirmBusy ? 'disabled' : ''} onclick='confirmarEliminarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>${state.deleteConfirmBusy ? 'Eliminando...' : 'Sí, eliminar definitivamente'}</button>
+</div>
+</div>` : ''}
+` : ''}
+</div>
+`;
+}).join('');
 }
 html += `</main>`;
 return html;
