@@ -13150,14 +13150,20 @@ const CK_FIREBASE_CONFIG = {
   messagingSenderId: "234198294318",
   appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
-const CK_DB_ROOT = 'Sistema Escolar';
+const CK_DB_ROOT_ADMIN = 'Sistema Escolar';
 firebase.initializeApp(CK_FIREBASE_CONFIG);
 const ckAuth = firebase.auth();
 const ckDb = firebase.database();
-const ckStudentsRef = ckDb.ref(CK_DB_ROOT + '/students');
-const ckSecStudentsRef = ckDb.ref(CK_DB_ROOT + '/secStudents');
-const ckAttendanceRef = ckDb.ref(CK_DB_ROOT + '/checkinAttendance');
+let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
 let ckSyncReady = false;
+function ckDbBase(uid, isAdmin) {
+  return isAdmin ? CK_DB_ROOT_ADMIN : ('usuarios/' + uid);
+}
+function ckBindRefs(base) {
+  ckStudentsRef = ckDb.ref(base + '/students');
+  ckSecStudentsRef = ckDb.ref(base + '/secStudents');
+  ckAttendanceRef = ckDb.ref(base + '/checkinAttendance');
+}
 
 // Convierte un alumno de CheckIn Kids al formato compartido con Sistema Escolar
 function ckToFirebaseStudent(s){
@@ -13236,13 +13242,29 @@ function ckStartSync(){
   });
 }
 
-ckAuth.onAuthStateChanged(user => {
+ckAuth.onAuthStateChanged(async user => {
   if(!user){
     // Usa el mismo sistema de autenticación de Sistema Escolar; si no
     // hay sesión, se manda a iniciar sesión ahí.
     window.location.href = 'index.html';
     return;
   }
+  let isAdmin = false;
+  try {
+    const adminSnap = await ckDb.ref('admins/' + user.uid).once('value');
+    isAdmin = adminSnap.val() === true;
+  } catch(e) { /* si aún no hay reglas configuradas, se sigue como no-admin */ }
+  try {
+    const perfilSnap = await ckDb.ref('perfiles/' + user.uid).once('value');
+    const perfil = perfilSnap.val();
+    if (perfil && perfil.mustChangePassword) {
+      // Debe cambiar su contraseña temporal primero: se manda a Sistema Escolar
+      // donde está la pantalla de cambio de contraseña obligatorio.
+      window.location.href = 'index.html';
+      return;
+    }
+  } catch(e) { /* cuenta sin perfil = administrador original */ }
+  ckBindRefs(ckDbBase(user.uid, isAdmin));
   ckStartSync();
 });
 

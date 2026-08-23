@@ -132,6 +132,7 @@ const PERIODOS_LABEL = ['1er','2do','3er'];
 const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - Junio'];
 const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
+const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
 const FIREBASE_CONFIG = {
@@ -145,6 +146,8 @@ const FIREBASE_CONFIG = {
 };
 
 let auth = null, db = null, storage = null;
+let currentUid = null;
+let secondaryApp = null;
 let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null;
 let state = {
 configDone: true,
@@ -205,6 +208,18 @@ disciplinaShareUrl: null,
 disciplinaShareLoading: false,
 disciplinaFilterGrade: '',
 disciplinaFilterGrupo: '',
+// ---- Multiusuario ----
+isAdmin: false,
+forcePasswordChange: false,
+perfilActual: null,
+showUserAdmin: false,
+adminUsersList: null,
+adminUsersLoading: false,
+newUserPhone: '',
+pwForm: { current: '', pass1: '', pass2: '' },
+pwSaving: false,
+pwError: '',
+showCambiarPassword: false,
 };
 function emptyExtra() {
 return {
@@ -259,24 +274,68 @@ box.innerHTML = '<div class="toast">'+msg+'</div>';
 setTimeout(()=>{ box.innerHTML=''; }, 2600);
 }
 // ---------------- Firebase Init ----------------
+// Cada usuario (el administrador y cada cuenta que él cree) tiene su propia
+// carpeta de datos, totalmente separada de las demás:
+//  - El administrador (la primera cuenta, la que ya existía) sigue usando
+//    la raíz original "Sistema Escolar", tal cual siempre lo ha hecho.
+//  - Cada cuenta nueva creada desde "Usuarios" usa su propia carpeta
+//    "usuarios/<uid>/...", que solo esa persona (y el administrador) pueden ver.
+function dbBase() {
+return state.isAdmin ? DB_ROOT : ('usuarios/' + currentUid);
+}
+function bindRefs() {
+const base = dbBase();
+studentsRef = db.ref(base + '/students');
+schoolRef = db.ref(base + '/schoolInfo');
+secStudentsRef = db.ref(base + '/secStudents');
+secSchoolRef = db.ref(base + '/secSchoolInfo');
+formativosPriRef = db.ref(base + '/formativos/primaria');
+formativosSecRef = db.ref(base + '/formativos/secundaria');
+tareasPriRef = db.ref(base + '/tareas/primaria');
+tareasSecRef = db.ref(base + '/tareas/secundaria');
+disciplinaPriRef = db.ref(base + '/disciplina/primaria');
+disciplinaSecRef = db.ref(base + '/disciplina/secundaria');
+}
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
 auth = firebase.auth();
 db = firebase.database();
-studentsRef = db.ref(DB_ROOT + '/students');
-schoolRef = db.ref(DB_ROOT + '/schoolInfo');
-secStudentsRef = db.ref(DB_ROOT + '/secStudents');
-secSchoolRef = db.ref(DB_ROOT + '/secSchoolInfo');
-formativosPriRef = db.ref(DB_ROOT + '/formativos/primaria');
-formativosSecRef = db.ref(DB_ROOT + '/formativos/secundaria');
-tareasPriRef = db.ref(DB_ROOT + '/tareas/primaria');
-tareasSecRef = db.ref(DB_ROOT + '/tareas/secundaria');
-disciplinaPriRef = db.ref(DB_ROOT + '/disciplina/primaria');
-disciplinaSecRef = db.ref(DB_ROOT + '/disciplina/secundaria');
-auth.onAuthStateChanged(u => {
+auth.onAuthStateChanged(async u => {
 state.user = u;
 state.authError = '';
-if (u) { subscribeData(); } else { unsubscribeData(); }
+state.forcePasswordChange = false;
+state.isAdmin = false;
+state.perfilActual = null;
+if (u) {
+currentUid = u.uid;
+try {
+const adminSnap = await db.ref('admins/' + currentUid).once('value');
+if (adminSnap.val() === true) {
+state.isAdmin = true;
+} else {
+// Si todavía no existe ningún administrador registrado, la primera
+// cuenta que inicia sesión después de esta actualización se
+// convierte automáticamente en administradora (normalmente tú).
+const anyAdmin = await db.ref('admins').once('value');
+if (!anyAdmin.exists()) {
+await db.ref('admins/' + currentUid).set(true);
+state.isAdmin = true;
+}
+}
+} catch (e) { /* si las reglas aún no están configuradas, seguimos sin bloquear */ }
+try {
+const perfilSnap = await db.ref('perfiles/' + currentUid).once('value');
+state.perfilActual = perfilSnap.val();
+if (state.perfilActual && state.perfilActual.mustChangePassword) {
+state.forcePasswordChange = true;
+}
+} catch (e) { /* sin perfil = cuenta antigua / administrador original */ }
+bindRefs();
+if (!state.forcePasswordChange) subscribeData();
+} else {
+currentUid = null;
+unsubscribeData();
+}
 render();
 });
 render();
@@ -286,7 +345,7 @@ studentsRef.on('value', snap => {
 const val = snap.val() || {};
 state.students = Object.keys(val).map(id => ({ id, ...val[id] }));
 render();
-}, err => { showToast('Permisos insuficientes: tu correo no está autorizado.'); });
+}, err => { showToast('Permisos insuficientes: revisa las reglas de la base de datos.'); });
 schoolRef.on('value', snap => {
 if (snap.val()) state.schoolInfo = snap.val();
 render();
@@ -341,14 +400,132 @@ render();
 }
 function traducirErrorAuth(code) {
 const map = {
-'auth/user-not-found': 'No existe una cuenta con ese correo. Créala primero en Firebase Console → Authentication → Users.',
+'auth/user-not-found': 'No existe una cuenta con ese correo. Pídele al administrador que la cree.',
 'auth/wrong-password': 'Contraseña incorrecta.',
 'auth/invalid-email': 'El correo no es válido.',
-'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.'
+'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.',
+'auth/email-already-in-use': 'Ya existe una cuenta con ese correo.',
+'auth/weak-password': 'La contraseña es demasiado corta (mínimo 6 caracteres).'
 };
 return map[code] || code;
 }
 function handleLogout() { auth.signOut(); }
+
+// ---------------- Multiusuario: crear cuentas y cambio de contraseña ----------------
+function getSecondaryAuth() {
+if (!secondaryApp) {
+secondaryApp = firebase.initializeApp(state.fbConfig, 'CuentaSecundaria' + Date.now());
+}
+return secondaryApp.auth();
+}
+function randomTempPassword() {
+const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+let out = '';
+for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
+return out;
+}
+function openUserAdmin() {
+if (!state.isAdmin) return;
+state.showUserAdmin = true;
+state.adminUsersList = null;
+render();
+cargarListaUsuarios();
+}
+function closeUserAdmin() {
+state.showUserAdmin = false;
+render();
+}
+async function cargarListaUsuarios() {
+state.adminUsersLoading = true;
+render();
+try {
+const snap = await db.ref('perfiles').once('value');
+const val = snap.val() || {};
+state.adminUsersList = Object.keys(val).map(uid => ({ uid, ...val[uid] }));
+} catch (e) {
+showToast('❌ No se pudo cargar la lista de usuarios (revisa las reglas de la base de datos).');
+state.adminUsersList = [];
+}
+state.adminUsersLoading = false;
+render();
+}
+async function crearUsuarioNuevo() {
+const emailInput = document.getElementById('newUserEmail').value.trim();
+const nombre = document.getElementById('newUserNombre').value.trim();
+const telefono = document.getElementById('newUserPhone').value.trim();
+const correoContacto = document.getElementById('newUserCorreoContacto').value.trim();
+if (!emailInput) { showToast('❌ Escribe el usuario del nuevo correo'); return; }
+// El correo de acceso siempre debe ser del dominio de la escuela.
+// Si la persona solo escribió la parte antes de la @, se completa sola.
+const usuario = emailInput.includes('@') ? emailInput.split('@')[0] : emailInput;
+const email = usuario.toLowerCase() + REQUIRED_EMAIL_DOMAIN;
+if (emailInput.includes('@') && emailInput.toLowerCase() !== email) {
+showToast('❌ El correo de acceso debe terminar en ' + REQUIRED_EMAIL_DOMAIN);
+return;
+}
+const btn = document.getElementById('crearUsuarioBtn');
+if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
+const tempPass = randomTempPassword();
+try {
+const secAuth = getSecondaryAuth();
+const cred = await secAuth.createUserWithEmailAndPassword(email, tempPass);
+const newUid = cred.user.uid;
+await db.ref('perfiles/' + newUid).set({
+email, nombre: nombre || '', telefono: telefono || '',
+correoContacto: correoContacto || '',
+mustChangePassword: true,
+tempPasswordActual: tempPass,
+creadoPor: currentUid,
+creadoEn: new Date().toISOString()
+});
+await secAuth.signOut();
+showToast('✅ Usuario creado. Comparte su contraseña temporal por WhatsApp.');
+document.getElementById('newUserEmail').value = '';
+document.getElementById('newUserNombre').value = '';
+document.getElementById('newUserPhone').value = '';
+document.getElementById('newUserCorreoContacto').value = '';
+cargarListaUsuarios();
+} catch (e) {
+showToast('❌ No se pudo crear: ' + traducirErrorAuth(e.code));
+}
+if (btn) { btn.disabled = false; btn.textContent = '➕ Crear usuario'; }
+}
+function whatsappLinkParaUsuario(u) {
+const texto = encodeURIComponent(
+`Hola${u.nombre ? ' ' + u.nombre : ''}, aquí están tus datos de acceso al Sistema Escolar:\nCorreo: ${u.email}\nContraseña: ${u.tempPasswordActual}\n(Al entrar, el sistema te pedirá cambiarla).`
+);
+const tel = (u.telefono || '').replace(/[^0-9]/g, '');
+return `https://wa.me/${tel}?text=${texto}`;
+}
+function copiarPassword(pass) {
+navigator.clipboard.writeText(pass).then(() => showToast('📋 Contraseña copiada'));
+}
+function updatePwFieldLocal(field, value) { state.pwForm[field] = value; }
+async function submitCambioPassword(forced) {
+const { current, pass1, pass2 } = state.pwForm;
+state.pwError = '';
+if (!pass1 || pass1.length < 6) { state.pwError = 'La nueva contraseña debe tener al menos 6 caracteres.'; render(); return; }
+if (pass1 !== pass2) { state.pwError = 'Las contraseñas no coinciden.'; render(); return; }
+state.pwSaving = true; render();
+try {
+const u = auth.currentUser;
+const currentKnownPass = forced ? (state.perfilActual && state.perfilActual.tempPasswordActual) : current;
+if (!currentKnownPass) throw { code: 'auth/requires-recent-login' };
+const cred = firebase.auth.EmailAuthProvider.credential(u.email, currentKnownPass);
+await u.reauthenticateWithCredential(cred);
+await u.updatePassword(pass1);
+await db.ref('perfiles/' + currentUid).update({ mustChangePassword: false, tempPasswordActual: pass1 });
+state.perfilActual = { ...(state.perfilActual || {}), mustChangePassword: false, tempPasswordActual: pass1 };
+state.forcePasswordChange = false;
+state.pwForm = { current: '', pass1: '', pass2: '' };
+showToast('✅ Contraseña actualizada');
+subscribeData();
+} catch (e) {
+state.pwError = 'No se pudo cambiar la contraseña: ' + (e.code ? traducirErrorAuth(e.code) : 'verifica tu contraseña actual.');
+}
+state.pwSaving = false;
+render();
+}
 // ---------------- Realtime Database actions ----------------
 function addStudent() {
 const input = document.getElementById('newStudentName');
@@ -819,6 +996,9 @@ function render() {
 const app = document.getElementById('app');
 if (!auth) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
 if (!state.user) { app.innerHTML = renderLogin(); return; }
+if (state.forcePasswordChange) { app.innerHTML = renderTopbarSimple() + renderCambiarPassword(true); return; }
+if (state.showCambiarPassword) { app.innerHTML = renderTopbarSimple() + renderCambiarPassword(false); return; }
+if (state.showUserAdmin) { app.innerHTML = renderTopbarSimple() + renderAdminUsuarios(); return; }
 if (!state.nivel) { app.innerHTML = renderTopbarSimple() + renderNivelSelector(); return; }
 if (state.nivel === 'primaria') {
 app.innerHTML = renderTopbar() + renderTabs() + '<main>' + renderTabContent() + '</main>';
@@ -883,7 +1063,74 @@ return `
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Primaria y secundaria · Registro de asistencia</p>
 </div>
 </div>
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
+<button class="btn btn-ghost btn-sm" onclick="openCambiarPasswordVoluntario()">🔑 Cambiar mi contraseña</button>
+${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openUserAdmin()">👥 Gestionar usuarios</button>` : ''}
+</div>
 </main>`;
+}
+function openCambiarPasswordVoluntario() {
+state.pwForm = { current: '', pass1: '', pass2: '' };
+state.pwError = '';
+state.showCambiarPassword = true;
+render();
+}
+function closeCambiarPassword() {
+state.showCambiarPassword = false;
+render();
+}
+function renderCambiarPassword(forced) {
+return `
+<main>
+<div class="card" style="max-width:420px;margin:0 auto;">
+<p style="font-weight:700;font-size:1.1em;margin-bottom:6px;">${forced ? '🔑 Debes cambiar tu contraseña' : '🔑 Cambiar mi contraseña'}</p>
+<p style="font-size:0.85em;color:#6b7280;margin-bottom:14px;">${forced ? 'Es tu primer ingreso con la contraseña temporal. Crea una contraseña nueva para continuar.' : 'Escribe tu contraseña actual y la nueva contraseña.'}</p>
+${!forced ? `<div class="field"><label>Contraseña actual</label><input type="password" value="${esc2(state.pwForm.current)}" oninput="updatePwFieldLocal('current', this.value)"/></div>` : ''}
+<div class="field"><label>Nueva contraseña</label><input type="password" value="${esc2(state.pwForm.pass1)}" oninput="updatePwFieldLocal('pass1', this.value)"/></div>
+<div class="field"><label>Repite la nueva contraseña</label><input type="password" value="${esc2(state.pwForm.pass2)}" oninput="updatePwFieldLocal('pass2', this.value)" onkeydown="if(event.key==='Enter')submitCambioPassword(${forced})"/></div>
+${state.pwError ? `<p class="errtext">${esc2(state.pwError)}</p>` : ''}
+<div class="modal-actions">
+${!forced ? `<button class="btn btn-ghost btn-sm" onclick="closeCambiarPassword()">Cancelar</button>` : ''}
+<button class="btn btn-blue btn-sm" ${state.pwSaving ? 'disabled' : ''} onclick="submitCambioPassword(${forced})">${state.pwSaving ? 'Guardando...' : 'Guardar contraseña'}</button>
+</div>
+</div>
+</main>`;
+}
+function renderAdminUsuarios() {
+let html = `
+<main>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+<p style="font-weight:700;font-size:1.15em;">👥 Usuarios del sistema</p>
+<button class="btn btn-ghost btn-sm" onclick="closeUserAdmin()">← Volver</button>
+</div>
+<div class="card">
+<p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
+<div class="field"><label>Usuario de acceso (se completa con ${REQUIRED_EMAIL_DOMAIN})</label><input id="newUserEmail" type="text" placeholder="ej. maestra.lopez"/></div>
+<div class="field"><label>Nombre (opcional)</label><input id="newUserNombre" type="text" placeholder="Nombre para identificarlo"/></div>
+<div class="field"><label>Correo real de contacto (privado, opcional)</label><input id="newUserCorreoContacto" type="email" placeholder="su_correo_real@gmail.com"/></div>
+<div class="field"><label>WhatsApp (opcional, con lada, solo números)</label><input id="newUserPhone" type="text" placeholder="521XXXXXXXXXX"/></div>
+<button id="crearUsuarioBtn" class="btn btn-blue btn-sm" style="margin-top:8px;" onclick="crearUsuarioNuevo()">➕ Crear usuario</button>
+<p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} (ese dominio no recibe ni envía correos reales) — por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla. Cada usuario ve y agrega solo sus propios alumnos.</p>
+</div>
+<p style="font-weight:600;margin:18px 0 8px;">Usuarios creados</p>`;
+if (state.adminUsersLoading) {
+html += `<p class="empty-note">Cargando...</p>`;
+} else if (!state.adminUsersList || !state.adminUsersList.length) {
+html += `<p class="empty-note">Aún no has creado ningún usuario.</p>`;
+} else {
+html += state.adminUsersList.map(u => `
+<div class="card" style="margin-bottom:10px;">
+<p style="font-weight:600;">${esc2(u.nombre || u.email)}</p>
+<p style="font-size:0.82em;color:#6b7280;">${esc2(u.email)}</p>
+${u.correoContacto ? `<p style="font-size:0.78em;color:#6b7280;">📧 Contacto real: ${esc2(u.correoContacto)}</p>` : ''}
+<p style="font-size:0.82em;margin-top:4px;">Contraseña actual: <b>${esc2(u.tempPasswordActual || '—')}</b> <button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="copiarPassword('${esc2(u.tempPasswordActual || '')}')">Copiar</button></p>
+<p style="font-size:0.78em;color:${u.mustChangePassword ? '#b45309' : '#059669'};margin-top:2px;">${u.mustChangePassword ? '⏳ Pendiente de cambiar su contraseña' : '✅ Ya cambió su contraseña'}</p>
+<a href="${whatsappLinkParaUsuario(u)}" target="_blank" class="btn btn-sage btn-sm" style="margin-top:8px;text-decoration:none;display:inline-block;">📲 Enviar por WhatsApp</a>
+</div>
+`).join('');
+}
+html += `</main>`;
+return html;
 }
 function renderTopbar() {
 const name = state.user.email;
