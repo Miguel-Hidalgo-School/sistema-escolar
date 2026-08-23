@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+
+
+<div id="circle-cursor" style="position: fixed; pointer-events: none; z-index: 9999; font-weight: 900; font-family: sans-serif; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); color: blue;">
+</div>
+
+<script>
+    const text = "CHAVARRÍA PRODUCCIONES ";
+    const container = document.getElementById('circle-cursor');
+    const radius = 180; // Aumenté un poco el radio para que se lea mejor
+
+    // Crear las letras
+    text.split('').forEach((char, i) => {
+        const span = document.createElement('span');
+        span.innerText = char;
+        span.style.position = 'absolute';
+        span.style.display = 'inline-block';
+        span.style.transform = `rotate(${i * (360 / text.length)}deg) translateY(-${radius}px)`;
+        container.appendChild(span);
+    });
+
+    // Mover con el mouse
+    document.addEventListener('mousemove', (e) => {
+        container.style.left = e.clientX + 'px';
+        container.style.top = e.clientY + 'px';
+    });
+
+    function animateColors() {
+        // Usamos una lógica de tono (hue) que va de 0 a 360 para colores vivos
+        const hue = (Date.now() / 20) % 360; 
+        
+        // HSL: 100% saturation y 50% lightness garantiza colores sólidos y brillantes
+        container.style.color = `hsl(${hue}, 100%, 50%)`;
+        container.style.transform = `rotate(${Date.now() / 20}deg)`;
+        
+        requestAnimationFrame(animateColors);
+    }
+    animateColors();
+</script>
+
+
+
+
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Módulo de Bitácora - Historial y Folios</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        input[type="text"], textarea, select {
+            text-transform: uppercase;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; margin: 0; }
+            .print-container { box-shadow: none; border: none; width: 100%; padding: 0; }
+        }
+    </style>
+
+
+<!-- Botones de Ejemplos Rápidos Centrados -->
+<div class="max-w-4xl mx-auto mb-4 p-4 bg-slate-100 rounded-lg border border-slate-300 text-center shadow-sm">
+    <span class="block text-xs font-bold text-slate-700 mb-2">⚡ CARGAR EJEMPLO DE LLENADO OFICIAL:</span>
+    <div class="inline-flex flex-wrap justify-center gap-2">
+        <button type="button" onclick="cargarEjemplo('accidente')" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 shadow transition">Accidente Escolar</button>
+        <button type="button" onclick="cargarEjemplo('retardo')" class="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 shadow transition">Retardo de Alumno</button>
+        <button type="button" onclick="cargarEjemplo('disruptiva')" class="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded hover:bg-amber-700 shadow transition">Conducta Disruptiva</button>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+</head>
+<body class="bg-slate-200 p-4 md:p-8 font-sans">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 md:p-12 rounded-xl shadow-2xl">
+        
+        <!-- Controles de Nivel e Historial -->
+        <div class="no-print mb-6 bg-indigo-50 p-4 rounded-xl border border-indigo-200 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h2 class="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-2">Seleccionar Nivel Institucional</h2>
+                <div class="flex gap-4">
+                    <button onclick="cambiarNivel('Primaria')" id="btnPrimaria" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition">Primaria</button>
+                    <button onclick="cambiarNivel('Secundaria')" id="btnSecundaria" class="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition">Secundaria</button>
+                </div>
+            </div>
+            <div class="flex gap-2 w-full md:w-auto">
+                <button onclick="mostrarFormulario()" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition">➕ Nueva Incidencia</button>
+                <button onclick="mostrarHistorial()" class="flex-1 md:flex-none bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition">📂 Ver Historial Guardado</button>
+            </div>
+        </div>
+
+        <!-- CONFIGURACIÓN DE ESCUELA Y PERSONAL -->
+        <div id="seccionConfig" class="no-print mb-6 bg-slate-100 p-4 rounded-xl border border-slate-300 space-y-3">
+            <div class="flex flex-wrap justify-between items-center gap-2">
+                <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider" id="tituloConfigPersonal">Configuración del Plantel - Primaria</h2>
+                <div class="flex gap-2">
+                    <button onclick="toggleEdicionManual()" id="btnToggleEdicion" class="bg-slate-600 hover:bg-slate-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔓 Editar manualmente</button>
+                    <button onclick="reiniciarFolioActual()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔄 Reiniciar Folio a 1</button>
+                </div>
+            </div>
+
+            <div id="avisoSincronizado" class="hidden text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+                🔗 Estos datos se cargaron automáticamente desde el Sistema Escolar. Usa "Editar manualmente" solo si necesitas corregir algo.
+            </div>
+            <div id="avisoManual" class="hidden text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                ✏️ No se encontraron datos del Sistema Escolar; captúralos aquí manualmente. Se guardarán en este dispositivo.
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2 border-b border-slate-200">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre de la Escuela:</label>
+                    <input type="text" id="configEscuela" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="guardarPersonalEnMemoria(); convertirMayusculas(this)">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Clave C.C.T.:</label>
+                    <input type="text" id="configCCT" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="guardarPersonalEnMemoria(); convertirMayusculas(this)">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del Docente:</label>
+                    <input type="text" id="configDocente" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="guardarPersonalEnMemoria(); convertirMayusculas(this)">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del Director (Vo. Bo.):</label>
+                    <input type="text" id="configDirector" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="guardarPersonalEnMemoria(); convertirMayusculas(this)">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-200">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Ciclo Escolar (para el folio):</label>
+                    <input type="text" id="configCiclo" placeholder="EJ. 2026-2027" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this); actualizarCicloActual()">
+                </div>
+                <div class="flex items-end">
+                    <a href="index.html" class="w-full text-center bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded text-xs font-bold shadow-sm transition">⬅️ Volver al Sistema Escolar</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 1. FORMULARIO DE CAPTURA -->
+        <div id="seccionFormulario" class="no-print bg-slate-50 p-6 rounded-xl border border-slate-300 space-y-4">
+            <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Registrar Nueva Incidencia en Bitácora</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Grado:</label>
+                    <select id="inputGradoSel" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" onchange="poblarGrupoSelect()"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Grupo:</label>
+                    <select id="inputGrupoSel" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" onchange="actualizarListaAlumnos()"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Fecha:</label>
+                    <input type="date" id="inputFecha" class="w-full p-2 border border-slate-300 rounded text-sm bg-white">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del alumno (a): <span class="font-normal normal-case text-slate-400">(elige de la lista según grado/grupo o escribe uno nuevo)</span></label>
+                    <input type="text" id="inputAlumno" list="listaAlumnosDatalist" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this); autocompletarTutor()" onchange="autocompletarTutor()">
+                    <datalist id="listaAlumnosDatalist"></datalist>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del padre, madre de familia o tutor:</label>
+                    <input type="text" id="inputTutor" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" placeholder="EJ. ROCIO RUIZ PEREZ (se autocompleta, puedes cambiarlo)" oninput="convertirMayusculas(this)">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Asunto / Protocolo de Violencia:</label>
+                <select id="inputAsunto" class="w-full p-2 border border-slate-300 rounded text-sm bg-white font-medium text-slate-800">
+                    <option value="MALA CONDUCTA / INCUMPLIMIENTO">Mala conducta / Incumplimiento general</option>
+                    <option value="ACCIDENTE ESCOLAR">Accidente escolar</option>
+                    <option value="RETARDO EN RECOGER AL ALUMNO AL TÉRMINO DE LA JORNADA ESCOLAR">Retardo en recoger al alumno</option>
+                    <option value="CONDUCTA DISRUPTIVA">Conducta disruptiva</option>
+                    <option value="PROTOCOLO DE VIOLENCIA: FÍSICO DIRECTO">Protocolo de Violencia: Físico directo</option>
+                    <option value="PROTOCOLO DE VIOLENCIA: FÍSICO INDIRECTO">Protocolo de Violencia: Físico indirecto</option>
+                    <option value="PROTOCOLO DE VIOLENCIA: SEXUAL">Protocolo de Violencia: Sexual</option>
+                    <option value="PROTOCOLO DE VIOLENCIA: PSICOLÓGICO">Protocolo de Violencia: Psicológico</option>
+                    <option value="PROTOCOLO DE VIOLENCIA: POR EXCLUSIÓN SOCIAL">Protocolo de Violencia: Por exclusión social</option>
+                    <option value="PROTOCOLO DE VIOLENCIA: POR CYBERBULLYING">Protocolo de Violencia: Por cyberbullying</option>
+                </select>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Narrativa de los hechos:</label>
+                    <textarea id="inputNarrativa" rows="3" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this)"></textarea>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Compromisos del tutor:</label>
+                        <textarea id="inputCompromisoTutor" rows="2" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this)"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Compromisos del alumno:</label>
+                        <textarea id="inputCompromisoAlumno" rows="2" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this)"></textarea>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Intervención del docente:</label>
+                    <textarea id="inputIntervencion" rows="2" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this)"></textarea>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Falta (Marco de Convivencia):</label>
+                        <input type="text" id="inputFalta" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" placeholder="EJ. CAUSA LEVE" oninput="convertirMayusculas(this)">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Acciones formativas:</label>
+                        <input type="text" id="inputAcciones" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this)">
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="guardarYMostrarReporte()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded shadow transition text-sm flex items-center justify-center gap-2">
+                💾 Guardar en Historial y Generar Formato Oficial
+            </button>
+        </div>
+
+        <!-- 2. SECCIÓN DE HISTORIAL GUARDADO -->
+        <div id="seccionHistorial" class="hidden no-print space-y-4">
+            <div class="flex justify-between items-center bg-slate-100 p-4 rounded-xl border border-slate-300">
+                <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Historial de Incidencias Guardadas (<span id="lblNivelHistorial">Primaria</span>)</h2>
+                <button onclick="mostrarFormulario()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow">← Volver al Formulario</button>
+            </div>
+            <div id="listaHistorial" class="space-y-3">
+                <!-- Se cargan dinámicamente -->
+            </div>
+        </div>
+
+        <!-- 3. FORMATO OFICIAL IMPRIMIBLE -->
+        <div id="seccionReporte" class="hidden bg-white text-black text-[11px] space-y-3 p-4 border border-slate-400 rounded-lg shadow-sm print-container">
+            
+            <div class="no-print flex justify-between items-center bg-emerald-50 p-3 rounded border border-emerald-200 mb-4">
+                <span class="text-emerald-800 font-bold text-xs">✨ Registro guardado permanentemente en el navegador.</span>
+                <button onclick="mostrarHistorial()" class="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1 rounded text-xs font-bold">← Ir al Historial / Volver</button>
+            </div>
+
+            <div class="flex justify-end">
+                <div class="border border-black px-3 py-1 font-bold text-xs bg-slate-50" id="lblFolio">FOLIO: ---</div>
+            </div>
+
+            <h1 class="text-center font-bold text-base uppercase tracking-wide">Bitácora Escolar</h1>
+
+            <div class="border border-black p-2 space-y-1 bg-slate-50/50">
+                <div class="font-bold uppercase" id="lblEscuela">ESCUELA PRIMARIA</div>
+                <div class="grid grid-cols-2">
+                    <div><strong>C.C.T.:</strong> <span id="lblCCT">---</span></div>
+                    <div><strong>Turno:</strong> Matutino</div>
+                </div>
+            </div>
+
+            <table class="w-full border-collapse border border-black">
+                <tr>
+                    <td class="border border-black p-1.5 w-3/5"><strong>Nombre del alumno (a):</strong> <span id="viewAlumno"></span></td>
+                    <td class="border border-black p-1.5 w-2/5"><strong>Grado y grupo:</strong> <span id="viewGrado"></span></td>
+                </tr>
+                <tr>
+                    <td class="border border-black p-1.5"><strong>Nombre del padre, madre de familia o tutor:</strong> <span id="viewTutor"></span></td>
+                    <td class="border border-black p-1.5"><strong>Fecha:</strong> <span id="viewFecha"></span></td>
+                </tr>
+                <tr>
+                    <td colspan="2" class="border border-black p-1.5 bg-slate-50"><strong>Asunto / Protocolo aplicado:</strong> <span id="viewAsunto" class="font-bold text-slate-900"></span></td>
+                </tr>
+            </table>
+
+            <div class="border border-black p-2 min-h-[70px]">
+                <strong class="block mb-1 text-slate-900">Narrativa de los hechos (circunstancias de modo, tiempo y lugar):</strong>
+                <p id="viewNarrativa" class="whitespace-pre-line text-slate-800 leading-relaxed"></p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div class="border border-black p-2 min-h-[50px]">
+                    <strong class="block mb-1">Compromisos del padre, madre o tutor:</strong>
+                    <p id="viewCompromisoTutor" class="whitespace-pre-line text-slate-800"></p>
+                </div>
+                <div class="border border-black p-2 min-h-[50px]">
+                    <strong class="block mb-1">Compromisos de la alumna o el alumno:</strong>
+                    <p id="viewCompromisoAlumno" class="whitespace-pre-line text-slate-800"></p>
+                </div>
+            </div>
+
+            <div class="border border-black p-2 min-h-[45px]">
+                <strong class="block mb-1">Intervención del docente (acciones a implementar):</strong>
+                <p id="viewIntervencion" class="whitespace-pre-line text-slate-800"></p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div class="border border-black p-2">
+                    <strong class="block mb-1">Falta conforme al Marco para la Convivencia:</strong>
+                    <p id="viewFalta" class="text-slate-800"></p>
+                </div>
+                <div class="border border-black p-2">
+                    <strong class="block mb-1">Acciones formativas:</strong>
+                    <p id="viewAcciones" class="text-slate-800"></p>
+                </div>
+            </div>
+
+            <div class="border border-black p-2 leading-snug">
+                <p><strong>Manifestación de conformidad:</strong> Yo <span id="confTutor" class="underline font-semibold">[NOMBRE DEL TUTOR]</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.</p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-6 pt-10 text-center text-[10px]">
+                <div class="border-t border-black pt-1 px-2">
+                    <span id="firmTutor" class="font-bold block uppercase text-slate-900">[NOMBRE DEL TUTOR]</span>
+                    <span class="text-slate-600">Nombre y firma del padre, madre o tutor</span>
+                </div>
+                <div class="border-t border-black pt-1 px-2">
+                    <span id="firmDocente" class="font-bold block uppercase text-slate-900">LIC. AARÓN CHAVARRÍA</span>
+                    <span class="text-slate-600">Nombre y firma del docente</span>
+                </div>
+                <div class="border-t border-black pt-1 px-2">
+                    <span id="firmDirector" class="font-bold block uppercase text-slate-900">PROF. DIRECTOR DEL PLANTEL</span>
+                    <span class="text-slate-600">Vo. Bo. de la Dirección del Plantel</span>
+                </div>
+            </div>
+
+
+
+            <div class="text-[10px] text-justify text-slate-700 pt-3 border-t border-slate-400 leading-normal">
+                Se informa que en el presente documento <strong>no se realizarán transferencias de Datos Personales</strong>, salvo aquellas que sea necesario de conformidad con los supuestos contemplados en los artículos 9 y 36 de la Ley Federal de Protección de Datos Personales en Posesión de los Particulares para atender requerimientos, solicitudes, recursos o cumplimientos de información de una autoridad competente, judicial, administrativa, civil, penal, fiscal o de cualquier otra rama del derecho que estén debidamente fundadas y motivadas para lo cual, no se requiere consentimiento de la persona titular.
+            </div>
+
+
+
+
+            <div class="no-print pt-6 flex justify-end gap-3">
+                <button onclick="window.print()" class="bg-slate-900 hover:bg-black text-white font-bold px-6 py-2.5 rounded shadow transition text-sm flex items-center gap-2">
+                    🖨️ Imprimir Formato Oficial
+                </button>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Script de Control con Botón de Reinicio de Folio -->
+    <script>
+        let nivelActual = "Primaria";
+        let cicloActual = calcularCicloEscolarDefault();
+        let edicionManual = false;
+
+        const GRADOS_POR_NIVEL = { "Primaria": ['1°','2°','3°','4°','5°','6°'], "Secundaria": ['1°','2°','3°'] };
+        const GRUPOS_DEFAULT = ['A','B','C','D','E','F'];
+
+        // --- Datos puente recibidos desde el Sistema Escolar (index.html) ---
+        let datosPuente = null;
+        try {
+            datosPuente = JSON.parse(localStorage.getItem('bitacora_puente_datos') || 'null');
+        } catch(e) { datosPuente = null; }
+
+        function calcularCicloEscolarDefault() {
+            const hoy = new Date();
+            const anio = hoy.getFullYear();
+            // El ciclo escolar en México inicia en agosto (mes 8)
+            return (hoy.getMonth() + 1) >= 8 ? `${anio}-${anio + 1}` : `${anio - 1}-${anio}`;
+        }
+
+        // Preserva la posición del cursor al forzar mayúsculas, para no interrumpir la escritura
+        function convertirMayusculas(elemento) {
+            const inicio = elemento.selectionStart;
+            const fin = elemento.selectionEnd;
+            const mayus = elemento.value.toUpperCase();
+            if (mayus !== elemento.value) {
+                elemento.value = mayus;
+                if (inicio !== null && fin !== null) {
+                    elemento.setSelectionRange(inicio, fin);
+                }
+            }
+        }
+
+        function tienePuenteDatos(nivel) {
+            return !!(datosPuente && datosPuente[nivel] && (datosPuente[nivel].escuela || datosPuente[nivel].cct || datosPuente[nivel].docente || datosPuente[nivel].director));
+        }
+
+        function cargarDatosPlantel() {
+            function resolver(nivel, campo) {
+                if (!edicionManual && datosPuente && datosPuente[nivel] && datosPuente[nivel][campo]) {
+                    return String(datosPuente[nivel][campo]).toUpperCase();
+                }
+                return (localStorage.getItem(`${campo}_${nivel}`) || '').toUpperCase();
+            }
+            return {
+                "Primaria": { escuela: resolver('Primaria','escuela'), cct: resolver('Primaria','cct'), docente: resolver('Primaria','docente'), director: resolver('Primaria','director') },
+                "Secundaria": { escuela: resolver('Secundaria','escuela'), cct: resolver('Secundaria','cct'), docente: resolver('Secundaria','docente'), director: resolver('Secundaria','director') }
+            };
+        }
+
+        let plantelPorNivel = cargarDatosPlantel();
+
+        function actualizarAvisoSincronizado() {
+            const sincronizado = !edicionManual && tienePuenteDatos(nivelActual);
+            document.getElementById('avisoSincronizado').classList.toggle('hidden', !sincronizado);
+            document.getElementById('avisoManual').classList.toggle('hidden', sincronizado || edicionManual);
+            ['configEscuela','configCCT','configDocente','configDirector'].forEach(id => {
+                const el = document.getElementById(id);
+                el.readOnly = sincronizado;
+                el.classList.toggle('bg-slate-100', sincronizado);
+                el.classList.toggle('text-slate-600', sincronizado);
+                el.classList.toggle('bg-white', !sincronizado);
+            });
+            document.getElementById('btnToggleEdicion').innerText = edicionManual ? "🔒 Volver a datos automáticos" : "🔓 Editar manualmente";
+        }
+
+        function toggleEdicionManual() {
+            guardarPersonalEnMemoria();
+            edicionManual = !edicionManual;
+            plantelPorNivel = cargarDatosPlantel();
+            document.getElementById('configEscuela').value = plantelPorNivel[nivelActual].escuela;
+            document.getElementById('configCCT').value = plantelPorNivel[nivelActual].cct;
+            document.getElementById('configDocente').value = plantelPorNivel[nivelActual].docente;
+            document.getElementById('configDirector').value = plantelPorNivel[nivelActual].director;
+            actualizarAvisoSincronizado();
+        }
+
+        function guardarPersonalEnMemoria() {
+            let esc = document.getElementById('configEscuela').value.toUpperCase();
+            let cct = document.getElementById('configCCT').value.toUpperCase();
+            let doc = document.getElementById('configDocente').value.toUpperCase();
+            let dir = document.getElementById('configDirector').value.toUpperCase();
+            
+            plantelPorNivel[nivelActual].escuela = esc;
+            plantelPorNivel[nivelActual].cct = cct;
+            plantelPorNivel[nivelActual].docente = doc;
+            plantelPorNivel[nivelActual].director = dir;
+
+            localStorage.setItem(`escuela_${nivelActual}`, esc);
+            localStorage.setItem(`cct_${nivelActual}`, cct);
+            localStorage.setItem(`docente_${nivelActual}`, doc);
+            localStorage.setItem(`director_${nivelActual}`, dir);
+        }
+
+        function actualizarCicloActual() {
+            cicloActual = document.getElementById('configCiclo').value.trim().toUpperCase() || calcularCicloEscolarDefault();
+            localStorage.setItem('ciclo_escolar_actual', cicloActual);
+        }
+
+        function alumnosDelNivel() {
+            if (!datosPuente || !datosPuente[nivelActual]) return [];
+            return datosPuente[nivelActual].alumnos || [];
+        }
+
+        function poblarGradoSelect() {
+            const grados = GRADOS_POR_NIVEL[nivelActual];
+            const sel = document.getElementById('inputGradoSel');
+            sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('');
+            poblarGrupoSelect();
+        }
+
+        function poblarGrupoSelect() {
+            const grado = document.getElementById('inputGradoSel').value;
+            const alumnos = alumnosDelNivel().filter(a => a.grade === grado);
+            let grupos = [...new Set(alumnos.map(a => a.grupo).filter(Boolean))].sort();
+            if (!grupos.length) grupos = GRUPOS_DEFAULT;
+            const sel = document.getElementById('inputGrupoSel');
+            sel.innerHTML = grupos.map(g => `<option value="${g}">${g}</option>`).join('');
+            actualizarListaAlumnos();
+        }
+
+        function actualizarListaAlumnos() {
+            const grado = document.getElementById('inputGradoSel').value;
+            const grupo = document.getElementById('inputGrupoSel').value;
+            const alumnos = alumnosDelNivel().filter(a => a.grade === grado && (a.grupo || '') === grupo);
+            const dl = document.getElementById('listaAlumnosDatalist');
+            dl.innerHTML = alumnos.map(a => `<option value="${(a.name||'').toUpperCase()}">`).join('');
+        }
+
+        function autocompletarTutor() {
+            const nombre = document.getElementById('inputAlumno').value.trim().toUpperCase();
+            if (!nombre) return;
+            const grado = document.getElementById('inputGradoSel').value;
+            const grupo = document.getElementById('inputGrupoSel').value;
+            const alumno = alumnosDelNivel().find(a => a.grade === grado && (a.grupo || '') === grupo && (a.name || '').toUpperCase() === nombre);
+            if (alumno) {
+                const tutor = alumno.madreNombre || alumno.padreNombre || alumno.tutorNombre || '';
+                if (tutor) document.getElementById('inputTutor').value = tutor.toUpperCase();
+            }
+        }
+
+        function cambiarNivel(nivel) {
+            guardarPersonalEnMemoria();
+            nivelActual = nivel;
+            plantelPorNivel = cargarDatosPlantel();
+
+            if(nivel === "Primaria") {
+                document.getElementById('btnPrimaria').className = "bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition";
+                document.getElementById('btnSecundaria').className = "bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition";
+                document.getElementById('tituloConfigPersonal').innerText = "Configuración del Plantel - Primaria";
+            } else {
+                document.getElementById('btnSecundaria').className = "bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition";
+                document.getElementById('btnPrimaria').className = "bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition";
+                document.getElementById('tituloConfigPersonal').innerText = "Configuración del Plantel - Secundaria";
+            }
+
+            document.getElementById('configEscuela').value = plantelPorNivel[nivel].escuela;
+            document.getElementById('configCCT').value = plantelPorNivel[nivel].cct;
+            document.getElementById('configDocente').value = plantelPorNivel[nivel].docente;
+            document.getElementById('configDirector').value = plantelPorNivel[nivel].director;
+
+            actualizarAvisoSincronizado();
+            poblarGradoSelect();
+            mostrarFormulario();
+        }
+
+        // Genera las iniciales de la escuela para anteponer al folio (ej. "ESCUELA PRIMARIA BENITO JUÁREZ" -> "EPBJ")
+        function calcularSiglaEscuela(nivel) {
+            const nombre = (plantelPorNivel[nivel].escuela || '').toUpperCase();
+            const conectores = ['DE','DEL','LA','LAS','EL','LOS','Y','EN'];
+            const palabras = nombre.split(/\s+/).map(p => p.replace(/[^A-ZÁÉÍÓÚÑ0-9]/g,'')).filter(p => p && !conectores.includes(p));
+            let sigla = palabras.map(p => p[0]).join('');
+            if (!sigla) sigla = nivel === "Primaria" ? "PRIM" : "SEC";
+            return sigla.slice(0, 6);
+        }
+
+        function generarFolio(ciclo) {
+            let sigla = calcularSiglaEscuela(nivelActual);
+            let clave = `contador_folio_${sigla}_${nivelActual}_${ciclo}`;
+            let num = parseInt(localStorage.getItem(clave)) || 0;
+            num++;
+            localStorage.setItem(clave, num);
+            return `${sigla}-${ciclo}/${String(num).padStart(4, '0')}`;
+        }
+
+        function reiniciarFolioActual() {
+            let sigla = calcularSiglaEscuela(nivelActual);
+            let clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
+            if(confirm(`¿Estás seguro de reiniciar el contador de folios de ${nivelActual} (ciclo ${cicloActual}) para que el próximo comience en 1?`)) {
+                localStorage.setItem(clave, 0);
+                alert("¡Folio reiniciado con éxito! El próximo registro comenzará en 0001.");
+            }
+        }
+
+        function guardarYMostrarReporte() {
+            guardarPersonalEnMemoria();
+
+            const selectAsunto = document.getElementById('inputAsunto');
+            const textoAsunto = selectAsunto.options[selectAsunto.selectedIndex].text;
+
+            const datos = {
+                id: Date.now(),
+                nivel: nivelActual,
+                escuela: document.getElementById('configEscuela').value.toUpperCase(),
+                cct: document.getElementById('configCCT').value.toUpperCase(),
+                alumno: document.getElementById('inputAlumno').value.toUpperCase() || 'SIN NOMBRE',
+                tutor: document.getElementById('inputTutor').value.toUpperCase() || 'NO ESPECIFICADO',
+                docente: document.getElementById('configDocente').value.toUpperCase(),
+                director: document.getElementById('configDirector').value.toUpperCase(),
+                grado: `${document.getElementById('inputGradoSel').value} GRUPO ${document.getElementById('inputGrupoSel').value}`,
+                asunto: textoAsunto.toUpperCase(),
+                fecha: document.getElementById('inputFecha').value,
+                narrativa: document.getElementById('inputNarrativa').value.toUpperCase(),
+                compTutor: document.getElementById('inputCompromisoTutor').value.toUpperCase(),
+                compAlumno: document.getElementById('inputCompromisoAlumno').value.toUpperCase(),
+                intervencion: document.getElementById('inputIntervencion').value.toUpperCase(),
+                falta: document.getElementById('inputFalta').value.toUpperCase(),
+                acciones: document.getElementById('inputAcciones').value.toUpperCase(),
+                folio: generarFolio(cicloActual)
+            };
+
+            let keyHistorial = `historial_incidencias_${nivelActual}`;
+            let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
+            historial.unshift(datos);
+            localStorage.setItem(keyHistorial, JSON.stringify(historial));
+
+            renderizarReporte(datos);
+        }
+
+        function renderizarReporte(datos) {
+            document.getElementById('lblEscuela').innerText = datos.escuela;
+            document.getElementById('lblCCT').innerText = datos.cct;
+            document.getElementById('lblFolio').innerText = "FOLIO: " + datos.folio;
+            document.getElementById('viewAlumno').innerText = datos.alumno;
+            document.getElementById('viewTutor').innerText = datos.tutor;
+            document.getElementById('viewGrado').innerText = datos.grado;
+            document.getElementById('viewFecha').innerText = datos.fecha;
+            document.getElementById('viewAsunto').innerText = datos.asunto;
+            document.getElementById('viewNarrativa').innerText = datos.narrativa;
+            document.getElementById('viewCompromisoTutor').innerText = datos.compTutor;
+            document.getElementById('viewCompromisoAlumno').innerText = datos.compAlumno;
+            document.getElementById('viewIntervencion').innerText = datos.intervencion;
+            document.getElementById('viewFalta').innerText = datos.falta;
+            document.getElementById('viewAcciones').innerText = datos.acciones;
+            
+            document.getElementById('confTutor').innerText = datos.tutor;
+            document.getElementById('firmTutor').innerText = datos.tutor;
+            document.getElementById('firmDocente').innerText = datos.docente;
+            document.getElementById('firmDirector').innerText = datos.director;
+
+            document.getElementById('seccionFormulario').classList.add('hidden');
+            document.getElementById('seccionHistorial').classList.add('hidden');
+            document.getElementById('seccionConfig').classList.add('no-print');
+            document.getElementById('seccionReporte').classList.remove('hidden');
+        }
+
+        function mostrarFormulario() {
+            document.getElementById('seccionReporte').classList.add('hidden');
+            document.getElementById('seccionHistorial').classList.add('hidden');
+            document.getElementById('seccionFormulario').classList.remove('hidden');
+            document.getElementById('seccionConfig').classList.remove('hidden');
+        }
+
+        function mostrarHistorial() {
+            document.getElementById('seccionFormulario').classList.add('hidden');
+            document.getElementById('seccionReporte').classList.add('hidden');
+            document.getElementById('seccionHistorial').classList.remove('hidden');
+            document.getElementById('seccionConfig').classList.add('hidden');
+
+            document.getElementById('lblNivelHistorial').innerText = nivelActual;
+            let keyHistorial = `historial_incidencias_${nivelActual}`;
+            let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
+            let contenedor = document.getElementById('listaHistorial');
+
+            if(historial.length === 0) {
+                contenedor.innerHTML = `<p class="text-slate-500 text-sm p-4 bg-slate-50 rounded border text-center">No hay incidencias guardadas para ${nivelActual}.</p>`;
+                return;
+            }
+
+            let html = "";
+            historial.forEach((item, index) => {
+                html += `
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-300 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                        <div>
+                            <span class="inline-block bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded mb-1">${item.folio}</span>
+                            <h4 class="font-bold text-sm text-slate-900">${item.alumno}</h4>
+                            <p class="text-xs text-slate-600"><strong>Asunto:</strong> ${item.asunto} | <strong>Fecha:</strong> ${item.fecha}</p>
+                        </div>
+                        <div class="flex gap-2 w-full md:w-auto">
+                            <button onclick='verIncidenciaGuardada(${index})' class="flex-1 md:flex-none bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold shadow">👁️ Ver / Imprimir</button>
+                            <button onclick='eliminarIncidencia(${index})' class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold shadow">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            });
+            contenedor.innerHTML = html;
+        }
+
+        function verIncidenciaGuardada(index) {
+            let keyHistorial = `historial_incidencias_${nivelActual}`;
+            let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
+            if(historial[index]) {
+                renderizarReporte(historial[index]);
+            }
+        }
+
+        function eliminarIncidencia(index) {
+            if(confirm("¿Estás seguro de eliminar este registro del historial local?")) {
+                let keyHistorial = `historial_incidencias_${nivelActual}`;
+                let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
+                historial.splice(index, 1);
+                localStorage.setItem(keyHistorial, JSON.stringify(historial));
+                mostrarHistorial();
+            }
+        }
+
+        window.onload = () => {
+            document.getElementById('inputFecha').valueAsDate = new Date();
+
+            cicloActual = localStorage.getItem('ciclo_escolar_actual') || calcularCicloEscolarDefault();
+            document.getElementById('configCiclo').value = cicloActual;
+
+            const nivelSugerido = localStorage.getItem('bitacora_nivel_sugerido');
+            const nivelInicial = (nivelSugerido === 'Secundaria') ? 'Secundaria' : 'Primaria';
+
+            if (nivelInicial === 'Secundaria') {
+                cambiarNivel('Secundaria');
+            } else {
+                document.getElementById('configEscuela').value = plantelPorNivel["Primaria"].escuela;
+                document.getElementById('configCCT').value = plantelPorNivel["Primaria"].cct;
+                document.getElementById('configDocente').value = plantelPorNivel["Primaria"].docente;
+                document.getElementById('configDirector').value = plantelPorNivel["Primaria"].director;
+                actualizarAvisoSincronizado();
+                poblarGradoSelect();
+            }
+        }
+   
+
+
+
+
+
+
+// Función para cargar ejemplos de llenado oficial
+function cargarEjemplo(tipo) {
+    if (tipo === 'accidente') {
+        document.getElementById('inputAsunto').value = "ACCIDENTE ESCOLAR";
+        document.getElementById('inputNarrativa').value = "El día 22 de octubre de 2024 siendo las 14:30 horas en el local que ocupa el patio principal del plantel educativo, el alumno Pedro Pérez Álvarez quien cursa en el grupo 5°A se golpeo en su pierna derecha a la altura de la rodilla mientras se dirigía a recoger un balón dentro de una actividad en la clase de Educación Física. El profesor titular del grupo Juan Fernández Jiménez junto con la profesora de educación física Nadia Bolaños Cárdenas al ocurrir la caída del menor, se acercan a auxiliarlo, levantándose el menor sin requerir algún apoyo. Acto seguido, siendo las 14:35 horas el profesor titular del grupo realiza llamada al número telefónico de la madre del menor, la Sra. Danae López Álvarez, informándole sobre lo ocurrido y solicitando acuda al plantel educativo.\n\nSiendo las 15:00 hrs. se presenta al plantel educativo la madre del menor y el profesor titular de grupo le informa sobre lo acontecido y le sugiere la activación del seguro médico escolar Va Segur@, ella tras revisar el golpe en la pierna de su hijo y preguntarle sobre las molestias que siente, determina que no es su deseo activar el seguro médico escolar Va segur@, quedando por escrito en la bitácora escolar. Pese a ello, el profesor titular de grupo le notifica, que cuenta con 72 hrs. para poder realizar la activación, siempre y cuando el menor no haya sido valorado por algún médico previamente.";
+        document.getElementById('inputCompromisoTutor').value = "Estoy enterada de la caída de mi hijo y sobre la sugerencia de la activación del seguro médico escolar, pero no deseo la activación de dicho seguro. Notificaré al profesor sobre el estado de salud de mi hijo. (escrito por la madre de familia).";
+        document.getElementById('inputCompromisoAlumno').value = "Me comprometo a tener más cuidado durante las actividades de Educación Física y a avisar de inmediato a mi profesor(a) si llego a sentir alguna molestia.";
+        document.getElementById('inputIntervencion').value = "Notificación por parte del profesor titular de grupo a la madre del menor sobre los ocurrido (llamada telefónica y de forma presencial), además que cuenta hasta con 72 hrs. para activación del seguro escolar. Acuerdo con la madre de familia para envío de actividades escolares en caso de ser necesario.";
+        document.getElementById('inputFalta').value = "N/A (Accidente escolar fortuito)";
+        document.getElementById('inputAcciones').value = "Sugerencia de activación del seguro médico escolar Va Segur@ (rechazada por la madre bajo su responsabilidad, notificando el plazo de 72 horas).";
+    } 
+    else if (tipo === 'retardo') {
+        document.getElementById('inputAsunto').value = "RETARDO EN RECOGER AL ALUMNO AL TÉRMINO DE LA JORNADA ESCOLAR";
+        document.getElementById('inputNarrativa').value = "El día 22 de octubre de 2024 siendo las 18:45 horas en el local que ocupa la dirección del plantel educativo, el profesor titular del grupo Andrés Solares Figueroa realiza llamada telefónica a la Sra. Nataly Barroso Gutiérrez para solicitarle acudir al plantel para recoger a su hija Ximena Flores Barroso quien cursa en el grupo 2°A, refiriendo la madre de la menor que se retraso en recoger a su hija por una cita médica que tuvo pero que no tardaba ya en llegar a recogerla en el plantel. Por su parte, la Directora del plantel Profra. Elizabeth Valle Telésforo, dio aviso vía telefónica a la supervisora de la zona escolar No. 411.\n\nSiendo las 19:05 horas se presenta en la dirección del plantel la Sra. Nataly Barroso Gutiérrez portando la credencial vigente de las personas autorizadas responsables para recoger al educando. El profesor titular del grupo le informa sobre la importancia de recoger a la menor de forma puntual al término de la jornada escolar puesto que ya acumula dos retardos en un mes y a la acumulación de otro retardo más, se procederá conforme lo estipulado en el 'Protocolo para el ingreso y entrega de alumnos de Educación Básica en la Ciudad de México'.";
+        document.getElementById('inputCompromisoTutor').value = "Estoy enterada de la importancia de recoger a mi hija de forma puntual al término de la jornada escolar y me comprometo a ya no acumular más retardos al recogerla (escrito por la madre de familia).";
+        document.getElementById('inputCompromisoAlumno').value = "Me comprometo a esperar en el lugar indicado por mi profesor(a) mientras llega la persona que me recoge.";
+        document.getElementById('inputIntervencion').value = "Notificación por parte del profesor titular de grupo a la madre de la menor (llamada telefónica y de forma presencial) sobre la importancia de recoger de forma puntual a su hija. Asimismo, se hizo hincapié de que en el caso de reincidencia se procederá conforme al 'Protocolo para el ingreso y entrega de alumnos de Educación Básica en la Ciudad de México'. La directora del plantel notificó vía telefónica a la Supervisora de la Zona Escolar que la madre de familia ya acudió a recoger a la menor.";
+        document.getElementById('inputFalta').value = "Acumulación de retardos al término de la jornada escolar.";
+        document.getElementById('inputAcciones').value = "Llamado de atención verbal e informativo sobre el protocolo de entrega de alumnos de Educación Básica.";
+    } 
+    else if (tipo === 'disruptiva') {
+        document.getElementById('inputAsunto').value = "CONDUCTA DISRUPTIVA";
+        document.getElementById('inputNarrativa').value = "El día 21 de octubre de 2024 siendo aproximadamente las 17:30 horas en el local que ocupa el aula Número 18 correspondiente al grupo 6°A del plantel educativo, se acerca al escritorio del profesor titular de grupo, el alumno Heliud Martínez López para referir sobre una situación que tuvo con su compañero Kevin Hernández Fernández. A decir del alumno Heliud refiere: 'Ahorita mi compañero Kevin me pasó a pegar muy fuerte con su mano en la cabeza, yo estaba resolviendo la actividad que nos dejó y cuando él se levantó de su lugar para ir al baño, pasó a pegarme. Ahorita me duele mucho la cabeza, pero además no es la primera vez que me pega, sólo que yo no le había comentado a usted de las otras veces'.\n\nPor lo citado anteriormente, el profesor titular del grupo procede a llamar vía telefónica a la mamá del alumno Heliud Martínez López, Sra. Nadia Martínez López informando sobre la molestia del dolor de cabeza del menor y solicitándole acudir al plantel educativo. Posteriormente, el profesor titular de grupo realiza una investigación con los alumnos del grupo 6°A para preguntar si alguno se percató sobre lo ocurrido con su compañero Heliud y Kevin, a lo que cuatro alumnos (as) refirieron lo siguiente: 'Cuando Kevin se levantó de su lugar pasó a pegarle en la cabeza a Heliud'.\n\nEnseguida, se realiza llamada telefónica a la Sra. Blanca Fernández Andrade madre del alumno Kevin Hernández Fernández solicitando su presencia en el plantel educativo para tratar asuntos relacionados con la conducta del menor. Al termino de lo anterior, el profesor titular del grupo notificó lo anteriormente descrito a la Directora del plantel.\n\nHabiendo llegado al plantel educativo las madres de familia de los dos menores y siendo las 18:05 horas, reunidos en el local que ocupa la Dirección del plantel, el profesor titular de grupo refiere a ambas mamás sobre lo sucedido en el aula con sus hijos, llegando a los acuerdos aquí mismo descritos.";
+        document.getElementById('inputCompromisoTutor').value = "Yo Blanca Fernández Andrade, mamá del alumno Kevin, me comprometo a hablar con mi hijo en casa para que no se vuelva a presentar una mala conducta ni golpes a sus compañeros, así como a vigilar el cumplimiento de la actividad de tríptico informativo y continuar en comunicación permanente.\n\nYo Nadia Martínez López, mamá del alumno Heliud, me comprometo a hablar con mi hijo para que informe de manera inmediata ante cualquier incidencia, y notificar sobre su estado de salud.";
+        document.getElementById('inputCompromisoAlumno').value = "Yo Kevin me comprometo a no volver a golpear a mis compañeros y a pedir disculpas por lo ocurrido.\n\nYo Heliud me comprometo a informar de inmediato a mi profesor(a) ante cualquier situación similar que se presente.";
+        document.getElementById('inputIntervencion').value = "Notificación a las madres de familia, reunión en dirección, levantamiento de compromisos por escrito y seguimiento a la acción formativa del alumno.";
+        document.getElementById('inputFalta').value = "Empujar, golpear o incurrir en conductas que conlleven a agresiones físicas o similares.";
+        document.getElementById('inputAcciones').value = "1. Reunión entre el alumno, docente y madre de familia para generar compromiso por escrito, en reconocimiento del impacto de su conducta.\n2. Como actividad extracurricular el alumno Kevin Hernández Fernández debe entregar al profesor titular de grupo un tríptico informativo tamaño cartulina sobre 'La convivencia sana y pacífica en el aula' para el día 04 de noviembre.";
+    }
+    // Aplica el formato de mayúsculas a todos los campos recién llenados
+    ['inputNarrativa','inputCompromisoTutor','inputCompromisoAlumno','inputIntervencion','inputFalta','inputAcciones'].forEach(id => {
+        const el = document.getElementById(id);
+        el.value = el.value.toUpperCase();
+    });
+}
+
+
+
+
+
+
+
+
+
+
+
+ </script>
+
+</body>
+
+<div style="text-align: center; font-weight: bold; margin-top: 20px; transition: transform 0.3s; cursor: pointer;" 
+     onmouseover="this.style.transform='scale(1.1)'; this.style.color='#007bff';" 
+     onmouseout="this.style.transform='scale(1)'; this.style.color='black';">
+    CHAVARRÍA PRODUCCIONES
+</div>
+
+</html>

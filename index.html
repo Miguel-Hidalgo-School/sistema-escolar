@@ -898,6 +898,40 @@ render();
 function goToCheckinKids() {
 window.location.href = 'checkin-kids.html';
 }
+function goToBitacora(nivel) {
+try {
+const si = state.schoolInfo || {};
+const ssi = state.secSchoolInfo || {};
+const mapAlumno = s => ({
+name: s.name || '',
+grade: s.grade || '',
+grupo: s.grupo || '',
+madreNombre: s.madreNombre || '',
+padreNombre: s.padreNombre || '',
+tutorNombre: s.tutorNombre || ''
+});
+const puente = {
+generadoEn: Date.now(),
+Primaria: {
+escuela: si.nombre || '',
+cct: si.cct || '',
+docente: si.encargadoNombre || si.autoridadNombre || '',
+director: si.autoridadNombre || '',
+alumnos: (state.students || []).map(mapAlumno)
+},
+Secundaria: {
+escuela: ssi.nombre || '',
+cct: ssi.cct || '',
+docente: ssi.docente || '',
+director: ssi.directorNombre || '',
+alumnos: (state.secStudents || []).map(mapAlumno)
+}
+};
+localStorage.setItem('bitacora_puente_datos', JSON.stringify(puente));
+localStorage.setItem('bitacora_nivel_sugerido', nivel === 'secundaria' ? 'Secundaria' : 'Primaria');
+} catch(e) {}
+window.location.href = 'bitacora.html';
+}
 function setTab(t) {
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
 state.tab = t;
@@ -1144,15 +1178,15 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina'],['bitacora','Bitácora'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
-`<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="setTab('${id}')">${label}</button>`
+`<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('primaria')" : `setTab('${id}')`}">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina']];
+  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['formativo','Formativa'],['tareas','Tareas'],['disciplina','Disciplina'],['bitacora','Bitácora']];
   return '<nav class="tabs">' + tabs.map(([id,label]) =>
-    `<button class="${state.secTab===id?'active':''}" onclick="setSecTab('${id}')">${label}</button>`
+    `<button class="${state.secTab===id?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('secundaria')" : `setSecTab('${id}')`}">${label}</button>`
   ).join('') + '</nav>';
 }
 function renderGradePills(cssClass, activeGrade, onclickFn) {
