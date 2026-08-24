@@ -1282,14 +1282,22 @@ async function verificarAceptoTerminos() {
 
 async function guardarAceptoTerminos() {
   if (!currentUid) return;
-  await db.ref('perfiles/' + currentUid).update({
-    aceptoTerminos: true,
-    fechaAceptoTerminos: new Date().toISOString(),
-    ipAceptacion: 'navegador-detectado'
-  });
-  state.aceptoTerminos = true;
-  state.mostrarModalTerminos = false;
-  render();
+  const btn = document.getElementById('btnAceptarTerminos');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    await db.ref('perfiles/' + currentUid).update({
+      aceptoTerminos: true,
+      fechaAceptoTerminos: new Date().toISOString(),
+      ipAceptacion: 'navegador-detectado'
+    });
+    state.aceptoTerminos = true;
+    state.mostrarModalTerminos = false;
+    render();
+  } catch (e) {
+    console.error('Error guardando aceptación de términos:', e);
+    showToast('❌ No se pudo guardar tu aceptación (permisos de la base de datos). Avisa al administrador.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; }
+  }
 }
 
 function renderModalTerminos() {
@@ -3444,6 +3452,7 @@ ${FALTAS_PRIMARIA.map(falta => `<p style="margin:4px 0;">${(inc.faltas||[]).incl
 <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del docente</div>
 <div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del padre/madre</div>
 </div>
+<p style="text-align:center;letter-spacing:1px;font-size:0.68em;color:#334155;margin-top:16px;white-space:nowrap;overflow:hidden;">»»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»««</p>
 </div>`;
 } else {
 const causaLbl = { leve: 'CAUSA LEVE', grave: 'CAUSA GRAVE', muygrave: 'CAUSA MUY GRAVE' };
@@ -3451,7 +3460,7 @@ const protLbl = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO 
 const si = state.secSchoolInfo;
 html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
 <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
-<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
+<div style="height:60px;width:70px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain;" />` : ''}</div>
 <div style="text-align:center;flex:1;">
 <p style="font-weight:700;">DIRECCIÓN GENERAL DE SECUNDARIAS TÉCNICAS</p>
 <p>SECTOR 06</p>
@@ -3460,7 +3469,7 @@ html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
 <p>${si.direccionReporte || 'SAN MARCOS, MPIO. DE TONILA, JAL.'}</p>
 <p>CICLO ESCOLAR ${getCicloEscolar()}</p>
 </div>
-<div style="width:56px;height:56px;flex-shrink:0;">${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fit:contain;" />` : ''}</div>
+<div style="height:60px;width:70px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;">${si.logoURL ? `<img src="${si.logoURL}" style="max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain;" />` : ''}</div>
 </div>
 <p>PADRE DE FAMILIA O TUTOR: <input style="border:none;border-bottom:1px solid #000;width:220px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> &nbsp; FECHA: <input type="date" style="border:none;border-bottom:1px solid #000;font-size:1em;" value="${rm.fecha}" oninput="updateReporteField('fecha',this.value)"></p>
 <p style="text-align:center;font-weight:700;margin:12px 0;font-size:1.1em;">REPORTE DE INDISCIPLINA</p>
