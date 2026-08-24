@@ -149,7 +149,7 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
@@ -203,6 +203,7 @@ sumativaFilterMateria: null,
 sumativaPeriodos: null,
 sumativaPeriodoActivo: 'p1',
 sumativaEditandoPeriodos: false,
+checkinAttendance: [],
 tareaSelectedId: null,
 tareaFilterGrade: '',
 tareaFilterGrupo: '',
@@ -319,6 +320,7 @@ sumativaConfigSecRef = db.ref(base + '/sumativaConfig/secundaria');
 sumativaCalifPriRef = db.ref(base + '/sumativaCalif/primaria');
 sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
+checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -400,6 +402,11 @@ sumativaConfigSecRef.on('value', snap => { state.sumativaConfigSec = snap.val() 
 sumativaCalifPriRef.on('value', snap => { state.sumativaCalifPri = snap.val() || {}; render(); }, () => {});
 sumativaCalifSecRef.on('value', snap => { state.sumativaCalifSec = snap.val() || {}; render(); }, () => {});
 sumativaPeriodosRef.on('value', snap => { state.sumativaPeriodos = snap.val() || defaultSumativaPeriodos(); render(); }, () => {});
+checkinAttendanceRef.on('value', snap => {
+const val = snap.val() || {};
+state.checkinAttendance = Object.keys(val).map(id => ({ id, ...val[id] }));
+render();
+}, () => {});
 }
 function unsubscribeData() {
 if (studentsRef) studentsRef.off();
@@ -417,6 +424,7 @@ if (sumativaConfigSecRef) sumativaConfigSecRef.off();
 if (sumativaCalifPriRef) sumativaCalifPriRef.off();
 if (sumativaCalifSecRef) sumativaCalifSecRef.off();
 if (sumativaPeriodosRef) sumativaPeriodosRef.off();
+if (checkinAttendanceRef) checkinAttendanceRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
@@ -425,6 +433,7 @@ state.tareasPri = {};
 state.tareasSec = {};
 state.disciplinaPri = {};
 state.disciplinaSec = {};
+state.checkinAttendance = [];
 state.sumativaConfigPri = null;
 state.sumativaConfigSec = null;
 state.sumativaCalifPri = {};
@@ -2778,13 +2787,51 @@ const ref = nivel === 'primaria' ? sumativaCalifPriRef : sumativaCalifSecRef;
 const map = nivel === 'primaria' ? state.sumativaCalifPri : state.sumativaCalifSec;
 ref.set(map).then(() => showToast('💾 Calificaciones guardadas')).catch(() => showToast('No se pudo guardar'));
 }
+function diasHabilesEnPeriodo(nivel, periodoId) {
+const roster = nivel === 'primaria' ? state.students : state.secStudents;
+const ids = new Set(roster.map(s => s.id));
+const fechas = new Set();
+(state.checkinAttendance || []).forEach(a => {
+if (a.studentId && ids.has(a.studentId) && fechaEnPeriodo(a.date, periodoId)) fechas.add(a.date);
+});
+return fechas.size;
+}
+function diasAsistidosEstudiante(studentId, periodoId) {
+const fechas = new Set();
+(state.checkinAttendance || []).forEach(a => {
+if (a.studentId === studentId && fechaEnPeriodo(a.date, periodoId)) fechas.add(a.date);
+});
+return fechas.size;
+}
+function calcularAsistenciaSumativa(nivel, studentId, periodoId) {
+const habiles = diasHabilesEnPeriodo(nivel, periodoId);
+if (!habiles) return null;
+const asistidos = diasAsistidosEstudiante(studentId, periodoId);
+const pct = Math.min(1, asistidos / habiles);
+return Math.round(pct * 10 * 10) / 10;
+}
 function calcularFinalSumativa(nivel, s, periodoId) {
 const config = sumativaConfigArr(nivel);
 const mk = sumativaMateriaKey(nivel);
 let total = 0;
 const faltan = [];
+const tareasValor = calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, mk, periodoId);
 config.forEach(c => {
-const valor = c.automatico ? calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, mk, periodoId) : getSumativaValor(nivel, s.id, c.id, periodoId);
+let valor;
+if (c.id === 'tareas') {
+valor = tareasValor;
+} else if (c.id === 'asistencia' || c.id === 'participacion') {
+// Se calculan solos a partir de los días que el alumno escaneó su QR
+// de entrada en CheckIn Kids dentro de las fechas de este periodo.
+valor = calcularAsistenciaSumativa(nivel, s.id, periodoId);
+} else if (c.id === 'examen') {
+// Si no se captura una calificación de examen, se calcula en automático
+// de forma proporcional a lo que el alumno lleva en Tareas.
+const manual = getSumativaValor(nivel, s.id, c.id, periodoId);
+valor = manual != null ? manual : tareasValor;
+} else {
+valor = c.automatico ? tareasValor : getSumativaValor(nivel, s.id, c.id, periodoId);
+}
 if (valor == null) faltan.push(c.nombre);
 total += (valor || 0) * ((Number(c.porcentaje) || 0) / 100);
 });
@@ -2870,7 +2917,8 @@ html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"
 <input style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:0.8em;text-transform:uppercase;" value="${esc2(c.nombre)}" ${c.automatico ? 'disabled' : ''} oninput="forceUpper(this);actualizarComponenteSumativaLocal('${nivel}',${i},'nombre',this.value)" />
 <input type="number" min="0" max="100" style="width:64px;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:0.8em;text-align:center;" value="${c.porcentaje}" oninput="actualizarComponenteSumativaLocal('${nivel}',${i},'porcentaje',this.value)" />
 <span style="font-size:0.75em;color:#6b7280;">%</span>
-${c.automatico ? `<span style="font-size:0.65em;background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:3px 6px;white-space:nowrap;">🔄 auto</span>` : `<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:4px 8px;font-size:0.75em;" onclick="eliminarComponenteSumativa('${nivel}',${i})">✕</button>`}
+${c.id === 'asistencia' || c.id === 'participacion' ? `<span style="font-size:0.65em;background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:3px 6px;white-space:nowrap;">🔄 por QR</span>` : c.id === 'examen' ? `<span style="font-size:0.65em;background:#fef3c7;color:#92400e;border-radius:6px;padding:3px 6px;white-space:nowrap;">🔄 si falta</span>` : ''}
+${c.automatico ? '' : `<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:4px 8px;font-size:0.75em;" onclick="eliminarComponenteSumativa('${nivel}',${i})">✕</button>`}
 </div>`;
 });
 
@@ -2909,7 +2957,18 @@ const r = calcularFinalSumativa(nivel, s, periodoActivo);
 html += `<div class="card" style="margin-bottom:8px;">
 <p style="font-weight:600;font-size:0.85em;margin-bottom:6px;">${esc2(s.name)}</p>`;
 config.forEach(c => {
-if (c.automatico) {
+if (c.id === 'tareas') {
+const prom = calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, sumativaMateriaKey(nivel), periodoActivo);
+html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78em;margin-bottom:4px;"><span>${esc2(c.nombre)} (${c.porcentaje}%)</span><span style="font-weight:600;">${prom != null ? prom.toFixed(1) : '— sin tareas calificadas'}</span></div>`;
+} else if (c.id === 'asistencia' || c.id === 'participacion') {
+const habiles = diasHabilesEnPeriodo(nivel, periodoActivo);
+const valorAsis = calcularAsistenciaSumativa(nivel, s.id, periodoActivo);
+html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78em;margin-bottom:4px;"><span>${esc2(c.nombre)} (${c.porcentaje}%) <span style="color:#9ca3af;">· por QR</span></span><span style="font-weight:600;">${valorAsis != null ? valorAsis.toFixed(1) : (habiles ? '—' : 'sin registros de CheckIn')}</span></div>`;
+} else if (c.id === 'examen') {
+const manual = getSumativaValor(nivel, s.id, c.id, periodoActivo);
+const tareasVal = calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, sumativaMateriaKey(nivel), periodoActivo);
+html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78em;margin-bottom:4px;gap:8px;"><span style="flex:1;">${esc2(c.nombre)} (${c.porcentaje}%)</span><input type="number" min="0" max="10" step="0.1" style="width:60px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;font-size:0.8em;" placeholder="${tareasVal != null ? tareasVal.toFixed(1) + ' auto' : 'Cal.'}" value="${manual != null ? manual : ''}" oninput="setSumativaValorLocal('${nivel}','${s.id}','${c.id}','${periodoActivo}',this.value)" /></div>`;
+} else if (c.automatico) {
 const prom = calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, sumativaMateriaKey(nivel), periodoActivo);
 html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78em;margin-bottom:4px;"><span>${esc2(c.nombre)} (${c.porcentaje}%)</span><span style="font-weight:600;">${prom != null ? prom.toFixed(1) : '— sin tareas calificadas'}</span></div>`;
 } else {
