@@ -79,6 +79,17 @@
 </head>
 <body class="bg-slate-200 p-4 md:p-8 font-sans">
 
+    <!-- Modal Promo Video -->
+    <div id="promoModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;align-items:center;justify-content:center;flex-direction:column;">
+        <div style="background:#fff;border-radius:16px;max-width:95%;max-height:90vh;overflow:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:relative;">
+            <button onclick="cerrarPromoVideo()" style="position:absolute;top:12px;right:12px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:40px;height:40px;font-size:20px;cursor:pointer;font-weight:bold;">✕</button>
+            <iframe src="promo-sistema-escolar.html" style="width:100%;height:600px;border:none;border-radius:8px;" allow="autoplay"></iframe>
+            <div style="margin-top:16px;text-center;">
+                <button onclick="cerrarPromoVideo()" style="background:#6366f1;color:#fff;padding:12px 24px;border:none;border-radius:8px;font-weight:600;font-size:16px;cursor:pointer;">Entendido, continuar</button>
+            </div>
+        </div>
+    </div>
+
     <div class="max-w-4xl mx-auto bg-white p-6 md:p-12 rounded-xl shadow-2xl">
         
         <!-- Controles de Nivel e Historial -->
@@ -90,8 +101,7 @@
                     <button onclick="cambiarNivel('Secundaria')" id="btnSecundaria" class="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition">Secundaria</button>
                 </div>
             </div>
-            <div class="flex flex-wrap gap-2 w-full md:w-auto">
-                <a href="index.html" class="flex-1 md:flex-none text-center bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition">⬅️ Volver al Sistema</a>
+            <div class="flex gap-2 w-full md:w-auto">
                 <button onclick="mostrarFormulario()" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition">➕ Nueva Incidencia</button>
                 <button onclick="mostrarHistorial()" class="flex-1 md:flex-none bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition">📂 Ver Historial Guardado</button>
             </div>
@@ -136,9 +146,14 @@
                 </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Ciclo Escolar (para el folio):</label>
-                <input type="text" id="configCiclo" placeholder="EJ. 2026-2027" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this); actualizarCicloActual()">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-200">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Ciclo Escolar (para el folio):</label>
+                    <input type="text" id="configCiclo" placeholder="EJ. 2026-2027" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this); actualizarCicloActual()">
+                </div>
+                <div class="flex items-end">
+                    <a href="index.html" class="w-full text-center bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded text-xs font-bold shadow-sm transition">⬅️ Volver al Sistema Escolar</a>
+                </div>
             </div>
         </div>
 
@@ -344,12 +359,101 @@
 
     <!-- Script de Control con Botón de Reinicio de Folio -->
     <script>
+        // ============ SERVICE WORKER REGISTRATION ============
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('./service-worker.js')
+            .then(reg => console.log('✅ Service Worker registrado'))
+            .catch(err => console.log('Service Worker error:', err));
+        }
+
+        // ============ SINCRONIZACIÓN OFFLINE-FIRST ============
+        let estoyOnline = navigator.onLine;
+
+        window.addEventListener('online', () => {
+          estoyOnline = true;
+          console.log('🟢 Conectado a internet - Sincronizando...');
+          sincronizarConFirebase();
+        });
+
+        window.addEventListener('offline', () => {
+          estoyOnline = false;
+          console.log('🔴 Sin internet - Guardando en localStorage');
+        });
+
+        // Sincroniza datos de localStorage → Firebase cuando hay internet
+        async function sincronizarConFirebase() {
+          const bitacoraData = localStorage.getItem('bitacora_incidencias_guardadas');
+          if (!bitacoraData) return;
+
+          try {
+            const incidencias = JSON.parse(bitacoraData);
+            const db = firebase.database();
+            const user = firebase.auth().currentUser;
+
+            if (!user || !user.email.endsWith('@chavarria.edu.com')) return;
+
+            // Guarda cada incidencia en Firebase
+            for (const [key, data] of Object.entries(incidencias)) {
+              await db.ref(`bitacora/${user.uid}/${key}`).set({
+                ...data,
+                sincronizadoEn: new Date().toISOString()
+              });
+            }
+
+            console.log('✅ Sincronización exitosa con Firebase');
+            showSyncNotification('✅ Datos sincronizados con servidor');
+          } catch (error) {
+            console.error('Error sincronizando:', error);
+            showSyncNotification('⚠️ Error sincronizando. Reintentando...', 'error');
+            // Reintenta en 30 segundos
+            setTimeout(sincronizarConFirebase, 30000);
+          }
+        }
+
+        function showSyncNotification(msg, type = 'success') {
+          const div = document.createElement('div');
+          div.textContent = msg;
+          div.style.cssText = `
+            position: fixed; bottom: 20px; right: 20px; 
+            background: ${type === 'error' ? '#dc2626' : '#16a34a'}; 
+            color: white; padding: 12px 16px; border-radius: 8px; 
+            z-index: 9998; font-weight: 600;
+          `;
+          document.body.appendChild(div);
+          setTimeout(() => div.remove(), 3000);
+        }
+
+        // Sincroniza cada 60 segundos si está online
+        setInterval(() => {
+          if (estoyOnline) sincronizarConFirebase();
+        }, 60000);
+
         let nivelActual = "Primaria";
         let cicloActual = calcularCicloEscolarDefault();
         let edicionManual = false;
 
         const GRADOS_POR_NIVEL = { "Primaria": ['1°','2°','3°','4°','5°','6°'], "Secundaria": ['1°','2°','3°'] };
         const GRUPOS_DEFAULT = ['A','B','C','D','E','F'];
+        
+        // Promo video logic
+        function mostrarPromoVideo() {
+          const mostrar = localStorage.getItem('bitacora_mostrar_promo') === 'true';
+          const yaVio = localStorage.getItem('bitacora_promo_visto') === 'true';
+          if (mostrar && !yaVio) {
+            const modal = document.getElementById('promoModal');
+            if (modal) modal.style.display = 'flex';
+            localStorage.setItem('bitacora_promo_visto', 'true');
+          }
+          localStorage.removeItem('bitacora_mostrar_promo');
+        }
+        
+        function cerrarPromoVideo() {
+          const modal = document.getElementById('promoModal');
+          if (modal) modal.style.display = 'none';
+        }
+        
+        // Ejecutar al cargar la página
+        window.addEventListener('load', mostrarPromoVideo);
 
         // --- Datos puente recibidos desde el Sistema Escolar (index.html) ---
         let datosPuente = null;

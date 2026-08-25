@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema Escolar — Video Promocional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --indigo: #17204F;
+    --indigo-2: #202C6E;
+    --blue: #3B5BFF;
+    --orange: #FF7A29;
+    --cream: #FFF6EA;
+    --teal: #17C3A2;
+    --ink: #0B0E22;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    height:100%;
+    background:#05060F;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Inter', sans-serif;
+    overflow:hidden;
+  }
+  #frame{
+    position:relative;
+    width:390px;
+    height:693px;
+    max-width:96vw;
+    max-height:96vh;
+    aspect-ratio: 9/16;
+    background:var(--indigo);
+    border-radius:28px;
+    overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 6px #0B0E22;
+  }
+  .scene{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:38px 30px;
+    opacity:0;
+    transform: scale(1.04);
+    transition: opacity .55s ease, transform .8s ease;
+    pointer-events:none;
+    text-align:center;
+  }
+  .scene.active{
+    opacity:1;
+    transform: scale(1);
+    pointer-events:auto;
+  }
+  /* Scene-specific backgrounds */
+  #s1{ background: radial-gradient(120% 90% at 50% 0%, #2A3A8F 0%, #17204F 60%, #0B0E22 100%); }
+  #s2{ background: linear-gradient(160deg, #12173A 0%, #1B2050 100%); }
+  #s3{ background: radial-gradient(140% 100% at 50% 100%, #274CD1 0%, #17204F 55%, #0B0E22 100%); }
+  #s4{ background: linear-gradient(180deg, #101636 0%, #17204F 100%); }
+  #s5{ background: radial-gradient(120% 90% at 50% 100%, #FF7A29 -20%, #17204F 55%); }
+  #s6{ background: radial-gradient(120% 120% at 50% 0%, #FF9151 0%, #FF7A29 35%, #B23E13 100%); }
+
+  .eyebrow{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color: var(--teal);
+    margin-bottom:14px;
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:32px;
+    line-height:1.12;
+    color:var(--cream);
+    letter-spacing:-0.01em;
+  }
+  h1 .hi{ color: var(--orange); }
+  p.lead{
+    margin-top:16px;
+    font-size:16px;
+    line-height:1.5;
+    color:#C9CFEF;
+    font-weight:400;
+    max-width:300px;
+  }
+
+  /* Feature list scene */
+  .feat-list{ display:flex; flex-direction:column; gap:16px; width:100%; margin-top:8px;}
+  .feat{
+    display:flex; align-items:center; gap:14px;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.09);
+    border-radius:16px;
+    padding:14px 16px;
+    text-align:left;
+    opacity:0;
+    transform: translateX(-18px);
+  }
+  .feat.show{ opacity:1; transform:translateX(0); transition: opacity .5s ease, transform .5s ease; }
+  .feat .ico{
+    flex:0 0 auto;
+    width:38px; height:38px; border-radius:11px;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--teal); color:#06231D; font-size:18px; font-weight:800;
+  }
+  .feat .txt{ color:var(--cream); font-size:15px; font-weight:600; }
+
+  /* device duo scene */
+  .devices{ display:flex; align-items:flex-end; gap:14px; margin-top:6px; }
+  .phone-mini{
+    width:78px; height:150px; border-radius:16px;
+    background:linear-gradient(180deg,#fff,#dfe6ff);
+    border:3px solid #0B0E22;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+    display:flex; flex-direction:column; gap:5px; padding:8px;
+  }
+  .laptop-mini{
+    width:170px; height:110px; border-radius:10px 10px 3px 3px;
+    background:linear-gradient(180deg,#fff,#dfe6ff);
+    border:3px solid #0B0E22; border-bottom:10px solid #0B0E22;
+    padding:8px; display:flex; flex-direction:column; gap:5px;
+  }
+  .bar{ height:8px; border-radius:4px; background:var(--blue); opacity:.85; }
+  .bar.b2{ background:var(--orange); width:70%;}
+  .bar.b3{ background:var(--teal); width:50%;}
+
+  /* CTA scene */
+  .logo-badge{
+    width:64px; height:64px; border-radius:18px;
+    background:var(--cream); color:var(--orange);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px;
+    margin-bottom:18px;
+    box-shadow:0 10px 24px rgba(0,0,0,.25);
+  }
+  .cta-num{
+    margin-top:20px;
+    background:var(--ink);
+    color:#fff;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:20px;
+    letter-spacing:.03em;
+    padding:12px 22px;
+    border-radius:999px;
+  }
+  .cta-sub{ margin-top:10px; font-size:13px; color:#3a1a02; font-weight:600;}
+
+  /* Captions */
+  #captionBar{
+    position:absolute; left:16px; right:16px; bottom:74px;
+    z-index:5;
+    text-align:center;
+    color:#fff;
+    font-size:14px;
+    font-weight:600;
+    line-height:1.4;
+    text-shadow:0 2px 8px rgba(0,0,0,.6);
+    min-height:36px;
+  }
+
+  /* Waveform / audio indicator */
+  #audioRow{
+    position:absolute; left:0; right:0; bottom:34px;
+    display:flex; align-items:center; justify-content:center; gap:3px;
+    height:22px; z-index:5;
+  }
+  .wbar{
+    width:3px; border-radius:2px; background: var(--teal);
+    height:6px;
+    transition: height .12s ease;
+    opacity:.85;
+  }
+
+  /* progress dots */
+  #dots{
+    position:absolute; top:16px; left:16px; right:16px;
+    display:flex; gap:5px; z-index:6;
+  }
+  .dot{ flex:1; height:3px; border-radius:2px; background:rgba(255,255,255,.25); overflow:hidden; }
+  .dot .fill{ height:100%; width:0%; background:#fff; }
+
+  /* start / replay overlay */
+  #overlay{
+    position:absolute; inset:0; z-index:20;
+    background:rgba(5,6,15,.72);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px;
+    color:#fff; text-align:center; padding:30px;
+  }
+  #overlay.hidden{ display:none; }
+  #overlay h2{ font-family:'Space Grotesk',sans-serif; font-size:20px; }
+  #overlay p{ font-size:13px; color:#C9CFEF; max-width:260px; }
+  #playBtn{
+    width:64px; height:64px; border-radius:50%;
+    background:var(--orange); border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 10px 24px rgba(255,122,41,.4);
+  }
+  #playBtn svg{ width:24px; height:24px; fill:#fff; margin-left:3px; }
+
+  #muteNote{ font-size:11px; color:#8b93c9; }
+</style>
+</head>
+<body>
+
+<div id="frame">
+  <div id="dots"></div>
+  <div id="captionBar"></div>
+  <div id="audioRow"></div>
+
+  <section class="scene" id="s1">
+    <div class="eyebrow">Colegas docentes</div>
+    <h1>Optimicen su tiempo <span class="hi">al máximo</span></h1>
+    <p class="lead">¿Buscan una herramienta práctica para organizar su ciclo escolar?</p>
+  </section>
+
+  <section class="scene" id="s2">
+    <div class="eyebrow">El problema</div>
+    <h1>Boletas, listas y reportes que no dan tregua</h1>
+    <p class="lead">El papeleo administrativo les roba horas que deberían estar en el aula.</p>
+  </section>
+
+  <section class="scene" id="s3">
+    <div class="logo-badge">SE</div>
+    <div class="eyebrow">La solución</div>
+    <h1>Sistema Escolar</h1>
+    <p class="lead">El asistente digital que todo maestro necesita, para primaria y secundaria.</p>
+  </section>
+
+  <section class="scene" id="s4">
+    <div class="eyebrow">Todo en un solo lugar</div>
+    <h1 style="font-size:24px; margin-bottom:6px;">Cuatro herramientas clave</h1>
+    <div class="feat-list" id="featList">
+      <div class="feat" data-f="1"><div class="ico">✓</div><div class="txt">Control de alumnos por grado y grupo</div></div>
+      <div class="feat" data-f="2"><div class="ico">✓</div><div class="txt">Calificaciones al instante</div></div>
+      <div class="feat" data-f="3"><div class="ico">✓</div><div class="txt">Reportes de evaluación formativa</div></div>
+      <div class="feat" data-f="4"><div class="ico">✓</div><div class="txt">Bitácora con protocolos editables</div></div>
+    </div>
+  </section>
+
+  <section class="scene" id="s5">
+    <div class="eyebrow">Sin restricciones</div>
+    <h1>Celular y computadora, mismo usuario</h1>
+    <div class="devices">
+      <div class="laptop-mini"><div class="bar"></div><div class="bar b2"></div><div class="bar b3"></div></div>
+      <div class="phone-mini"><div class="bar"></div><div class="bar b2"></div><div class="bar b3"></div></div>
+    </div>
+    <p class="lead" style="margin-top:20px;">Trabajen al mismo tiempo, desde donde estén.</p>
+  </section>
+
+  <section class="scene" id="s6">
+    <div class="logo-badge" style="background:var(--ink); color:var(--orange);">SE</div>
+    <h1 style="color:#2a1102;">Simplifiquen su carga administrativa hoy</h1>
+    <div class="cta-num">312 142 0391</div>
+    <div class="cta-sub">Escríbenos para más información</div>
+  </section>
+
+  <div id="overlay">
+    <h2>Sistema Escolar</h2>
+    <p>Video promocional con narración por voz. Actívala con el botón.</p>
+    <button id="playBtn" aria-label="Reproducir"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+    <div id="muteNote">Sube el volumen de tu dispositivo 🔊</div>
+  </div>
+</div>
+
+<script>
+const scenes = [
+  { id:'s1', caption:'¡Colegas docentes! Optimicen su tiempo al máximo.', text:'¡Colegas docentes! Optimicen su tiempo al máximo.', minMs: 3200 },
+  { id:'s2', caption:'Boletas, listas y reportes que no dan tregua...', text:'Boletas, listas de asistencia y reportes que no dan tregua. El papeleo administrativo les roba horas que deberían estar en el aula.', minMs: 3600 },
+  { id:'s3', caption:'Conoce Sistema Escolar.', text:'Conoce Sistema Escolar: el asistente digital que todo maestro necesita, para primaria y secundaria.', minMs: 3200 },
+  { id:'s4', caption:'Control de alumnos, calificaciones, reportes y bitácora.', text:'Control de alumnos por grado y grupo. Calificaciones al instante. Reportes de evaluación formativa. Y una bitácora con protocolos editables, listos para usar.', minMs: 5200, feats:true },
+  { id:'s5', caption:'Funciona en celular y computadora, con el mismo usuario.', text:'Funciona en tu celular y en tu computadora, con el mismo usuario, al mismo tiempo.', minMs: 3400 },
+  { id:'s6', caption:'Escríbenos al 312 142 0391.', text:'Simplifiquen su carga administrativa hoy mismo. Escríbenos para más información al 312 142 0391.', minMs: 4200 },
+];
+
+const dotsWrap = document.getElementById('dots');
+scenes.forEach(()=>{
+  const d = document.createElement('div'); d.className='dot';
+  const f = document.createElement('div'); f.className='fill';
+  d.appendChild(f); dotsWrap.appendChild(d);
+});
+const dotFills = [...dotsWrap.querySelectorAll('.fill')];
+
+// waveform bars
+const audioRow = document.getElementById('audioRow');
+const NBARS = 28;
+const wbars = [];
+for(let i=0;i<NBARS;i++){
+  const b = document.createElement('div'); b.className='wbar';
+  audioRow.appendChild(b); wbars.push(b);
+}
+let waveTimer = null;
+function startWave(){
+  stopWave();
+  waveTimer = setInterval(()=>{
+    wbars.forEach(b=>{ b.style.height = (4 + Math.random()*18) + 'px'; });
+  }, 110);
+}
+function stopWave(){
+  if(waveTimer){ clearInterval(waveTimer); waveTimer=null; }
+  wbars.forEach(b=> b.style.height = '4px');
+}
+
+const captionBar = document.getElementById('captionBar');
+let idx = -1;
+let sceneStart = 0;
+let rafId = null;
+
+function speak(text){
+  return new Promise((resolve)=>{
+    if(!('speechSynthesis' in window)){ resolve(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'es-MX';
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    const voices = speechSynthesis.getVoices();
+    const esVoice = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith('es'));
+    if(esVoice) u.voice = esVoice;
+    u.onend = resolve;
+    u.onerror = resolve;
+    speechSynthesis.speak(u);
+  });
+}
+
+function animateProgress(durationMs){
+  return new Promise((resolve)=>{
+    const start = performance.now();
+    function tick(now){
+      const p = Math.min(1, (now-start)/durationMs);
+      dotFills[idx].style.width = (p*100)+'%';
+      if(p<1){ rafId = requestAnimationFrame(tick); }
+      else resolve();
+    }
+    rafId = requestAnimationFrame(tick);
+  });
+}
+
+async function playScene(i){
+  idx = i;
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  const sc = scenes[i];
+  const el = document.getElementById(sc.id);
+  el.classList.add('active');
+  captionBar.textContent = sc.caption;
+
+  if(sc.feats){
+    [...document.querySelectorAll('#featList .feat')].forEach((f,fi)=>{
+      f.classList.remove('show');
+      setTimeout(()=> f.classList.add('show'), 400 + fi*550);
+    });
+  }
+
+  startWave();
+  const speakPromise = speak(sc.text);
+  const minPromise = new Promise(r=> setTimeout(r, sc.minMs));
+  const progressPromise = animateProgress(sc.minMs);
+  await Promise.all([speakPromise, minPromise, progressPromise]);
+  stopWave();
+  dotFills[idx].style.width = '100%';
+}
+
+async function runAll(){
+  for(let i=0;i<scenes.length;i++){
+    await playScene(i);
+  }
+  captionBar.textContent = '¡Gracias por ver! 🎬';
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('overlay').querySelector('h2').textContent = 'Fin del video';
+  document.getElementById('overlay').querySelector('p').textContent = 'Toca para volver a reproducir.';
+}
+
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  document.getElementById('overlay').classList.add('hidden');
+  dotFills.forEach(f=> f.style.width='0%');
+  speechSynthesis.cancel();
+  runAll();
+});
+
+// prime voices list (Chrome loads async)
+if('speechSynthesis' in window){
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = ()=> speechSynthesis.getVoices();
+}
+</script>
+</body>
+</html>

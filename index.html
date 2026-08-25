@@ -1095,6 +1095,11 @@ if (!tieneAccesoCheckin()) return;
 window.location.href = 'checkin-kids.html';
 }
 function goToBitacora(nivel) {
+// Restricción: solo @chavarria.edu.com pueden entrar a Bitácora
+if (state.currentUser && !state.currentUser.email?.endsWith('@chavarria.edu.com')) {
+  showToast('🚫 Acceso denegado. Solo usuarios @chavarria.edu.com pueden acceder a Bitácora.');
+  return;
+}
 try {
 const si = state.schoolInfo || {};
 const ssi = state.secSchoolInfo || {};
@@ -1125,6 +1130,8 @@ alumnos: (state.secStudents || []).map(mapAlumno)
 };
 localStorage.setItem('bitacora_puente_datos', JSON.stringify(puente));
 localStorage.setItem('bitacora_nivel_sugerido', nivel === 'secundaria' ? 'Secundaria' : 'Primaria');
+// Trigger promo video flag
+localStorage.setItem('bitacora_mostrar_promo', 'true');
 } catch(e) {}
 window.location.href = 'bitacora.html';
 }
@@ -1386,15 +1393,15 @@ if (!state.user) { app.innerHTML = renderLogin(); return; }
 // MOSTRAR MODAL DE TÉRMINOS (BLOQUEADOR) ANTES DE CUALQUIER OTRA COSA
 if (state.mostrarModalTerminos) {
   app.innerHTML = renderModalTerminos();
-  // Event listener para checkbox
-  setTimeout(() => {
-    const ck = document.getElementById('checkAcepto');
-    const btn = document.getElementById('btnAceptarTerminos');
-    if (ck) ck.addEventListener('change', () => {
-      if (btn) btn.disabled = !ck.checked;
-      if (btn && ck.checked) btn.style.opacity = '1';
+  // Event listener para checkbox (fixup inmediato)
+  const ck = document.getElementById('checkAcepto');
+  const btn = document.getElementById('btnAceptarTerminos');
+  if (ck && btn) {
+    ck.addEventListener('change', () => {
+      btn.disabled = !ck.checked;
+      btn.style.opacity = ck.checked ? '1' : '0.5';
     });
-  }, 100);
+  }
   return; // Detiene render aquí, no muestra nada más
 }
 if (state.forcePasswordChange) { app.innerHTML = renderTopbarSimple() + renderCambiarPassword(true); return; }
@@ -1515,7 +1522,7 @@ let html = `
 <main>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
 <p style="font-weight:700;font-size:1.15em;">${tituloScope}</p>
-<button class="btn btn-ghost btn-sm" onclick="closeUserAdmin()">← Volver</button>
+<button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="closeUserAdmin()">← Volver a Bitácora</button>
 </div>
 <div class="card">
 <p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
@@ -3460,7 +3467,7 @@ const protLbl = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO 
 const si = state.secSchoolInfo;
 html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
 <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
-<div style="height:60px;width:70px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain;" />` : ''}</div>
+<div style="height:80px;width:90px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain;" />` : ''}</div>
 <div style="text-align:center;flex:1;">
 <p style="font-weight:700;">DIRECCIÓN GENERAL DE SECUNDARIAS TÉCNICAS</p>
 <p>SECTOR 06</p>
