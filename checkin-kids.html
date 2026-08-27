@@ -327,6 +327,7 @@
 
   <!-- ENTRADAS -->
   <section class="panel" id="panel-entradas">
+    <div class="class-selector" id="entradasClassSelector"></div>
     <div class="search-row">
       <input id="entradasSearch" placeholder="Buscar por nombre, madre, padre o tutor..." oninput="renderEntradas()">
     </div>
@@ -522,6 +523,7 @@
   <div class="modal wide">
     <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">Alumnos en el plantel</b>
     <p class="note">Alumnos que ya marcaron entrada hoy y aún no marcan salida (pueden estar en el baño, en un salón u otra área).</p>
+    <div class="class-selector" id="enPlantelClassSelector"></div>
     <input id="enPlantelSearch" placeholder="Buscar por nombre, grado o folio..." style="margin:12px 0;" oninput="renderEnPlantelList()">
     <div style="max-height:55vh;overflow-y:auto;">
       <table>
@@ -13010,13 +13012,24 @@ function saveJSON(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }
   catch(e){ showToast('No hay espacio suficiente para guardar (fotos muy pesadas). Prueba con una foto más ligera.', 'err'); return false; }
   if(ckSyncReady && key === STUDENTS_KEY){
-    const pri = {}, sec = {};
-    val.forEach(s => {
-      if((s.nivel||'primaria') === 'secundaria') sec[s.id] = ckToFirebaseStudent(s);
-      else pri[s.id] = ckToFirebaseStudent(s);
-    });
-    ckStudentsRef.set(pri).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
-    ckSecStudentsRef.set(sec).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
+    if (ckModoSoloCheckin) {
+      // Cuenta SOLO CheckIn Kids: su lista es propia, no se reparte entre
+      // Primaria/Secundaria.
+      const all = {};
+      val.forEach(s => { all[s.id] = ckToFirebaseStudent(s); });
+      if (ckCheckinStudentsRef) ckCheckinStudentsRef.set(all).catch(()=>{ showToast('No se pudo sincronizar la lista de alumnos', 'err'); });
+    } else {
+      const pri = {}, sec = {};
+      val.forEach(s => {
+        if((s.nivel||'primaria') === 'secundaria') sec[s.id] = ckToFirebaseStudent(s);
+        else pri[s.id] = ckToFirebaseStudent(s);
+      });
+      // Solo se escribe en la rama (primaria/secundaria) a la que esta cuenta tiene
+      // acceso; si intenta registrar un alumno de un nivel que no le corresponde,
+      // las reglas de Firebase lo rechazarían de todos modos.
+      if (ckStudentsRef) ckStudentsRef.set(pri).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
+      if (ckSecStudentsRef) ckSecStudentsRef.set(sec).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
+    }
   } else if(ckSyncReady && key === ATTEND_KEY){
     const obj = {};
     val.forEach(a => { const { id, ...rest } = a; obj[id] = rest; });
@@ -13028,9 +13041,16 @@ function saveJSON(key, val){
 let students = [];
 let attendance = [];
 
-/* ---------- Nivel educativo (primaria/secundaria): grado y grupo dinámicos ---------- */
-const CK_GRADOS_POR_NIVEL = { primaria: ['1°','2°','3°','4°','5°','6°'], secundaria: ['1°','2°','3°'] };
-const CK_GRUPOS_POR_NIVEL = { primaria: ['A','B','C','D'], secundaria: ['A','B','C','D','E','F'] };
+/* ---------- Nivel educativo (primaria/secundaria): grado y grupo dinámicos ----------
+   "checkin" es un pseudo-nivel: la lista propia de una cuenta que SOLO tiene
+   CheckIn Kids (sin Primaria ni Secundaria), totalmente separada de esos dos. */
+const CK_GRADOS_POR_NIVEL = { primaria: ['1°','2°','3°','4°','5°','6°'], secundaria: ['1°','2°','3°'], checkin: ['1°','2°','3°','4°','5°','6°'] };
+const CK_GRUPOS_POR_NIVEL = { primaria: ['A','B','C','D'], secundaria: ['A','B','C','D','E','F'], checkin: ['A','B','C','D'] };
+function ckNivelLabel(nivel, corto){
+  if (nivel === 'secundaria') return corto ? 'Sec.' : 'Secundaria';
+  if (nivel === 'checkin') return corto ? '' : 'Lista propia';
+  return corto ? 'Prim.' : 'Primaria';
+}
 function updateNivelOptions(prefix){
   const nivel = document.getElementById(prefix+'Nivel').value;
   const gradeSel = document.getElementById(prefix+'Grade');
@@ -13038,6 +13058,22 @@ function updateNivelOptions(prefix){
   const curGrade = gradeSel.value, curGroup = groupSel.value;
   gradeSel.innerHTML = CK_GRADOS_POR_NIVEL[nivel].map(g=>`<option${g===curGrade?' selected':''}>${g}</option>`).join('');
   groupSel.innerHTML = CK_GRUPOS_POR_NIVEL[nivel].map(g=>`<option${g===curGroup?' selected':''}>${g}</option>`).join('');
+}
+
+// Limita el selector de "Nivel educativo" (en Registro nuevo y en Editar alumno)
+// a solo los niveles a los que esta cuenta tiene acceso. Agregar un alumno de un
+// nivel al que no se tiene acceso escribiría (o intentaría escribir) directo en
+// el nodo compartido de Primaria/Secundaria, lo cual las reglas de Firebase ya
+// no permiten para esa cuenta.
+function ckPopulateNivelSelect(selectId, preferido){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  const disponibles = ckNivelesDisponibles();
+  const labels = { primaria: 'Primaria', secundaria: 'Secundaria', checkin: 'General' };
+  const usar = disponibles.length ? disponibles : ['primaria'];
+  const valor = usar.includes(preferido) ? preferido : usar[0];
+  sel.innerHTML = usar.map(n => `<option value="${n}"${n===valor?' selected':''}>${labels[n]}</option>`).join('');
+  sel.disabled = usar.length <= 1;
 }
 
 /* ---------- Selector de nivel + grado + grupo (Escáner y Alumnos) ----------
@@ -13048,9 +13084,38 @@ function updateNivelOptions(prefix){
    los grados; Secundaria se ve por grado (1°/2°/3°) y grupo (A-F), o
    también puede verse en una sola lista completa. */
 const ckFilters = {
-  scan:    { nivel: 'primaria', grado: null, grupo: null },
-  alumnos: { nivel: 'primaria', grado: null, grupo: null }
+  scan:      { nivel: 'primaria', grado: null, grupo: null },
+  alumnos:   { nivel: 'primaria', grado: null, grupo: null },
+  entradas:  { nivel: 'primaria' },
+  enPlantel: { nivel: 'primaria' }
 };
+
+// Niveles a los que esta cuenta tiene acceso (se llenan al iniciar sesión, según
+// accesoPrimaria/accesoSecundaria en su perfil). Un admin siempre tiene ambos.
+let ckAccesoPrimaria = true;
+let ckAccesoSecundaria = true;
+// Cuenta SOLO CheckIn Kids (sin Primaria ni Secundaria): usa su propia lista de
+// alumnos, totalmente separada de Primaria/Secundaria (nodo "checkinStudents"),
+// en vez de los alumnos compartidos con Sistema Escolar.
+let ckModoSoloCheckin = false;
+function ckNivelesDisponibles(){
+  if (ckModoSoloCheckin) return ['checkin'];
+  const arr = [];
+  if (ckAccesoPrimaria) arr.push('primaria');
+  if (ckAccesoSecundaria) arr.push('secundaria');
+  return arr;
+}
+// Ajusta el nivel activo de cada pantalla al primer nivel disponible, por si la
+// cuenta solo tiene Secundaria (para que no se quede mostrando "Primaria" vacío).
+function ckAjustarNivelesAlAcceso(){
+  const disponibles = ckNivelesDisponibles();
+  if (disponibles.length === 0) return;
+  Object.keys(ckFilters).forEach(scope => {
+    if (!disponibles.includes(ckFilters[scope].nivel)) {
+      ckFilters[scope].nivel = disponibles[0];
+    }
+  });
+}
 
 function ckFilterStudents(list, f){
   return list.filter(s=>{
@@ -13063,7 +13128,7 @@ function ckFilterStudents(list, f){
 }
 
 function ckFilterLabel(f){
-  const nivelTxt = f.nivel === 'secundaria' ? 'Secundaria' : 'Primaria';
+  const nivelTxt = ckNivelLabel(f.nivel);
   if(!f.grado) return `${nivelTxt} · todos los grados`;
   if(!f.grupo) return `${nivelTxt} · ${f.grado} · todos los grupos`;
   return `${nivelTxt} · ${f.grado} ${f.grupo}`;
@@ -13071,13 +13136,19 @@ function ckFilterLabel(f){
 
 function ckClassSelectorHtml(scope){
   const f = ckFilters[scope];
+  const disponibles = ckNivelesDisponibles();
   const grados = CK_GRADOS_POR_NIVEL[f.nivel];
   const grupos = CK_GRUPOS_POR_NIVEL[f.nivel];
 
   let html = '<div class="cs-row">';
   html += '<span class="cs-label">Nivel educativo</span>';
-  html += `<button type="button" class="chip${f.nivel==='primaria'?' active':''}" onclick="ckSetNivel('${scope}','primaria')">Primaria</button>`;
-  html += `<button type="button" class="chip${f.nivel==='secundaria'?' active':''}" onclick="ckSetNivel('${scope}','secundaria')">Secundaria</button>`;
+  if (disponibles.length > 1) {
+    if (disponibles.includes('primaria')) html += `<button type="button" class="chip${f.nivel==='primaria'?' active':''}" onclick="ckSetNivel('${scope}','primaria')">Primaria</button>`;
+    if (disponibles.includes('secundaria')) html += `<button type="button" class="chip${f.nivel==='secundaria'?' active':''}" onclick="ckSetNivel('${scope}','secundaria')">Secundaria</button>`;
+  } else {
+    // Solo tiene acceso a un nivel: se muestra fijo, sin botones para cambiarlo.
+    html += `<span class="chip active" style="cursor:default;">${ckNivelLabel(f.nivel)}</span>`;
+  }
   html += '</div>';
 
   html += '<div class="cs-row">';
@@ -13106,17 +13177,36 @@ function ckClassSelectorHtml(scope){
   return html;
 }
 
+// Toggle simple (solo Primaria/Secundaria, sin grado/grupo) para las pantallas de
+// actividad del día (Entradas y En Plantel): no tiene sentido dividir por grupo
+// ahí, pero sí por nivel, igual que en Escáner y Alumnos.
+function ckNivelToggleHtml(scope){
+  const f = ckFilters[scope];
+  const disponibles = ckNivelesDisponibles();
+  if (disponibles.length <= 1) return ''; // solo un nivel: no hace falta mostrar nada
+  let html = '<div class="cs-row">';
+  html += '<span class="cs-label">Nivel educativo</span>';
+  if (disponibles.includes('primaria')) html += `<button type="button" class="chip${f.nivel==='primaria'?' active':''}" onclick="ckSetNivel('${scope}','primaria')">Primaria</button>`;
+  if (disponibles.includes('secundaria')) html += `<button type="button" class="chip${f.nivel==='secundaria'?' active':''}" onclick="ckSetNivel('${scope}','secundaria')">Secundaria</button>`;
+  html += '</div>';
+  return html;
+}
+
 function ckRenderClassSelector(scope){
-  const containerId = scope === 'scan' ? 'scanClassSelector' : 'alumnosClassSelector';
-  const el = document.getElementById(containerId);
+  const containerId = scope === 'scan' ? 'scanClassSelector'
+    : scope === 'alumnos' ? 'alumnosClassSelector'
+    : scope === 'entradas' ? 'entradasClassSelector'
+    : scope === 'enPlantel' ? 'enPlantelClassSelector'
+    : null;
+  const el = containerId && document.getElementById(containerId);
   if(!el) return;
-  el.innerHTML = ckClassSelectorHtml(scope);
+  el.innerHTML = (scope === 'entradas' || scope === 'enPlantel') ? ckNivelToggleHtml(scope) : ckClassSelectorHtml(scope);
 }
 
 function ckSetNivel(scope, nivel){
   ckFilters[scope].nivel = nivel;
-  ckFilters[scope].grado = null;
-  ckFilters[scope].grupo = null;
+  if (ckFilters[scope].grado !== undefined) ckFilters[scope].grado = null;
+  if (ckFilters[scope].grupo !== undefined) ckFilters[scope].grupo = null;
   ckRenderClassSelector(scope);
   ckOnFilterChanged(scope);
 }
@@ -13133,6 +13223,8 @@ function ckSetGrupo(scope, grupo){
 }
 function ckOnFilterChanged(scope){
   if(scope === 'alumnos') renderAlumnos();
+  if(scope === 'entradas') renderEntradas();
+  if(scope === 'enPlantel') renderEnPlantelList();
 }
 
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
@@ -13155,13 +13247,26 @@ firebase.initializeApp(CK_FIREBASE_CONFIG);
 const ckAuth = firebase.auth();
 const ckDb = firebase.database();
 let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
+let ckCheckinStudentsRef = null; // lista propia, solo para cuentas SOLO CheckIn Kids
 let ckSyncReady = false;
 function ckDbBase(uid, isAdmin) {
   return isAdmin ? CK_DB_ROOT_ADMIN : ('usuarios/' + uid);
 }
 function ckBindRefs(base) {
-  ckStudentsRef = ckDb.ref(base + '/students');
-  ckSecStudentsRef = ckDb.ref(base + '/secStudents');
+  if (ckModoSoloCheckin) {
+    // Sin Primaria ni Secundaria: nada de 'students'/'secStudents' (las reglas de
+    // Firebase ya se lo bloquean); usa su propia lista, aparte.
+    ckStudentsRef = null;
+    ckSecStudentsRef = null;
+    ckCheckinStudentsRef = ckDb.ref(base + '/checkinStudents');
+  } else {
+    // Con las reglas nuevas de Firebase, leer 'students' sin accesoPrimaria (o
+    // 'secStudents' sin accesoSecundaria) da error de permisos. Por eso solo se
+    // enlaza/suscribe la rama a la que esta cuenta sí tiene acceso.
+    ckStudentsRef = ckAccesoPrimaria ? ckDb.ref(base + '/students') : null;
+    ckSecStudentsRef = ckAccesoSecundaria ? ckDb.ref(base + '/secStudents') : null;
+    ckCheckinStudentsRef = null;
+  }
   ckAttendanceRef = ckDb.ref(base + '/checkinAttendance');
 }
 
@@ -13199,47 +13304,74 @@ function ckFromFirebaseStudent(id, v, nivel){
 
 let ckPriStudents = [];
 let ckSecStudentsArr = [];
+let ckCheckinOwnStudents = []; // lista propia de una cuenta SOLO CheckIn Kids
 function ckMergeStudents(){
-  students = [...ckPriStudents, ...ckSecStudentsArr];
+  students = ckModoSoloCheckin ? [...ckCheckinOwnStudents] : [...ckPriStudents, ...ckSecStudentsArr];
   renderAll();
 }
 
 function ckStartSync(){
   ckSyncReady = true;
-  ckStudentsRef.on('value', snap => {
-    const val = snap.val() || {};
-    ckPriStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'primaria'));
-    // A los alumnos creados desde Sistema Escolar se les genera el
-    // código QR (token) a partir de su matrícula, no de un folio
-    // autoincrementable (que se duplicaba entre dispositivos). Si aún
-    // no tienen matrícula capturada, se quedan sin QR hasta que se
-    // les agregue (se muestra "Falta matrícula" en la interfaz).
-    Object.keys(val).forEach(id => {
-      const matricula = val[id].matricula;
-      if(matricula && (val[id].folio !== matricula || !val[id].token)){
-        const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
-        ckStudentsRef.child(id).update({ folio: matricula, token });
-      }
-    });
-    ckMergeStudents();
-  });
-  ckSecStudentsRef.on('value', snap => {
-    const val = snap.val() || {};
-    ckSecStudentsArr = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'secundaria'));
-    Object.keys(val).forEach(id => {
-      const matricula = val[id].matricula;
-      if(matricula && (val[id].folio !== matricula || !val[id].token)){
-        const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
-        ckSecStudentsRef.child(id).update({ folio: matricula, token });
-      }
-    });
-    ckMergeStudents();
-  });
+  if (ckModoSoloCheckin) {
+    if (ckCheckinStudentsRef) {
+      ckCheckinStudentsRef.on('value', snap => {
+        const val = snap.val() || {};
+        ckCheckinOwnStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'checkin'));
+        Object.keys(val).forEach(id => {
+          const matricula = val[id].matricula;
+          if(matricula && (val[id].folio !== matricula || !val[id].token)){
+            const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
+            ckCheckinStudentsRef.child(id).update({ folio: matricula, token });
+          }
+        });
+        ckMergeStudents();
+      }, () => { ckCheckinOwnStudents = []; ckMergeStudents(); });
+    }
+  } else {
+    if (ckStudentsRef) {
+      ckStudentsRef.on('value', snap => {
+        const val = snap.val() || {};
+        ckPriStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'primaria'));
+        // A los alumnos creados desde Sistema Escolar se les genera el
+        // código QR (token) a partir de su matrícula, no de un folio
+        // autoincrementable (que se duplicaba entre dispositivos). Si aún
+        // no tienen matrícula capturada, se quedan sin QR hasta que se
+        // les agregue (se muestra "Falta matrícula" en la interfaz).
+        Object.keys(val).forEach(id => {
+          const matricula = val[id].matricula;
+          if(matricula && (val[id].folio !== matricula || !val[id].token)){
+            const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
+            ckStudentsRef.child(id).update({ folio: matricula, token });
+          }
+        });
+        ckMergeStudents();
+      }, () => { ckPriStudents = []; ckMergeStudents(); });
+    } else {
+      ckPriStudents = [];
+    }
+    if (ckSecStudentsRef) {
+      ckSecStudentsRef.on('value', snap => {
+        const val = snap.val() || {};
+        ckSecStudentsArr = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'secundaria'));
+        Object.keys(val).forEach(id => {
+          const matricula = val[id].matricula;
+          if(matricula && (val[id].folio !== matricula || !val[id].token)){
+            const token = `${QR_PREFIX}|${matricula}|${randomSuffix()}`;
+            ckSecStudentsRef.child(id).update({ folio: matricula, token });
+          }
+        });
+        ckMergeStudents();
+      }, () => { ckSecStudentsArr = []; ckMergeStudents(); });
+    } else {
+      ckSecStudentsArr = [];
+    }
+  }
   ckAttendanceRef.on('value', snap => {
     const val = snap.val() || {};
     attendance = Object.keys(val).map(id => ({ id, ...val[id] }));
     renderAll();
   });
+  ckMergeStudents();
 }
 
 ckAuth.onAuthStateChanged(async user => {
@@ -13254,6 +13386,10 @@ ckAuth.onAuthStateChanged(async user => {
     const adminSnap = await ckDb.ref('admins/' + user.uid).once('value');
     isAdmin = adminSnap.val() === true;
   } catch(e) { /* si aún no hay reglas configuradas, se sigue como no-admin */ }
+  if (isAdmin) {
+    ckAccesoPrimaria = true;
+    ckAccesoSecundaria = true;
+  }
   try {
     const perfilSnap = await ckDb.ref('perfiles/' + user.uid).once('value');
     const perfil = perfilSnap.val();
@@ -13263,7 +13399,27 @@ ckAuth.onAuthStateChanged(async user => {
       window.location.href = 'index.html';
       return;
     }
+    if (!isAdmin && perfil) {
+      // Mismo criterio permisivo que en Sistema Escolar: acceso salvo que esté
+      // explícitamente en "false" (para no afectar cuentas creadas antes de
+      // que existiera este control).
+      ckAccesoPrimaria = perfil.accesoPrimaria !== false;
+      ckAccesoSecundaria = perfil.accesoSecundaria !== false;
+      const ckAccesoCheckin = perfil.accesoCheckin !== false;
+      if (!ckAccesoCheckin) {
+        // No debería poder llegar aquí, pero por si acaso: sin acceso a CheckIn
+        // Kids, se regresa a la interfaz principal.
+        window.location.href = 'index.html';
+        return;
+      }
+    }
   } catch(e) { /* cuenta sin perfil = administrador original */ }
+  // Cuenta SOLO CheckIn Kids: ni Primaria ni Secundaria. Usa su propia lista de
+  // alumnos en vez de la compartida con Sistema Escolar.
+  ckModoSoloCheckin = !isAdmin && !ckAccesoPrimaria && !ckAccesoSecundaria;
+  ckAjustarNivelesAlAcceso();
+  ckPopulateNivelSelect('inNivel', 'primaria');
+  updateNivelOptions('in');
   ckBindRefs(ckDbBase(user.uid, isAdmin));
   ckStartSync();
 });
@@ -13510,6 +13666,7 @@ function registerStudent(){
     document.getElementById(id).value='';
   });
   document.getElementById('inNivel').value = 'primaria';
+  ckPopulateNivelSelect('inNivel', 'primaria');
   updateNivelOptions('in');
   regPickupList = [];
   renderPickupEditor('register');
@@ -13529,6 +13686,7 @@ function openEditModal(studentId){
   document.getElementById('editStudentId').value = s.id;
   document.getElementById('editName').value = s.name;
   document.getElementById('editNivel').value = s.nivel || 'primaria';
+  ckPopulateNivelSelect('editNivel', s.nivel || 'primaria');
   updateNivelOptions('edit');
   document.getElementById('editGrade').value = s.grade;
   document.getElementById('editGroup').value = s.group;
@@ -13616,7 +13774,7 @@ function showCredential(student){
     <img src="${dataUrl}" class="qr" alt="QR ${student.folio||'sin matrícula'}">
     <div class="cname">${escapeHtml(student.name)}</div>
     <div class="cfolio">${student.folio ? 'MATRÍCULA ' + student.folio : '⚠ FALTA MATRÍCULA'}</div>
-    <div class="cmeta">${student.nivel==='secundaria'?'Secundaria':'Primaria'} · ${student.grade} ${student.group} · ${escapeHtml(primaryContactName(student))}</div>
+    <div class="cmeta">${ckNivelLabel(student.nivel)} · ${student.grade} ${student.group} · ${escapeHtml(primaryContactName(student))}</div>
   `;
   box.dataset.dataUrl = dataUrl;
   box.dataset.folio = student.folio;
@@ -13866,7 +14024,7 @@ function reportScanResult(res){
       (s.nivel||'primaria') !== f.nivel || s.grade !== f.grado || (f.grupo && s.group !== f.grupo)
     );
     if(mismatch){
-      const suyo = `${(s.nivel==='secundaria')?'Secundaria':'Primaria'} · ${s.grade} ${s.group}`;
+      const suyo = `${ckNivelLabel(s.nivel)} · ${s.grade} ${s.group}`;
       resultEl.textContent += ` (⚠ es de ${suyo})`;
       showToast(`${res.msg} — ⚠ ${s.name} es de ${suyo}, no de ${ckFilterLabel(f)}`, 'err');
     } else {
@@ -13940,11 +14098,13 @@ function studentMatchesQuery(s, q){
 }
 
 function renderEntradas(){
+  ckRenderClassSelector('entradas');
   const q = (document.getElementById('entradasSearch').value || '').toLowerCase();
   const today = todayStr();
+  const nivel = ckFilters.entradas.nivel;
   const todays = attendance.filter(a => a.date===today)
     .map(a => ({...a, student: students.find(s=>s.id===a.studentId)}))
-    .filter(a => a.student && studentMatchesQuery(a.student, q));
+    .filter(a => a.student && (a.student.nivel||'primaria') === nivel && studentMatchesQuery(a.student, q));
 
   const body = document.getElementById('entradasBody');
   const empty = document.getElementById('entradasEmpty');
@@ -13955,7 +14115,7 @@ function renderEntradas(){
     <tr>
       <td class="folio">${a.student.folio}</td>
       <td><div class="name-cell">${avatarHtml(a.student)}<span><b>${escapeHtml(a.student.name)}</b>${a.student.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
-      <td>${a.student.nivel==='secundaria'?'Sec.':'Prim.'} ${a.student.grade} ${a.student.group}</td>
+      <td>${ckNivelLabel(a.student.nivel, true)} ${a.student.grade} ${a.student.group}</td>
       <td>${fmtTime(a.checkin)}</td>
       <td>${a.checkout ? fmtTime(a.checkout) : '—'}</td>
       <td>${a.checkout ? '<span class="badge out">Salió</span>' : '<span class="badge in">En plantel</span>'}</td>
@@ -13987,11 +14147,13 @@ function openEnPlantelModal(){
   document.getElementById('enPlantelModal').classList.add('show');
 }
 function renderEnPlantelList(){
+  ckRenderClassSelector('enPlantel');
   const q = (document.getElementById('enPlantelSearch').value || '').toLowerCase();
   const today = todayStr();
+  const nivel = ckFilters.enPlantel.nivel;
   const inNow = attendance.filter(a => a.date===today && !a.checkout)
     .map(a => ({...a, student: students.find(s=>s.id===a.studentId)}))
-    .filter(a => a.student && studentMatchesQuery(a.student, q))
+    .filter(a => a.student && (a.student.nivel||'primaria') === nivel && studentMatchesQuery(a.student, q))
     .sort((a,b) => new Date(a.checkin) - new Date(b.checkin));
 
   const body = document.getElementById('enPlantelBody');
@@ -14002,7 +14164,7 @@ function renderEnPlantelList(){
   body.innerHTML = inNow.map(a => `
     <tr>
       <td><div class="name-cell">${avatarHtml(a.student)}<span><b>${escapeHtml(a.student.name)}</b>${a.student.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
-      <td>${a.student.nivel==='secundaria'?'Sec.':'Prim.'} ${a.student.grade} ${a.student.group}</td>
+      <td>${ckNivelLabel(a.student.nivel, true)} ${a.student.grade} ${a.student.group}</td>
       <td>${fmtTime(a.checkin)}</td>
       <td>${fmtElapsed(a.checkin)}</td>
       <td><button class="btn btn-sage btn-sm" onclick="manualCheckout('${a.id}'); renderEnPlantelList();">Salida</button></td>
@@ -14016,7 +14178,7 @@ function ckStudentRowHtml(s){
     <tr>
       <td class="folio">${s.folio || '<span style="color:var(--coral);">⚠ falta</span>'}</td>
       <td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
-      <td>${s.nivel==='secundaria'?'Sec.':'Prim.'} ${s.grade} ${s.group}</td>
+      <td>${ckNivelLabel(s.nivel, true)} ${s.grade} ${s.group}</td>
       <td>${escapeHtml(primaryContactName(s))}</td>
       <td class="mono-small">${escapeHtml(s.curp||'—')}</td>
       <td>${escapeHtml(contactPhone)}</td>
@@ -14059,7 +14221,7 @@ function renderAlumnos(){
     list.forEach(s=>{
       if(s.grade !== lastGrade){
         lastGrade = s.grade;
-        const nivelTxt = f.nivel === 'secundaria' ? 'Secundaria' : 'Primaria';
+        const nivelTxt = ckNivelLabel(f.nivel);
         html += `<tr class="group-row"><td colspan="7">${nivelTxt} · ${s.grade}</td></tr>`;
       }
       html += ckStudentRowHtml(s);

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bitácora - Sistema Escolar</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icons/icon-se-192.png">
+<link rel="apple-touch-icon" href="icons/icon-se-192.png">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; max-width: 100vw; }
+body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #1f2937; }
+.hidden { display: none !important; }
+.center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg,#dbeafe,#e0e7ff); }
+.card-box { background: #fff; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 32px; width: 100%; max-width: 380px; text-align: center; }
+.logo-box { width: 64px; height: 64px; border-radius: 16px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 26px; margin: 0 auto 16px; }
+h1 { font-size: 1.2em; margin-bottom: 4px; }
+.sub { color: #6b7280; font-size: 0.85em; margin-bottom: 22px; }
+.userline { font-size: 0.78em; color: #6b7280; background: #f3f4f6; border-radius: 999px; padding: 6px 14px; display: inline-block; margin-bottom: 20px; }
+.btn { display: block; width: 100%; padding: 13px; border: none; border-radius: 12px; font-weight: 700; font-size: 0.95em; cursor: pointer; margin-bottom: 10px; }
+.btn-blue { background: linear-gradient(135deg,#2563eb,#4f46e5); color: #fff; box-shadow: 0 8px 18px rgba(37,99,235,0.3); }
+.btn-ghost { background: #f3f4f6; color: #374151; }
+.hint { font-size: 0.72em; color: #9ca3af; margin-top: 16px; line-height: 1.4; }
+.loading { text-align: center; color: #6b7280; font-size: 0.9em; }
+.spinner { width: 28px; height: 28px; border: 3px solid #e0e7ff; border-top-color: #4f46e5; border-radius: 50%; margin: 0 auto 12px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app" class="center-screen">
+  <div class="loading"><div class="spinner"></div>Cargando...</div>
+</div>
+
+<script>
+// Configuración fija de Firebase (misma que index.html)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+const ADMIN_EMAIL = 'educacion@chavarria.edu.com';
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db = firebase.database();
+const app = document.getElementById('app');
+
+function renderLoading() {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando...</div>';
+}
+
+function renderHome(email, perfil) {
+  const inicial = email.slice(0, 2).toUpperCase();
+  app.innerHTML = `
+    <div class="card-box">
+      <div class="logo-box">${inicial}</div>
+      <h1>Bitácora Escolar</h1>
+      <p class="sub">${perfil && perfil.nombre ? 'Hola, ' + perfil.nombre : 'Bienvenido(a)'}</p>
+      <div class="userline">${email}</div>
+      <button class="btn btn-blue" onclick="entrarABitacora()">📋 Entrar a Bitácora</button>
+      <button class="btn btn-ghost" onclick="cerrarSesion()">Cerrar sesión</button>
+      <p class="hint">Esta cuenta solo tiene acceso al módulo de Bitácora. Si necesitas acceso a Primaria, Secundaria o CheckIn Kids, pídeselo al administrador del sistema.</p>
+    </div>`;
+}
+
+function entrarABitacora() {
+  try {
+    // Esta cuenta no tiene módulos de Primaria/Secundaria, así que no hay datos de
+    // alumnos que puentear. Se limpia cualquier rastro de una sesión anterior en este
+    // mismo dispositivo y se marca explícitamente que NO tiene otros accesos, para que
+    // el botón "Volver al Sistema Escolar" dentro de bitacora.html sepa que debe
+    // regresar aquí (con confirmación) en vez de mandarla a index.html.
+    localStorage.removeItem('bitacora_puente_datos');
+    localStorage.setItem('bitacora_nivel_sugerido', 'Primaria');
+    localStorage.setItem('bitacora_permisos', JSON.stringify({ primaria: false, secundaria: false, checkin: false, soloBitacora: true }));
+  } catch (e) {}
+  window.location.href = 'bitacora.html';
+}
+
+function cerrarSesion() {
+  auth.signOut().then(() => { window.location.href = 'index.html'; });
+}
+
+auth.onAuthStateChanged(async (u) => {
+  if (!u) { window.location.href = 'index.html'; return; }
+  renderLoading();
+  let perfil = null;
+  try {
+    const snap = await db.ref('perfiles/' + u.uid).once('value');
+    perfil = snap.val();
+  } catch (e) { /* cuenta antigua sin perfil = comportamiento por defecto en index.html */ }
+
+  // Cualquier condición especial (cuenta deshabilitada/eliminada, términos pendientes,
+  // cambio de contraseña obligatorio, o ser el administrador) la resuelve index.html;
+  // esta página nunca duplica esa lógica, solo redirige de vuelta.
+  const necesitaIndex =
+    (u.email && u.email.toLowerCase() === ADMIN_EMAIL) ||
+    (perfil && (perfil.eliminado || perfil.deshabilitado || perfil.bloqueadoPorScreenshot)) ||
+    (perfil && perfil.aceptoTerminos !== true) ||
+    (perfil && perfil.mustChangePassword);
+  if (necesitaIndex) { window.location.href = 'index.html'; return; }
+
+  const esSoloBitacora = !!perfil && perfil.accesoBitacora === true &&
+    perfil.accesoPrimaria !== true && perfil.accesoSecundaria !== true && perfil.accesoCheckin !== true;
+
+  if (!esSoloBitacora) {
+    // Esta cuenta tiene otros módulos (o ninguno acceso a Bitácora): su lugar es la
+    // interfaz principal de index.html, no esta página.
+    window.location.href = 'index.html';
+    return;
+  }
+
+  renderHome(u.email, perfil);
+});
+</script>
+</body>
+</html>

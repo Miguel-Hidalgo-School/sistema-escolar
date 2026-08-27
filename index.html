@@ -330,6 +330,41 @@ function initFirebase() {
 firebase.initializeApp(state.fbConfig);
 auth = firebase.auth();
 db = firebase.database();
+// Todo lo que debe pasar justo después de que una cuenta ya tiene los términos
+// aceptados: saber si es admin, si debe forzar cambio de contraseña, si debe
+// redirigirse a Bitácora por ser cuenta "solo-Bitácora", y conectar los listeners
+// de Firebase. Se usa tanto en un login normal (términos ya aceptados de antes)
+// como justo después de aceptar los términos por primera vez, para que la cuenta
+// NUNCA se quede varada en una pantalla sin avanzar.
+async function continuarSesionPostTerminos() {
+// Solo la cuenta oficial del administrador (por correo) puede tener privilegios
+// de administrador; ninguna otra cuenta puede auto-otorgárselos.
+const email = (state.user && state.user.email) || (auth.currentUser && auth.currentUser.email) || '';
+if (email && email.toLowerCase() === ADMIN_EMAIL) {
+state.isAdmin = true;
+try { await db.ref('admins/' + currentUid).set(true); } catch (e2) { /* las reglas ya lo protegen */ }
+} else {
+try {
+const adminSnap = await db.ref('admins/' + currentUid).once('value');
+state.isAdmin = adminSnap.val() === true;
+} catch (e) { state.isAdmin = false; }
+}
+if (state.perfilActual && state.perfilActual.mustChangePassword) {
+state.forcePasswordChange = true;
+}
+// Redirección post-login: si la cuenta SOLO tiene permiso de Bitácora (nada de
+// Primaria/Secundaria/CheckIn Kids), jamás debe ver el selector principal ni las
+// tarjetas de esos 3 sistemas. Se manda directo a bitacora-home.html, su única
+// puerta de entrada/salida. Esto se hace después de resolver el cambio de
+// contraseña obligatorio (si aplica) para no interrumpir ese flujo.
+if (!state.forcePasswordChange && esSoloBitacora()) {
+window.location.href = 'bitacora-home.html';
+return true; // avisa al que llamó que ya se está navegando fuera de esta página
+}
+bindRefs();
+if (!state.forcePasswordChange) subscribeData();
+return false;
+}
 auth.onAuthStateChanged(async u => {
 state.user = u;
 state.authError = '';
@@ -369,22 +404,7 @@ return; // Bloquea acceso hasta que acepte
 }
 state.aceptoTerminos = true;
 detectarIntentosScreenshot(); // Activa detección post-login
-// Solo la cuenta oficial del administrador (por correo) puede tener privilegios
-// de administrador; ninguna otra cuenta puede auto-otorgárselos.
-if (u.email && u.email.toLowerCase() === ADMIN_EMAIL) {
-state.isAdmin = true;
-try { await db.ref('admins/' + currentUid).set(true); } catch (e2) { /* las reglas ya lo protegen */ }
-} else {
-try {
-const adminSnap = await db.ref('admins/' + currentUid).once('value');
-state.isAdmin = adminSnap.val() === true;
-} catch (e) { state.isAdmin = false; }
-}
-if (state.perfilActual && state.perfilActual.mustChangePassword) {
-state.forcePasswordChange = true;
-}
-bindRefs();
-if (!state.forcePasswordChange) subscribeData();
+await continuarSesionPostTerminos();
 } else {
 currentUid = null;
 unsubscribeData();
@@ -394,6 +414,15 @@ render();
 render();
 }
 function subscribeData() {
+// Con las reglas de Firebase ahora exigiendo el permiso exacto (accesoPrimaria,
+// accesoSecundaria, accesoCheckin) para cada rama de datos, solo nos suscribimos a
+// lo que la cuenta realmente tiene permitido. Así evitamos errores de "permiso
+// insuficiente" para quienes, por diseño, no deben ver esa información.
+const puedePrimaria = tieneAccesoPrimaria();
+const puedeSecundaria = tieneAccesoSecundaria();
+const puedeCheckin = tieneAccesoCheckin();
+
+if (puedePrimaria) {
 studentsRef.on('value', snap => {
 const val = snap.val() || {};
 state.students = Object.keys(val).map(id => ({ id, ...val[id] }));
@@ -402,7 +431,14 @@ render();
 schoolRef.on('value', snap => {
 if (snap.val()) state.schoolInfo = snap.val();
 render();
-});
+}, () => {});
+formativosPriRef.on('value', snap => { state.formativosPri = snap.val() || {}; render(); }, () => {});
+tareasPriRef.on('value', snap => { state.tareasPri = snap.val() || {}; render(); }, () => {});
+disciplinaPriRef.on('value', snap => { state.disciplinaPri = snap.val() || {}; render(); }, () => {});
+sumativaConfigPriRef.on('value', snap => { state.sumativaConfigPri = snap.val() || defaultSumativaConfig(); render(); }, () => {});
+sumativaCalifPriRef.on('value', snap => { state.sumativaCalifPri = snap.val() || {}; render(); }, () => {});
+}
+if (puedeSecundaria) {
 secStudentsRef.on('value', snap => {
 const val = snap.val() || {};
 state.secStudents = Object.keys(val).map(id => ({ id, ...val[id] }));
@@ -411,23 +447,23 @@ render();
 secSchoolRef.on('value', snap => {
 if (snap.val()) state.secSchoolInfo = snap.val();
 render();
-});
-formativosPriRef.on('value', snap => { state.formativosPri = snap.val() || {}; render(); }, () => {});
+}, () => {});
 formativosSecRef.on('value', snap => { state.formativosSec = snap.val() || {}; render(); }, () => {});
-tareasPriRef.on('value', snap => { state.tareasPri = snap.val() || {}; render(); }, () => {});
 tareasSecRef.on('value', snap => { state.tareasSec = snap.val() || {}; render(); }, () => {});
-disciplinaPriRef.on('value', snap => { state.disciplinaPri = snap.val() || {}; render(); }, () => {});
 disciplinaSecRef.on('value', snap => { state.disciplinaSec = snap.val() || {}; render(); }, () => {});
-sumativaConfigPriRef.on('value', snap => { state.sumativaConfigPri = snap.val() || defaultSumativaConfig(); render(); }, () => {});
 sumativaConfigSecRef.on('value', snap => { state.sumativaConfigSec = snap.val() || defaultSumativaConfig(); render(); }, () => {});
-sumativaCalifPriRef.on('value', snap => { state.sumativaCalifPri = snap.val() || {}; render(); }, () => {});
 sumativaCalifSecRef.on('value', snap => { state.sumativaCalifSec = snap.val() || {}; render(); }, () => {});
+}
+if (puedePrimaria || puedeSecundaria) {
 sumativaPeriodosRef.on('value', snap => { state.sumativaPeriodos = snap.val() || defaultSumativaPeriodos(); render(); }, () => {});
+}
+if (puedeCheckin) {
 checkinAttendanceRef.on('value', snap => {
 const val = snap.val() || {};
 state.checkinAttendance = Object.keys(val).map(id => ({ id, ...val[id] }));
 render();
 }, () => {});
+}
 }
 function unsubscribeData() {
 if (studentsRef) studentsRef.off();
@@ -563,6 +599,7 @@ return;
 const accesoPrimaria = !!document.getElementById('newUserAccesoPrimaria').checked;
 const accesoSecundaria = !!document.getElementById('newUserAccesoSecundaria').checked;
 const accesoCheckin = !!document.getElementById('newUserAccesoCheckin').checked;
+const accesoBitacora = !!document.getElementById('newUserAccesoBitacora').checked;
 const elGestionarUsuarios = document.getElementById('newUserPuedeGestionar');
 // Solo el administrador global puede otorgar el permiso de gestionar usuarios;
 // un usuario delegado nunca puede crear más sub-administradores.
@@ -594,7 +631,7 @@ tempPasswordActual: tempPass,
 creadoPor: currentUid,
 creadoEn: new Date().toISOString(),
 espacioUid,
-accesoPrimaria, accesoSecundaria, accesoCheckin,
+accesoPrimaria, accesoSecundaria, accesoCheckin, accesoBitacora,
 puedeGestionarUsuarios,
 deshabilitado: false,
 eliminado: false
@@ -615,6 +652,7 @@ document.getElementById('newUserCorreoContacto').value = '';
 document.getElementById('newUserAccesoPrimaria').checked = false;
 document.getElementById('newUserAccesoSecundaria').checked = false;
 document.getElementById('newUserAccesoCheckin').checked = false;
+document.getElementById('newUserAccesoBitacora').checked = false;
 if (elGestionarUsuarios) elGestionarUsuarios.checked = false;
 cargarListaUsuarios();
 } catch (e) {
@@ -1076,6 +1114,19 @@ render();
 function tieneAccesoPrimaria() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoPrimaria !== false; }
 function tieneAccesoSecundaria() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoSecundaria !== false; }
 function tieneAccesoCheckin() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoCheckin !== false; }
+function tieneAccesoBitacora() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoBitacora !== false; }
+// Un usuario "solo-Bitácora" es aquel que tiene acceso a Bitácora pero NINGÚN otro
+// módulo (ni Primaria, ni Secundaria, ni CheckIn Kids). A estos usuarios nunca se les
+// debe mostrar el selector de nivel principal (para que jamás, ni por error, entren a
+// Primaria/Secundaria/CheckIn Kids ni al panel de gestión de usuarios); en su lugar se
+// les manda directo a bitacora-home.html.
+function esSoloBitacora() {
+return !state.isAdmin && !!state.perfilActual && state.perfilActual.accesoBitacora === true &&
+!tieneAccesoPrimaria_estricto() && !tieneAccesoSecundaria_estricto() && !tieneAccesoCheckin_estricto();
+}
+function tieneAccesoPrimaria_estricto() { return state.perfilActual && state.perfilActual.accesoPrimaria === true; }
+function tieneAccesoSecundaria_estricto() { return state.perfilActual && state.perfilActual.accesoSecundaria === true; }
+function tieneAccesoCheckin_estricto() { return state.perfilActual && state.perfilActual.accesoCheckin === true; }
 function selectNivel(n) {
 if (n === 'primaria' && !tieneAccesoPrimaria()) return;
 if (n === 'secundaria' && !tieneAccesoSecundaria()) return;
@@ -1132,6 +1183,16 @@ localStorage.setItem('bitacora_puente_datos', JSON.stringify(puente));
 localStorage.setItem('bitacora_nivel_sugerido', nivel === 'secundaria' ? 'Secundaria' : 'Primaria');
 // Trigger promo video flag
 localStorage.setItem('bitacora_mostrar_promo', 'true');
+// Le dice a bitacora.html qué otros módulos tiene esta cuenta, para que su botón
+// "Volver al Sistema Escolar" sea inteligente: si tiene algo más que Bitácora, vuelve
+// a la interfaz principal (que ya filtra las tarjetas según sus permisos); si solo
+// tiene Bitácora, esta ruta nunca debería usarse (llegan por bitacora-home.html), pero
+// se guarda igual como respaldo.
+localStorage.setItem('bitacora_permisos', JSON.stringify({
+primaria: tieneAccesoPrimaria(),
+secundaria: tieneAccesoSecundaria(),
+checkin: tieneAccesoCheckin()
+}));
 } catch(e) {}
 window.location.href = 'bitacora.html';
 }
@@ -1297,9 +1358,16 @@ async function guardarAceptoTerminos() {
       fechaAceptoTerminos: new Date().toISOString(),
       ipAceptacion: 'navegador-detectado'
     });
+    if (!state.perfilActual) state.perfilActual = {};
+    state.perfilActual.aceptoTerminos = true;
     state.aceptoTerminos = true;
     state.mostrarModalTerminos = false;
-    render();
+    // Antes esto se quedaba aquí y la cuenta "avanzaba" a una pantalla sin datos
+    // conectados (o, en el caso de una cuenta solo-Bitácora, sin la redirección a
+    // bitacora-home.html). Ahora se completa el mismo proceso que ocurre en un
+    // login normal ya con los términos aceptados.
+    const yaNavego = await continuarSesionPostTerminos();
+    if (!yaNavego) render();
   } catch (e) {
     console.error('Error guardando aceptación de términos:', e);
     showToast('❌ No se pudo guardar tu aceptación (permisos de la base de datos). Avisa al administrador.');
@@ -1405,6 +1473,11 @@ if (state.mostrarModalTerminos) {
   return; // Detiene render aquí, no muestra nada más
 }
 if (state.forcePasswordChange) { app.innerHTML = renderTopbarSimple() + renderCambiarPassword(true); return; }
+// Red de seguridad: si en cualquier punto del ciclo de vida de la página (por ejemplo,
+// justo después de completar un cambio de contraseña obligatorio) resulta que la cuenta
+// es "solo-Bitácora", nunca se le debe pintar el selector principal ni ninguna otra
+// pantalla de este archivo — se manda de inmediato a su única puerta: bitacora-home.html.
+if (esSoloBitacora()) { window.location.href = 'bitacora-home.html'; return; }
 if (state.showCambiarPassword) { app.innerHTML = renderTopbarSimple() + renderCambiarPassword(false); return; }
 if (state.showUserAdmin) { app.innerHTML = renderTopbarSimple() + renderAdminUsuarios(); return; }
 if (!state.nivel) { app.innerHTML = renderTopbarSimple() + renderNivelSelector(); return; }
@@ -1522,7 +1595,7 @@ let html = `
 <main>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
 <p style="font-weight:700;font-size:1.15em;">${tituloScope}</p>
-<button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="closeUserAdmin()">← Volver a Bitácora</button>
+<button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="closeUserAdmin()">← Volver al inicio</button>
 </div>
 <div class="card">
 <p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
@@ -1534,7 +1607,9 @@ let html = `
 <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoPrimaria" type="checkbox"/> Primaria</label>
 <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoSecundaria" type="checkbox"/> Secundaria</label>
 <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoCheckin" type="checkbox"/> CheckIn Kids</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoBitacora" type="checkbox"/> Bitácora</label>
 ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserPuedeGestionar" type="checkbox"/> Puede gestionar sus propios usuarios (tendrá su propio botón "Gestionar usuarios")</label>` : ''}
+<p style="font-size:0.75em;color:#6b7280;margin-top:4px;">Si le das <b>solo</b> Bitácora (sin Primaria, Secundaria ni CheckIn Kids), esa cuenta entrará directo a la Bitácora al iniciar sesión y nunca verá el resto del sistema.</p>
 <button id="crearUsuarioBtn" class="btn btn-blue btn-sm" style="margin-top:8px;" onclick="crearUsuarioNuevo()">➕ Crear usuario</button>
 <p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} (ese dominio no recibe ni envía correos reales) — por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla.${scope === 'own' ? ' Los usuarios que crees aquí trabajarán dentro de tu propio espacio de datos, sin tocar el del administrador ni el de nadie más.' : ' Cada usuario ve y agrega solo los datos de su propio espacio.'}</p>
 </div>
@@ -1561,6 +1636,7 @@ ${puedeEditarPermisos ? `
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoPrimaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoPrimaria',this.checked)"/> Primaria</label>
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoSecundaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoSecundaria',this.checked)"/> Secundaria</label>
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoCheckin !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoCheckin',this.checked)"/> CheckIn Kids</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoBitacora === true ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoBitacora',this.checked)"/> Bitácora</label>
 ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.puedeGestionarUsuarios ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','puedeGestionarUsuarios',this.checked)"/> Puede gestionar sus propios usuarios</label>` : ''}
 </div>
 <div style="display:flex;gap:8px;margin-top:10px;">

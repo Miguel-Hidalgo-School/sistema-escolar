@@ -152,7 +152,7 @@
                     <input type="text" id="configCiclo" placeholder="EJ. 2026-2027" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this); actualizarCicloActual()">
                 </div>
                 <div class="flex items-end">
-                    <a href="index.html" class="w-full text-center bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded text-xs font-bold shadow-sm transition">⬅️ Volver al Sistema Escolar</a>
+                    <button type="button" onclick="volverAlSistema()" class="w-full text-center bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded text-xs font-bold shadow-sm transition">⬅️ Volver al Sistema Escolar</button>
                 </div>
             </div>
         </div>
@@ -460,6 +460,40 @@
         try {
             datosPuente = JSON.parse(localStorage.getItem('bitacora_puente_datos') || 'null');
         } catch(e) { datosPuente = null; }
+
+        // --- Botón "Volver al Sistema Escolar" inteligente ---
+        // index.html (o bitacora-home.html) deja guardado en localStorage qué otros
+        // módulos tiene la cuenta que entró a la Bitácora. Con eso decidimos a dónde
+        // debe regresar el botón "Volver":
+        //   - Si tiene acceso a Primaria, Secundaria o CheckIn Kids (cualquier
+        //     combinación, incluido el administrador con todo) -> se manda a
+        //     index.html. La interfaz principal ya filtra sola las tarjetas según
+        //     los permisos de cada quien, así que no hace falta distinguir más casos.
+        //   - Si SOLO tiene acceso a Bitácora -> nunca se navega a index.html (ahí
+        //     no vería ningún módulo). En su lugar se pregunta con una emergente y,
+        //     si confirma, simplemente se refresca esta misma página a un estado en
+        //     blanco (lo ya guardado en el historial permanece intacto).
+        //   - Si no hay datos guardados (por ejemplo, se abrió el archivo
+        //     directamente) se conserva el comportamiento original: ir a index.html.
+        function permisosBitacora() {
+            try {
+                return JSON.parse(localStorage.getItem('bitacora_permisos') || 'null');
+            } catch (e) { return null; }
+        }
+
+        function volverAlSistema() {
+            const permisos = permisosBitacora();
+            const tieneOtroAcceso = !permisos || !!(permisos.primaria || permisos.secundaria || permisos.checkin);
+            if (tieneOtroAcceso) {
+                window.location.href = 'index.html';
+                return;
+            }
+            // Cuenta solo-Bitácora: confirmar antes de perder lo que esté sin guardar
+            // en el formulario abierto (lo ya guardado en el historial no se pierde).
+            if (confirm('¿Estás seguro que quieres salir de Bitácora? Asegúrate de guardar antes de salir.')) {
+                window.location.reload();
+            }
+        }
 
         function calcularCicloEscolarDefault() {
             const hoy = new Date();
