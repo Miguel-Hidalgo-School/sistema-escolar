@@ -51,6 +51,9 @@
     <link rel="icon" href="icons/icon-se-192.png">
     <link rel="apple-touch-icon" href="icons/icon-se-192.png">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <style>
         input[type="text"], textarea, select {
             text-transform: uppercase;
@@ -375,8 +378,24 @@
             .catch(err => console.log('Service Worker error:', err));
         }
 
+        // ============ FIREBASE (misma cuenta/sesión que Sistema Escolar) ============
+        const FIREBASE_CONFIG = {
+          apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+          authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+          databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+          projectId: "sistema-escolar-a5c31",
+          storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+          messagingSenderId: "234198294318",
+          appId: "1:234198294318:web:a65521e9607753d68664bf"
+        };
+        firebase.initializeApp(FIREBASE_CONFIG);
+        const bitAuth = firebase.auth();
+        const bitDb = firebase.database();
+        let bitUsuarioActual = null; // se llena cuando Firebase confirma la sesión
+
         // ============ SINCRONIZACIÓN OFFLINE-FIRST ============
         let estoyOnline = navigator.onLine;
+        const NIVELES_SYNC = ['Primaria', 'Secundaria'];
 
         window.addEventListener('online', () => {
           estoyOnline = true;
@@ -389,33 +408,75 @@
           console.log('🔴 Sin internet - Guardando en localStorage');
         });
 
-        // Sincroniza datos de localStorage → Firebase cuando hay internet
+        // La sesión de Firebase se restaura de forma asíncrona (aunque ya hayas
+        // iniciado sesión en Sistema Escolar, tarda un instante en confirmarse aquí
+        // también). En cuanto se confirma, se intenta sincronizar lo pendiente.
+        bitAuth.onAuthStateChanged(user => {
+          bitUsuarioActual = user;
+          if (user) sincronizarConFirebase();
+        });
+
+        // Sube a Firebase, de cada nivel, únicamente las incidencias que aún no se
+        // habían subido (se marcan con "sincronizado: true" tras subir con éxito).
+        // Las que ya están marcadas no se reenvían cada vez, para no gastar
+        // ancho de banda innecesariamente.
         async function sincronizarConFirebase() {
-          const bitacoraData = localStorage.getItem('bitacora_incidencias_guardadas');
-          if (!bitacoraData) return;
+          if (!estoyOnline) return;
+          const user = bitUsuarioActual || bitAuth.currentUser;
+          if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
 
-          try {
-            const incidencias = JSON.parse(bitacoraData);
-            const db = firebase.database();
-            const user = firebase.auth().currentUser;
+          let huboError = false;
+          for (const nivel of NIVELES_SYNC) {
+            const keyHistorial = `historial_incidencias_${nivel}`;
+            let historial;
+            try { historial = JSON.parse(localStorage.getItem(keyHistorial)) || []; }
+            catch (e) { continue; }
 
-            if (!user || !user.email.endsWith('@chavarria.edu.com')) return;
+            const pendientes = historial.filter(item => !item.sincronizado);
+            if (pendientes.length === 0) continue;
 
-            // Guarda cada incidencia en Firebase
-            for (const [key, data] of Object.entries(incidencias)) {
-              await db.ref(`bitacora/${user.uid}/${key}`).set({
-                ...data,
-                sincronizadoEn: new Date().toISOString()
-              });
+            for (const item of pendientes) {
+              try {
+                await bitDb.ref(`bitacora/${user.uid}/${item.id}`).set({
+                  ...item,
+                  sincronizadoEn: new Date().toISOString()
+                });
+                item.sincronizado = true;
+              } catch (error) {
+                console.error('Error sincronizando incidencia', item.id, error);
+                huboError = true;
+              }
             }
+            localStorage.setItem(keyHistorial, JSON.stringify(historial));
+          }
 
-            console.log('✅ Sincronización exitosa con Firebase');
-            showSyncNotification('✅ Datos sincronizados con servidor');
+          if (huboError) {
+            showSyncNotification('⚠️ Algunas incidencias no se pudieron subir. Se reintentará.', 'error');
+          }
+        }
+
+        // Sincroniza solo UNA incidencia recién guardada, de inmediato (sin esperar
+        // al intervalo de 60s ni al próximo evento "online"), para que "guardar" se
+        // sienta instantáneo cuando hay internet.
+        async function sincronizarIncidenciaInmediata(nivel, item) {
+          if (!estoyOnline) return;
+          const user = bitUsuarioActual || bitAuth.currentUser;
+          if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
+          try {
+            await bitDb.ref(`bitacora/${user.uid}/${item.id}`).set({
+              ...item,
+              sincronizadoEn: new Date().toISOString()
+            });
+            const keyHistorial = `historial_incidencias_${nivel}`;
+            let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
+            const idx = historial.findIndex(h => h.id === item.id);
+            if (idx !== -1) {
+              historial[idx].sincronizado = true;
+              localStorage.setItem(keyHistorial, JSON.stringify(historial));
+            }
           } catch (error) {
-            console.error('Error sincronizando:', error);
-            showSyncNotification('⚠️ Error sincronizando. Reintentando...', 'error');
-            // Reintenta en 30 segundos
-            setTimeout(sincronizarConFirebase, 30000);
+            console.error('Error sincronizando incidencia nueva', error);
+            showSyncNotification('⚠️ Se guardó en este dispositivo, pero no se pudo subir todavía. Se reintentará solo.', 'error');
           }
         }
 
@@ -432,7 +493,8 @@
           setTimeout(() => div.remove(), 3000);
         }
 
-        // Sincroniza cada 60 segundos si está online
+        // Sincroniza cada 60 segundos si está online (red de seguridad, por si algo
+        // quedó pendiente: sin internet al guardar, un error momentáneo, etc.)
         setInterval(() => {
           if (estoyOnline) sincronizarConFirebase();
         }, 60000);
@@ -657,13 +719,32 @@
             mostrarFormulario();
         }
 
-        // Genera las iniciales de la escuela para anteponer al folio (ej. "ESCUELA PRIMARIA BENITO JUÁREZ" -> "EPBJ")
+        // Genera las siglas de la escuela para anteponer al folio.
+        // - Nombres propios: iniciales de cada palabra significativa
+        //   (ej. "ESCUELA PRIMARIA BENITO JUÁREZ" -> "BJ").
+        // - Secundarias técnicas/generales numeradas: usa "ST" + el número
+        //   completo en vez de solo iniciales (ej. "Secundaria Técnica 32" -> "ST32"),
+        //   para que no se confundan planteles distintos con el mismo folio.
         function calcularSiglaEscuela(nivel) {
-            const nombre = (plantelPorNivel[nivel].escuela || '').toUpperCase();
-            const conectores = ['DE','DEL','LA','LAS','EL','LOS','Y','EN'];
-            const palabras = nombre.split(/\s+/).map(p => p.replace(/[^A-ZÁÉÍÓÚÑ0-9]/g,'')).filter(p => p && !conectores.includes(p));
-            let sigla = palabras.map(p => p[0]).join('');
-            if (!sigla) sigla = nivel === "Primaria" ? "PRIM" : "SEC";
+            const nombreOriginal = (plantelPorNivel[nivel].escuela || '').trim();
+            if (!nombreOriginal) return nivel === "Primaria" ? "PRIM" : "SEC";
+
+            const nombreLimpio = nombreOriginal.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+            if (nombreLimpio.includes("tecnica") || nombreLimpio.includes("secundaria")) {
+                const matchNumero = nombreLimpio.match(/\d+/);
+                if (matchNumero) return "ST" + matchNumero[0];
+            }
+
+            const palabrasExcluidas = ["escuela","primaria","secundaria","tecnica","general","telesecundaria","el","la","los","las","de","del","y","a","en"];
+            const palabras = nombreLimpio.split(/\s+/);
+            let sigla = "";
+            for (const palabra of palabras) {
+                if (palabra && !palabrasExcluidas.includes(palabra)) {
+                    sigla += /\d/.test(palabra) ? palabra.toUpperCase() : palabra[0].toUpperCase();
+                }
+            }
+            if (sigla.length < 2) sigla = nivel === "Primaria" ? "PRIM" : "SEC";
             return sigla.slice(0, 6);
         }
 
@@ -716,6 +797,7 @@
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
             historial.unshift(datos);
             localStorage.setItem(keyHistorial, JSON.stringify(historial));
+            sincronizarIncidenciaInmediata(nivelActual, datos);
 
             renderizarReporte(datos);
         }
@@ -772,10 +854,16 @@
 
             let html = "";
             historial.forEach((item, index) => {
+                const estadoSync = item.sincronizado
+                    ? `<span class="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded" title="Ya está respaldado en el servidor">☁️ En línea</span>`
+                    : `<span class="inline-block bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded" title="Solo está guardado en este dispositivo por ahora">⏳ Solo local</span>`;
                 html += `
                     <div class="bg-slate-50 p-4 rounded-xl border border-slate-300 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                         <div>
-                            <span class="inline-block bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded mb-1">${item.folio}</span>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="inline-block bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded">${item.folio}</span>
+                                ${estadoSync}
+                            </div>
                             <h4 class="font-bold text-sm text-slate-900">${item.alumno}</h4>
                             <p class="text-xs text-slate-600"><strong>Asunto:</strong> ${item.asunto} | <strong>Fecha:</strong> ${item.fecha}</p>
                         </div>
@@ -801,8 +889,15 @@
             if(confirm("¿Estás seguro de eliminar este registro del historial local?")) {
                 let keyHistorial = `historial_incidencias_${nivelActual}`;
                 let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
+                const eliminado = historial[index];
                 historial.splice(index, 1);
                 localStorage.setItem(keyHistorial, JSON.stringify(historial));
+                // También se borra de Firebase, si ya se había subido (o si hay
+                // internet en este momento), para que no quede huérfano allá.
+                const user = bitUsuarioActual || bitAuth.currentUser;
+                if (eliminado && user) {
+                    bitDb.ref(`bitacora/${user.uid}/${eliminado.id}`).remove().catch(()=>{});
+                }
                 mostrarHistorial();
             }
         }
