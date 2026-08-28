@@ -2731,6 +2731,15 @@ render();
 }
 function setTareaCalificacion(nivel, tareaId, studentId, value) {
 updateTareaEntregaLocal(nivel, tareaId, studentId, 'calificacion', value === '' ? null : Number(value));
+const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
+const t = map[tareaId];
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === studentId);
+const el = document.getElementById('sumlive-' + tareaId + '-' + studentId);
+if (s && t && el) {
+const r = calcularFinalSumativa(nivel, s, state.sumativaPeriodoActivo || 'p1', t.materia);
+el.textContent = 'Llevas en Sumativa: ' + r.total.toFixed(1) + '/10';
+}
 }
 function setTareaObservaciones(nivel, tareaId, studentId, value) {
 updateTareaEntregaLocal(nivel, tareaId, studentId, 'observaciones', value);
@@ -2941,6 +2950,7 @@ html += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;marg
 <label style="display:flex;align-items:center;gap:6px;font-size:0.8em;font-weight:600;flex:1;"><input type="checkbox" ${e.cumplio?'checked':''} onchange="setTareaCumplio('${nivel}','${id}','${s.id}',this.checked)" /> ${s.name}</label>
 <input type="number" min="0" max="10" step="0.1" style="width:60px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;font-size:0.78em;" placeholder="Cal." value="${e.calificacion!=null?e.calificacion:''}" oninput="setTareaCalificacion('${nivel}','${id}','${s.id}',this.value)" />
 </div>
+<p id="sumlive-${id}-${s.id}" style="font-size:0.68em;color:#059669;font-weight:700;margin-bottom:4px;">Llevas en Sumativa: ${calcularFinalSumativa(nivel, s, state.sumativaPeriodoActivo||'p1', t.materia).total.toFixed(1)}/10</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:0.75em;text-transform:uppercase;" placeholder="Observaciones (opcional)" value="${e.observaciones||''}" oninput="forceUpper(this);setTareaObservaciones('${nivel}','${id}','${s.id}',this.value)" />
 </div>`;
 });
@@ -2994,8 +3004,9 @@ return [
 { id: 'tareas', nombre: 'TAREAS', porcentaje: 70, automatico: true },
 { id: 'participacion', nombre: 'PARTICIPACIÓN', porcentaje: 5, automatico: false },
 { id: 'asistencia', nombre: 'ASISTENCIA', porcentaje: 5, automatico: false },
-{ id: 'examen', nombre: 'EXAMEN', porcentaje: 10, automatico: false },
-{ id: 'proyecto', nombre: 'PROYECTO', porcentaje: 10, automatico: false }
+{ id: 'examen', nombre: 'EXAMEN', porcentaje: 5, automatico: false },
+{ id: 'proyecto', nombre: 'PROYECTO', porcentaje: 10, automatico: false },
+{ id: 'exposicion', nombre: 'EXPOSICIÓN', porcentaje: 5, automatico: false }
 ];
 }
 function sumativaConfigArr(nivel) {
@@ -3048,9 +3059,14 @@ return nivel === 'primaria' ? (state.sumativaFilterMateria || MATERIAS[0]) : 'ge
 }
 function calcularPromedioTareas(nivel, studentId, grade, grupo, materia, periodoId) {
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
-const notas = Object.values(map).filter(t => t.grade === grade && (nivel === 'primaria' ? t.materia === materia : t.grupo === grupo) && fechaEnPeriodo(t.fecha, periodoId) && t.entregas && t.entregas[studentId] && typeof t.entregas[studentId].calificacion === 'number').map(t => t.entregas[studentId].calificacion);
-if (!notas.length) return null;
-return notas.reduce((a, b) => a + b, 0) / notas.length;
+// Regla de 3: se toman TODAS las tareas asignadas al alumno en este periodo (estén
+// calificadas o no). La suma de lo ya calificado se divide entre el total de tareas
+// asignadas, así el promedio avanza en vivo conforme se van calificando, en vez de
+// esperar a que todas tengan nota para poder mostrar algo.
+const asignadas = Object.values(map).filter(t => t.grade === grade && (nivel === 'primaria' ? t.materia === materia : t.grupo === grupo) && fechaEnPeriodo(t.fecha, periodoId) && t.entregas && t.entregas[studentId]);
+if (!asignadas.length) return null; // de verdad no hay tareas asignadas todavía
+const suma = asignadas.reduce((a, t) => a + (typeof t.entregas[studentId].calificacion === 'number' ? t.entregas[studentId].calificacion : 0), 0);
+return suma / asignadas.length;
 }
 function getSumativaValor(nivel, studentId, componentId, periodoId) {
 const map = nivel === 'primaria' ? state.sumativaCalifPri : state.sumativaCalifSec;
@@ -3093,9 +3109,9 @@ const asistidos = diasAsistidosEstudiante(studentId, periodoId);
 const pct = Math.min(1, asistidos / habiles);
 return Math.round(pct * 10 * 10) / 10;
 }
-function calcularFinalSumativa(nivel, s, periodoId) {
+function calcularFinalSumativa(nivel, s, periodoId, materiaOverride) {
 const config = sumativaConfigArr(nivel);
-const mk = sumativaMateriaKey(nivel);
+const mk = materiaOverride || sumativaMateriaKey(nivel);
 let total = 0;
 const faltan = [];
 const tareasValor = calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, mk, periodoId);
@@ -3137,6 +3153,38 @@ function eliminarComponenteSumativa(nivel, index) {
 const config = sumativaConfigArr(nivel).slice();
 config.splice(index, 1);
 if (nivel === 'primaria') state.sumativaConfigPri = config; else state.sumativaConfigSec = config;
+render();
+}
+function cerrarEvaluacionSumativa(nivel) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+const grade = state.sumativaFilterGrade || gradeOptions[0];
+const grupo = state.sumativaFilterGrupo;
+const periodoActivo = state.sumativaPeriodoActivo || 'p1';
+const periodoIndex = { p1: 0, p2: 1, p3: 2 }[periodoActivo];
+const PERIODO_LABELS = { p1: '1er Periodo', p2: '2do Periodo', p3: '3er Periodo' };
+const alumnos = list.filter(s => s.grade === grade && (nivel === 'primaria' || s.grupo === grupo));
+if (!alumnos.length) { showToast('No hay alumnos en este grado' + (nivel === 'secundaria' ? '/grupo' : '')); return; }
+const materiaTxt = nivel === 'primaria' ? (' — ' + sumativaMateriaKey(nivel)) : '';
+if (!confirm(`¿Cerrar la evaluación Sumativa de ${PERIODO_LABELS[periodoActivo]}${materiaTxt} para ${alumnos.length} alumno(s)?\n\nLa calificación acumulada de hoy se escribirá en Calificaciones, ${grade}${nivel === 'secundaria' ? (' Grupo ' + grupo) : ''}. Podrás editarla manualmente ahí después si algo cambia.`)) return;
+alumnos.forEach(s => {
+const r = calcularFinalSumativa(nivel, s, periodoActivo);
+const val = Math.round(r.total * 10) / 10;
+if (nivel === 'primaria') {
+const materia = sumativaMateriaKey(nivel);
+const grades = { ...(s.grades || {}) };
+grades[materia] = grades[materia] ? [...grades[materia]] : [null, null, null];
+grades[materia][periodoIndex] = val;
+studentsRef.child(s.id).update({ grades });
+s.grades = grades;
+} else {
+const periodos = s.periodos ? [...s.periodos] : [null, null, null];
+periodos[periodoIndex] = val;
+secStudentsRef.child(s.id).update({ periodos });
+s.periodos = periodos;
+}
+});
+showToast(`🔒 Sumativa cerrada: ${alumnos.length} alumno(s) actualizados en Calificaciones`);
 render();
 }
 function agregarComponenteSumativa(nivel) {
@@ -3193,7 +3241,7 @@ html += `</div>`;
 
 html += `<div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:4px;">🧮 ¿Cómo se va a evaluar?</p>
-<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">"Tareas" se calcula sola con el promedio de las tareas ya calificadas dentro del periodo seleccionado. Agrega, edita o quita los rubros que necesites (examen, participación, proyecto, asistencia...); los porcentajes deben sumar 100%.</p>`;
+<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">"Tareas" se calcula sola: suma las calificaciones ya capturadas y las divide entre el TOTAL de tareas asignadas en el periodo (regla de 3), así el número va subiendo conforme calificas, sin esperar a terminar todas. Agrega, edita o quita los rubros que necesites (examen, participación, proyecto, exposición...); los porcentajes deben sumar 100%.</p>`;
 
 config.forEach((c, i) => {
 html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -3260,12 +3308,14 @@ html += `<div style="display:flex;justify-content:space-between;align-items:cent
 }
 });
 html += `<div style="border-top:1px solid #e5e7eb;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-<span style="font-size:0.75em;font-weight:700;">${r.completo ? PERIODO_LABELS[periodoActivo] + ' final' : 'Provisional (falta: ' + esc2(r.faltan.join(', ')) + ')'}</span>
+<span style="font-size:0.75em;font-weight:700;">${r.faltan.length ? 'Acumulado hasta hoy (falta capturar: ' + esc2(r.faltan.join(', ')) + ')' : 'Calificación acumulada del periodo'}</span>
 <span style="font-size:1em;font-weight:800;color:${r.total >= 6 ? '#059669' : '#b91c1c'};">${r.total.toFixed(1)}</span>
 </div>
 </div>`;
 });
-html += `<button class="btn btn-green" style="width:100%;" onclick="guardarSumativaGrupo('${nivel}')">💾 Guardar calificaciones del grupo</button>`;
+html += `<button class="btn btn-green" style="width:100%;" onclick="guardarSumativaGrupo('${nivel}')">💾 Guardar calificaciones del grupo</button>
+<button class="btn btn-dark" style="width:100%;margin-top:6px;" onclick="cerrarEvaluacionSumativa('${nivel}')">🔒 Cerrar evaluación Sumativa (pasar a Calificaciones)</button>
+<p style="font-size:0.7em;color:#9ca3af;margin-top:6px;text-align:center;">Cerrar no borra nada: solo copia la calificación acumulada de hoy a Calificaciones. Puedes cerrar de nuevo más adelante para actualizarla, o editarla manualmente allá.</p>`;
 }
 return html;
 }
