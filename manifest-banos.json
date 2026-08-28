@@ -1,0 +1,12 @@
+{
+  "name": "Pase de Baño - Sistema Escolar",
+  "short_name": "Pase de Baño",
+  "start_url": "banos.html",
+  "display": "standalone",
+  "background_color": "#F4F3EF",
+  "theme_color": "#57708A",
+  "icons": [
+    { "src": "icons/icon-ck-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-ck-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

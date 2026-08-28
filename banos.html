@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pase de Baño · Sistema Escolar</title>
+<link rel="manifest" href="manifest-banos.json">
+<meta name="theme-color" content="#57708A">
+<link rel="icon" href="icons/icon-ck-192.png">
+<link rel="apple-touch-icon" href="icons/icon-ck-192.png">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  /* Misma estructura visual que CheckIn Kids, pero con una paleta mucho
+     menos llamativa: grises cálidos y azul-grisáceo apagado en vez de
+     naranja/coral. */
+  :root{
+    --ink:#2B3440; --ink-soft:#3B4652; --paper:#F4F3EF; --paper-dim:#EAE8E2;
+    --primary:#748CA6; --primary-deep:#57708A; --alert:#B97A63; --alert-deep:#96604C;
+    --ok:#7C9885; --ok-deep:#5E7A67; --slate:#6B7280; --line:#DAD7CE; --white:#FFFFFF; --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .app{max-width:1000px;margin:0 auto;padding:28px 20px 40px;}
+
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:16px;}
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand-mark{
+    width:52px;height:52px;border-radius:14px;background:var(--ink);display:flex;align-items:center;justify-content:center;
+    font-family:'Baloo 2',sans-serif;font-weight:800;color:var(--primary);font-size:20px;transform:rotate(-4deg);
+    box-shadow:0 6px 0 var(--primary-deep);
+  }
+  .brand h1{font-family:'Baloo 2',sans-serif;font-size:24px;font-weight:800;margin:0;letter-spacing:-0.01em;}
+  .brand p{margin:2px 0 0;color:var(--slate);font-size:12.5px;font-weight:600;}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;}
+  .stat-chip{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:8px 14px;text-align:center;min-width:78px;}
+  .stat-chip b{display:block;font-family:'Baloo 2',sans-serif;font-size:19px;color:var(--ink);}
+  .stat-chip span{font-size:11px;color:var(--slate);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .stat-chip.alert b{color:var(--alert-deep);}
+
+  nav.tabs{display:flex;gap:6px;background:var(--paper-dim);padding:5px;border-radius:14px;margin-bottom:26px;width:fit-content;flex-wrap:wrap;}
+  nav.tabs button{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:14px;border:none;background:transparent;color:var(--slate);padding:10px 18px;border-radius:10px;cursor:pointer;transition:.15s;}
+  nav.tabs button.active{background:var(--ink);color:var(--primary);}
+  nav.tabs button:not(.active):hover{color:var(--ink);}
+
+  .panel{display:none;}
+  .panel.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  .card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin-bottom:18px;}
+
+  .btn{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:15px;border:none;border-radius:11px;padding:12px 22px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:8px;}
+  .btn-primary{background:var(--primary);color:var(--white);box-shadow:0 4px 0 var(--primary-deep);}
+  .btn-primary:hover{transform:translateY(-1px);}
+  .btn-primary:active{transform:translateY(2px);box-shadow:0 2px 0 var(--primary-deep);}
+  .btn-ghost{background:transparent;color:var(--slate);border:1.5px solid var(--line);}
+  .btn-ghost:hover{border-color:var(--slate);color:var(--ink);}
+  .btn-alert{background:var(--alert);color:var(--white);box-shadow:0 4px 0 var(--alert-deep);}
+  .btn-ok{background:var(--ok);color:var(--white);box-shadow:0 4px 0 var(--ok-deep);}
+  .btn-sm{font-size:12.5px;padding:8px 14px;border-radius:9px;box-shadow:none;}
+
+  label{display:block;font-size:12.5px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+  input,select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;font-family:'Inter',sans-serif;font-size:14.5px;color:var(--ink);background:var(--paper);outline:none;transition:.15s;}
+  input:focus,select:focus{border-color:var(--primary);background:var(--white);}
+
+  .scan-wrap{max-width:440px;margin:0 auto;text-align:center;}
+  .scan-frame{position:relative;width:100%;aspect-ratio:1/1;background:var(--ink);border-radius:18px;overflow:hidden;margin-bottom:16px;}
+  .scan-frame video{width:100%;height:100%;object-fit:cover;}
+  .scan-frame .reticle{position:absolute;inset:14%;border:3px solid rgba(116,140,166,.85);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none;transition:.15s;}
+  .scan-frame .reticle.ok{border-color:var(--ok);}
+  .scan-frame .reticle.err{border-color:var(--alert);}
+  .scan-frame .off{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--paper-dim);font-family:'Baloo 2',sans-serif;font-weight:700;font-size:15px;text-align:center;padding:20px;}
+  .scan-result{min-height:26px;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:16px;margin-bottom:14px;}
+  .manual-fallback{display:flex;gap:8px;margin-top:6px;}
+  .manual-fallback input{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;letter-spacing:.05em;}
+
+  .class-selector{background:var(--paper-dim);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;text-align:left;}
+  .cs-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .cs-row:last-child{margin-bottom:0;}
+  .cs-label{font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;width:100%;margin-bottom:1px;}
+  .chip{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;border:1.5px solid var(--line);background:var(--white);color:var(--ink-soft);padding:7px 15px;border-radius:20px;cursor:pointer;transition:.15s;}
+  .chip:hover{border-color:var(--primary-deep);}
+  .chip.active{background:var(--ink);color:var(--primary);border-color:var(--ink);}
+  .chip.all{border-style:dashed;color:var(--slate);}
+  .chip.all.active{border-style:solid;color:var(--primary);}
+  .cs-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--white);border:1.5px solid var(--line);border-radius:12px;padding:11px 16px;margin-bottom:0;font-size:13.5px;color:var(--slate);}
+  .cs-summary b{font-family:'Baloo 2',sans-serif;color:var(--ink);font-weight:700;}
+  .cs-summary .cs-count{margin-left:auto;font-weight:700;color:var(--primary-deep);white-space:nowrap;}
+
+  .search-row{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+  .search-row input{flex:1;min-width:200px;}
+
+  .empty{text-align:center;padding:50px 20px;color:var(--slate);}
+  .empty b{display:block;font-family:'Baloo 2',sans-serif;color:var(--ink);font-size:17px;margin-bottom:4px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--slate);padding:8px 10px;border-bottom:2px solid var(--line);white-space:nowrap;}
+  td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block;}
+  .badge.out{background:#EFE4DC;color:var(--alert-deep);}
+  .badge.out.long{background:var(--alert);color:var(--white);}
+  .badge.in{background:#E7EBE1;color:var(--ok-deep);}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);
+    padding:13px 22px;border-radius:12px;font-weight:600;font-size:14px;opacity:0;transition:.25s;pointer-events:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:80;max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.err{background:var(--alert-deep);}
+  .toast.ok{background:var(--ok-deep);}
+
+  footer.brand-footer{text-align:center;color:var(--slate);font-size:11.5px;font-weight:600;letter-spacing:.04em;margin-top:40px;padding-top:18px;border-top:1px solid var(--line);}
+  footer.brand-footer b{color:var(--ink-soft);}
+
+  @media(max-width:640px){ .toolbar{flex-direction:column;align-items:stretch;} }
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:18px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <button class="btn btn-ghost btn-sm" style="margin-right:8px;" onclick="window.location.href='index.html'">← Sistema Escolar</button>
+      <div class="brand-mark">PB</div>
+      <div>
+        <h1>Pase de Baño</h1>
+        <p id="schoolLabel">&nbsp;</p>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat-chip alert"><b id="statOut">0</b><span>En baño ahora</span></div>
+      <div class="stat-chip"><b id="statToday">0</b><span>Salidas hoy</span></div>
+      <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="active" data-tab="escaner">Escáner</button>
+    <button data-tab="enbano">En baño ahora</button>
+    <button data-tab="historial">Historial</button>
+  </nav>
+
+  <!-- ESCÁNER -->
+  <section class="panel active" id="panel-escaner">
+    <div class="scan-wrap">
+      <div class="class-selector" id="scanClassSelector"></div>
+      <div class="scan-frame" id="scanFrame">
+        <video id="scanVideo" playsinline muted></video>
+        <div class="reticle" id="reticle"></div>
+        <div class="off" id="scanOff">La cámara está apagada.<br>Pulsa "Activar cámara" para escanear.</div>
+      </div>
+      <div class="scan-result" id="scanResult">&nbsp;</div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:18px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" id="scanToggleBtn" onclick="toggleScanner()">Activar cámara</button>
+      </div>
+      <div class="card" style="text-align:left;">
+        <label>O ingresa el folio / código manualmente</label>
+        <div class="manual-fallback">
+          <input id="manualCode" placeholder="Ej. 0007 o pega un código QR" onkeydown="if(event.key==='Enter')processManualCode()">
+          <button class="btn btn-ok btn-sm" onclick="processManualCode()">Registrar</button>
+        </div>
+        <p style="color:var(--slate);font-size:12.5px;margin-top:10px;margin-bottom:0;">
+          Usa la misma credencial QR generada en CheckIn Kids / Sistema Escolar. Primer escaneo del alumno = registra salida; segundo escaneo = registra regreso.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- EN BAÑO AHORA -->
+  <section class="panel" id="panel-enbano">
+    <div class="card">
+      <table>
+        <thead><tr><th>Alumno</th><th>Nivel/Grado/Grupo</th><th>Salió a las</th><th>Tiempo fuera</th><th></th></tr></thead>
+        <tbody id="enBanoBody"></tbody>
+      </table>
+      <div id="enBanoEmpty" class="empty" style="display:none;"><b>Nadie está en el baño ahora mismo</b>Los alumnos que salgan aparecerán aquí.</div>
+    </div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="panel" id="panel-historial">
+    <div class="class-selector" id="histClassSelector"></div>
+    <div class="toolbar">
+      <input id="histSearch" placeholder="Buscar por nombre..." oninput="renderHistorial()" style="max-width:280px;">
+      <button class="btn btn-ghost btn-sm" onclick="exportHistorialCsv()">Descargar CSV</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Fecha</th><th>Alumno</th><th>Grado/Grupo</th><th>Salida</th><th>Entrada</th><th>Duración</th></tr></thead>
+        <tbody id="historialBody"></tbody>
+      </table>
+      <div id="historialEmpty" class="empty" style="display:none;"><b>Sin registros todavía</b>Los pases de baño aparecerán aquí.</div>
+    </div>
+  </section>
+
+  <footer class="brand-footer">Un sistema de <b>CHAVARRÍA PRODUCCIONES</b></footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   Pase de Baño — usa la MISMA base de datos y credenciales QR que
+   CheckIn Kids / Sistema Escolar (nodos "students" / "secStudents").
+   No crea ni edita alumnos: solo lee la lista para poder escanear.
+   Los registros de salida/entrada al baño viven en su propio nodo
+   ("banoLog") para no interferir con la asistencia de CheckIn Kids.
+   ===================================================================== */
+const PB_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+const PB_DB_ROOT_ADMIN = 'Sistema Escolar';
+const OUT_ALERT_MINUTES = 12; // a partir de aquí se marca como "tardó" en la UI
+
+firebase.initializeApp(PB_FIREBASE_CONFIG);
+const pbAuth = firebase.auth();
+const pbDb = firebase.database();
+
+let pbAccesoPrimaria = true, pbAccesoSecundaria = true;
+let priStudentsRef = null, secStudentsRef = null, banoLogRef = null;
+let priStudents = [], secStudentsArr = [];
+let students = [];
+let banoLog = [];
+
+function mergeStudents(){
+  students = [...priStudents, ...secStudentsArr];
+  renderAll();
+}
+
+pbAuth.onAuthStateChanged(async user => {
+  if(!user){ window.location.href = 'index.html'; return; }
+  let isAdmin = false;
+  try{
+    const adminSnap = await pbDb.ref('admins/' + user.uid).once('value');
+    isAdmin = adminSnap.val() === true;
+  }catch(e){}
+  if(isAdmin){ pbAccesoPrimaria = true; pbAccesoSecundaria = true; }
+  try{
+    const perfilSnap = await pbDb.ref('perfiles/' + user.uid).once('value');
+    const perfil = perfilSnap.val();
+    if(perfil && perfil.mustChangePassword){ window.location.href = 'index.html'; return; }
+    if(!isAdmin && perfil){
+      pbAccesoPrimaria = perfil.accesoPrimaria !== false;
+      pbAccesoSecundaria = perfil.accesoSecundaria !== false;
+    }
+  }catch(e){}
+
+  if(!pbAccesoPrimaria && !pbAccesoSecundaria){
+    document.querySelector('.app').innerHTML =
+      '<div class="card" style="text-align:center;padding:40px;">' +
+      '<b style="font-family:\\'Baloo 2\\',sans-serif;font-size:18px;">Sin acceso a Primaria ni Secundaria</b>' +
+      '<p style="color:var(--slate);margin-top:8px;">Pase de Baño usa la misma lista de alumnos de Primaria/Secundaria; pídele al administrador que te dé acceso.</p>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" onclick="window.location.href=\\'index.html\\'">Volver</button></div>';
+    return;
+  }
+
+  // Si solo tiene un nivel, ese es el que se usa por defecto; si tiene ambos,
+  // se prioriza Secundaria (pensado especialmente para ese nivel).
+  scanFilter.nivel = pbAccesoSecundaria ? 'secundaria' : 'primaria';
+  histFilter.nivel = scanFilter.nivel;
+
+  const base = isAdmin ? PB_DB_ROOT_ADMIN : ('usuarios/' + user.uid);
+  priStudentsRef = pbAccesoPrimaria ? pbDb.ref(base + '/students') : null;
+  secStudentsRef = pbAccesoSecundaria ? pbDb.ref(base + '/secStudents') : null;
+  banoLogRef = pbDb.ref(base + '/banoLog');
+
+  if(priStudentsRef){
+    priStudentsRef.on('value', snap => {
+      const val = snap.val() || {};
+      priStudents = Object.keys(val).map(id => fromFirebaseStudent(id, val[id], 'primaria'));
+      mergeStudents();
+    }, () => { priStudents = []; mergeStudents(); });
+  }
+  if(secStudentsRef){
+    secStudentsRef.on('value', snap => {
+      const val = snap.val() || {};
+      secStudentsArr = Object.keys(val).map(id => fromFirebaseStudent(id, val[id], 'secundaria'));
+      mergeStudents();
+    }, () => { secStudentsArr = []; mergeStudents(); });
+  }
+  banoLogRef.on('value', snap => {
+    const val = snap.val() || {};
+    banoLog = Object.keys(val).map(id => ({ id, ...val[id] }));
+    renderAll();
+  });
+
+  const schoolName = (localStorage.getItem('checkinKids_schoolName') || '').replace(/^"|"$/g,'');
+  document.getElementById('schoolLabel').textContent = schoolName || 'Escaneo de salidas al baño';
+
+  renderClassSelector('scan');
+  renderClassSelector('hist');
+  mergeStudents();
+});
+
+function fromFirebaseStudent(id, v, nivel){
+  v = v || {};
+  return {
+    id, nivel: nivel || 'primaria',
+    name: v.name || '', grade: v.grade || '1°', group: v.grupo || '',
+    folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || []
+  };
+}
+
+/* ---------- Nivel / grado / grupo selector (igual criterio que CheckIn Kids) ---------- */
+const GRADOS = { primaria: ['1°','2°','3°','4°','5°','6°'], secundaria: ['1°','2°','3°'] };
+const GRUPOS = { primaria: ['A','B','C','D'], secundaria: ['A','B','C','D','E','F'] };
+const scanFilter = { nivel: 'secundaria', grado: null, grupo: null };
+const histFilter = { nivel: 'secundaria', grado: null, grupo: null };
+
+function nivelesDisponibles(){
+  const arr = [];
+  if(pbAccesoPrimaria) arr.push('primaria');
+  if(pbAccesoSecundaria) arr.push('secundaria');
+  return arr;
+}
+function nivelLabel(n){ return n === 'secundaria' ? 'Secundaria' : 'Primaria'; }
+function filterStudents(list, f){
+  return list.filter(s=>{
+    if((s.nivel||'primaria') !== f.nivel) return false;
+    if(f.grado && s.grade !== f.grado) return false;
+    if(f.grado && f.grupo && s.group !== f.grupo) return false;
+    return true;
+  });
+}
+function filterLabel(f){
+  const t = nivelLabel(f.nivel);
+  if(!f.grado) return `${t} · todos los grados`;
+  if(!f.grupo) return `${t} · ${f.grado} · todos los grupos`;
+  return `${t} · ${f.grado} ${f.grupo}`;
+}
+function setNivel(scope, n){ const f = scope==='scan'?scanFilter:histFilter; f.nivel=n; f.grado=null; f.grupo=null; renderClassSelector(scope); onFilterChanged(scope); }
+function setGrado(scope, g){ const f = scope==='scan'?scanFilter:histFilter; f.grado=g; f.grupo=null; renderClassSelector(scope); onFilterChanged(scope); }
+function setGrupo(scope, g){ const f = scope==='scan'?scanFilter:histFilter; f.grupo=g; renderClassSelector(scope); onFilterChanged(scope); }
+function onFilterChanged(scope){ if(scope==='hist') renderHistorial(); else renderAll(); }
+
+function renderClassSelector(scope){
+  const f = scope==='scan' ? scanFilter : histFilter;
+  const containerId = scope==='scan' ? 'scanClassSelector' : 'histClassSelector';
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const disponibles = nivelesDisponibles();
+  const grados = GRADOS[f.nivel] || GRADOS.secundaria;
+  const grupos = GRUPOS[f.nivel] || GRUPOS.secundaria;
+
+  let html = '<div class="cs-row"><span class="cs-label">Nivel educativo</span>';
+  if(disponibles.length > 1){
+    if(disponibles.includes('primaria')) html += `<button type="button" class="chip${f.nivel==='primaria'?' active':''}" onclick="setNivel('${scope}','primaria')">Primaria</button>`;
+    if(disponibles.includes('secundaria')) html += `<button type="button" class="chip${f.nivel==='secundaria'?' active':''}" onclick="setNivel('${scope}','secundaria')">Secundaria</button>`;
+  } else {
+    html += `<span class="chip active" style="cursor:default;">${nivelLabel(f.nivel)}</span>`;
+  }
+  html += '</div>';
+
+  html += '<div class="cs-row"><span class="cs-label">Grado</span>';
+  html += `<button type="button" class="chip all${!f.grado?' active':''}" onclick="setGrado('${scope}', null)">Todos los grados</button>`;
+  grados.forEach(g=>{ html += `<button type="button" class="chip${f.grado===g?' active':''}" onclick="setGrado('${scope}', '${g}')">${g}</button>`; });
+  html += '</div>';
+
+  if(f.grado){
+    html += '<div class="cs-row"><span class="cs-label">Grupo</span>';
+    html += `<button type="button" class="chip all${!f.grupo?' active':''}" onclick="setGrupo('${scope}', null)">Todos los grupos</button>`;
+    grupos.forEach(gr=>{ html += `<button type="button" class="chip${f.grupo===gr?' active':''}" onclick="setGrupo('${scope}', '${gr}')">${gr}</button>`; });
+    html += '</div>';
+  }
+
+  if(scope === 'scan'){
+    const count = filterStudents(students, f).length;
+    html += `<div class="cs-summary" style="margin-top:12px;"><span>Escaneando para <b>${filterLabel(f)}</b></span><span class="cs-count">${count} alumno${count===1?'':'s'}</span></div>`;
+  }
+  el.innerHTML = html;
+}
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab === 'historial') renderHistorial();
+  });
+});
+
+/* ---------- Helpers ---------- */
+function uid(){ return 'id' + Date.now() + Math.random().toString(16).slice(2,8); }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtTime(iso){ return new Date(iso).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}); }
+function fmtDate(str){ const [y,m,d]=str.split('-'); return `${d}/${m}/${y}`; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function minutesBetween(a,b){ return Math.max(0, Math.round((b-a)/60000)); }
+function fmtDuration(mins){ if(mins < 60) return `${mins} min`; return `${Math.floor(mins/60)}h ${mins%60}min`; }
+function showToast(msg, kind){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' '+kind : '');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+/* ---------- Lógica principal: salida / entrada al baño ---------- */
+function processCode(rawText){
+  const text = (rawText || '').trim();
+  if(!text) return {ok:false, msg:'Código vacío'};
+
+  let student = students.find(s => s.token === text || (s.altCodes && s.altCodes.includes(text)));
+  if(!student && text.length<=4){
+    const digits = text.replace(/\D/g,'').padStart(4,'0').slice(-4);
+    student = students.find(s => s.folio === digits);
+  }
+  if(!student){
+    return {ok:false, msg:'Código no reconocido. Verifica que el alumno tenga credencial generada en CheckIn Kids.'};
+  }
+
+  const openEntry = banoLog.find(b => b.studentId === student.id && !b.entrada);
+  if(openEntry){
+    const mins = minutesBetween(new Date(openEntry.salida).getTime(), Date.now());
+    banoLogRef.child(openEntry.id).update({ entrada: new Date().toISOString() });
+    return {ok:true, action:'in', student, msg:`${student.name} — regreso registrado (${fmtDuration(mins)} fuera)`};
+  } else {
+    const entry = { studentId: student.id, nivel: student.nivel, grade: student.grade, group: student.group, date: todayStr(), salida: new Date().toISOString(), entrada: null };
+    banoLogRef.push(entry);
+    return {ok:true, action:'out', student, msg:`${student.name} — salida al baño registrada`};
+  }
+}
+function registerReturn(studentId){
+  const openEntry = banoLog.find(b => b.studentId === studentId && !b.entrada);
+  if(!openEntry) return;
+  banoLogRef.child(openEntry.id).update({ entrada: new Date().toISOString() });
+  showToast('Regreso registrado', 'ok');
+}
+function processManualCode(){
+  const input = document.getElementById('manualCode');
+  const res = processCode(input.value);
+  reportScanResult(res);
+  input.value=''; input.focus();
+}
+function reportScanResult(res){
+  const reticle = document.getElementById('reticle');
+  const resultEl = document.getElementById('scanResult');
+  if(!reticle || !resultEl) { showToast(res.msg, res.ok ? 'ok':'err'); return; }
+  reticle.classList.remove('ok','err');
+  if(res.ok){
+    reticle.classList.add('ok');
+    resultEl.style.color = res.action==='out' ? 'var(--alert-deep)' : 'var(--ok-deep)';
+    resultEl.textContent = res.msg;
+    showToast(res.msg, 'ok');
+  } else {
+    reticle.classList.add('err');
+    resultEl.style.color = 'var(--alert)';
+    resultEl.textContent = res.msg;
+    showToast(res.msg, 'err');
+  }
+  setTimeout(()=>reticle.classList.remove('ok','err'), 900);
+}
+
+/* ---------- Escáner (cámara + jsQR) ---------- */
+let scannerStream = null, scannerActive = false, scannerRAF = null;
+let lastScan = {text:'', at:0};
+const scanCanvas = document.createElement('canvas');
+const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+async function toggleScanner(){
+  if(scannerActive){ stopScanner(); return; }
+  const video = document.getElementById('scanVideo');
+  try{ scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
+  catch(e){
+    const why = e && e.name === 'NotAllowedError'
+      ? 'Permiso de cámara bloqueado. Ve a Ajustes del teléfono → Apps → Sistema Escolar → Permisos → Cámara → Permitir.'
+      : (e && e.message) ? e.message : 'Revisa los permisos.';
+    showToast('No se pudo acceder a la cámara. ' + why, 'err');
+    return;
+  }
+  video.srcObject = scannerStream;
+  await video.play();
+  scannerActive = true;
+  document.getElementById('scanOff').style.display='none';
+  document.getElementById('scanToggleBtn').textContent = 'Apagar cámara';
+  scanLoop();
+}
+function stopScanner(){
+  scannerActive = false;
+  if(scannerRAF) cancelAnimationFrame(scannerRAF);
+  if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); scannerStream=null; }
+  const off = document.getElementById('scanOff'); if(off) off.style.display='flex';
+  const btn = document.getElementById('scanToggleBtn'); if(btn) btn.textContent = 'Activar cámara';
+}
+function scanLoop(){
+  if(!scannerActive) return;
+  const video = document.getElementById('scanVideo');
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    scanCanvas.width = video.videoWidth;
+    scanCanvas.height = video.videoHeight;
+    scanCtx.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+    const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+    if(code && code.data){
+      const now = Date.now();
+      if(!(code.data === lastScan.text && now - lastScan.at < 3500)){
+        lastScan = {text: code.data, at: now};
+        reportScanResult(processCode(code.data));
+      }
+    }
+  }
+  scannerRAF = requestAnimationFrame(scanLoop);
+}
+
+/* ---------- Render ---------- */
+let liveTimerInterval = null;
+function renderAll(){
+  renderStats();
+  renderEnBano();
+  if(document.getElementById('scanClassSelector')) renderClassSelector('scan');
+  if(document.getElementById('panel-historial').classList.contains('active')) renderHistorial();
+}
+function renderStats(){
+  const today = todayStr();
+  const outNow = banoLog.filter(b => !b.entrada);
+  const todayCount = banoLog.filter(b => b.date === today).length;
+  document.getElementById('statOut').textContent = outNow.length;
+  document.getElementById('statToday').textContent = todayCount;
+  document.getElementById('statTotal').textContent = students.length;
+}
+function renderEnBano(){
+  const body = document.getElementById('enBanoBody');
+  const empty = document.getElementById('enBanoEmpty');
+  const outNow = banoLog.filter(b => !b.entrada).sort((a,b)=> new Date(a.salida)-new Date(b.salida));
+  if(outNow.length === 0){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = outNow.map(b=>{
+    const s = students.find(x=>x.id===b.studentId);
+    const name = s ? s.name : '(alumno ya no está en la lista)';
+    const cls = s ? `${nivelLabel(s.nivel)} · ${s.grade} ${s.group}` : '—';
+    const mins = minutesBetween(new Date(b.salida).getTime(), Date.now());
+    const long = mins >= OUT_ALERT_MINUTES;
+    return `<tr>
+      <td>${escapeHtml(name)}</td>
+      <td>${cls}</td>
+      <td class="mono">${fmtTime(b.salida)}</td>
+      <td><span class="badge out${long?' long':''}">${fmtDuration(mins)}${long?' ⚠':''}</span></td>
+      <td><button class="btn btn-ok btn-sm" onclick="registerReturn('${b.studentId}')">Registrar regreso</button></td>
+    </tr>`;
+  }).join('');
+  if(!liveTimerInterval){ liveTimerInterval = setInterval(renderEnBano, 30000); }
+}
+function renderHistorial(){
+  const body = document.getElementById('historialBody');
+  const empty = document.getElementById('historialEmpty');
+  const q = (document.getElementById('histSearch').value || '').trim().toLowerCase();
+  const rows = banoLog
+    .map(b => ({ b, s: students.find(x=>x.id===b.studentId) }))
+    .filter(({s}) => s && (histFilter.nivel ? (s.nivel||'primaria')===histFilter.nivel : true) &&
+      (!histFilter.grado || s.grade===histFilter.grado) &&
+      (!histFilter.grado || !histFilter.grupo || s.group===histFilter.grupo))
+    .filter(({s}) => !q || s.name.toLowerCase().includes(q))
+    .sort((a,b) => new Date(b.b.salida) - new Date(a.b.salida));
+
+  if(rows.length === 0){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = rows.map(({b,s})=>{
+    const durMins = b.entrada ? minutesBetween(new Date(b.salida).getTime(), new Date(b.entrada).getTime()) : null;
+    return `<tr>
+      <td class="mono">${fmtDate(b.date)}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${nivelLabel(s.nivel)} · ${s.grade} ${s.group}</td>
+      <td class="mono">${fmtTime(b.salida)}</td>
+      <td class="mono">${b.entrada ? fmtTime(b.entrada) : '<span class="badge out">en curso</span>'}</td>
+      <td>${durMins!==null ? fmtDuration(durMins) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportHistorialCsv(){
+  if(banoLog.length === 0){ showToast('No hay registros todavía', 'err'); return; }
+  const rows = [['Fecha','Alumno','Nivel','Grado','Grupo','Salida','Entrada','Duración (min)']];
+  banoLog.slice().sort((a,b)=> new Date(a.salida)-new Date(b.salida)).forEach(b=>{
+    const s = students.find(x=>x.id===b.studentId);
+    const durMins = b.entrada ? minutesBetween(new Date(b.salida).getTime(), new Date(b.entrada).getTime()) : '';
+    rows.push([b.date, s?s.name:'', s?nivelLabel(s.nivel):'', s?s.grade:'', s?s.group:'', fmtTime(b.salida), b.entrada?fmtTime(b.entrada):'', durMins]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `pases_bano_${todayStr()}.csv`;
+  a.click();
+  showToast('Descargando CSV', 'ok');
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
