@@ -159,6 +159,7 @@
         <div class="off" id="scanOff">La cámara está apagada.<br>Pulsa "Activar cámara" para escanear.</div>
       </div>
       <div class="scan-result" id="scanResult">&nbsp;</div>
+      <div id="scanWaBtn" style="margin-bottom:14px;"></div>
       <div style="display:flex;gap:10px;justify-content:center;margin-bottom:18px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" id="scanToggleBtn" onclick="toggleScanner()">Activar cámara</button>
       </div>
@@ -179,7 +180,7 @@
   <section class="panel" id="panel-enbano">
     <div class="card">
       <table>
-        <thead><tr><th>Alumno</th><th>Nivel/Grado/Grupo</th><th>Salió a las</th><th>Tiempo fuera</th><th></th></tr></thead>
+        <thead><tr><th>Alumno</th><th>Nivel/Grado/Grupo</th><th>Salió a las</th><th>Tiempo fuera</th><th>Aviso</th><th></th></tr></thead>
         <tbody id="enBanoBody"></tbody>
       </table>
       <div id="enBanoEmpty" class="empty" style="display:none;"><b>Nadie está en el baño ahora mismo</b>Los alumnos que salgan aparecerán aquí.</div>
@@ -195,7 +196,7 @@
     </div>
     <div class="card">
       <table>
-        <thead><tr><th>Fecha</th><th>Alumno</th><th>Grado/Grupo</th><th>Salida</th><th>Entrada</th><th>Duración</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Alumno</th><th>Grado/Grupo</th><th>Salida</th><th>Entrada</th><th>Duración</th><th>Avisos</th></tr></thead>
         <tbody id="historialBody"></tbody>
       </table>
       <div id="historialEmpty" class="empty" style="display:none;"><b>Sin registros todavía</b>Los pases de baño aparecerán aquí.</div>
@@ -232,10 +233,11 @@ const pbAuth = firebase.auth();
 const pbDb = firebase.database();
 
 let pbAccesoPrimaria = true, pbAccesoSecundaria = true;
-let priStudentsRef = null, secStudentsRef = null, banoLogRef = null;
+let priStudentsRef = null, secStudentsRef = null, banoLogRef = null, secSchoolRef = null;
 let priStudents = [], secStudentsArr = [];
 let students = [];
 let banoLog = [];
+let directorTelefono = '';
 
 function mergeStudents(){
   students = [...priStudents, ...secStudentsArr];
@@ -263,9 +265,9 @@ pbAuth.onAuthStateChanged(async user => {
   if(!pbAccesoPrimaria && !pbAccesoSecundaria){
     document.querySelector('.app').innerHTML =
       '<div class="card" style="text-align:center;padding:40px;">' +
-      '<b style="font-family:\\'Baloo 2\\',sans-serif;font-size:18px;">Sin acceso a Primaria ni Secundaria</b>' +
+      '<b style="font-family:\'Baloo 2\',sans-serif;font-size:18px;">Sin acceso a Primaria ni Secundaria</b>' +
       '<p style="color:var(--slate);margin-top:8px;">Pase de Baño usa la misma lista de alumnos de Primaria/Secundaria; pídele al administrador que te dé acceso.</p>' +
-      '<button class="btn btn-primary" style="margin-top:14px;" onclick="window.location.href=\\'index.html\\'">Volver</button></div>';
+      '<button class="btn btn-primary" style="margin-top:14px;" onclick="window.location.href=\'index.html\'">Volver</button></div>';
     return;
   }
 
@@ -278,6 +280,12 @@ pbAuth.onAuthStateChanged(async user => {
   priStudentsRef = pbAccesoPrimaria ? pbDb.ref(base + '/students') : null;
   secStudentsRef = pbAccesoSecundaria ? pbDb.ref(base + '/secStudents') : null;
   banoLogRef = pbDb.ref(base + '/banoLog');
+  if(pbAccesoSecundaria){
+    secSchoolRef = pbDb.ref(base + '/secSchoolInfo');
+    secSchoolRef.on('value', snap => {
+      directorTelefono = (snap.val() || {}).directorTelefono || '';
+    });
+  }
 
   if(priStudentsRef){
     priStudentsRef.on('value', snap => {
@@ -312,8 +320,15 @@ function fromFirebaseStudent(id, v, nivel){
   return {
     id, nivel: nivel || 'primaria',
     name: v.name || '', grade: v.grade || '1°', group: v.grupo || '',
-    folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || []
+    folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || [],
+    padreTelefono: v.padreTelefono || '', tutorTelefono: v.tutorTelefono || ''
   };
+}
+function resolveContactBano(s){
+  if(s.padreTelefono) return { tel: s.padreTelefono, label: 'Padre' };
+  if(s.tutorTelefono) return { tel: s.tutorTelefono, label: 'Tutor(a)' };
+  if(s.nivel === 'secundaria' && directorTelefono) return { tel: directorTelefono, label: 'Director(a) — sin contacto de familia registrado' };
+  return { tel: '', label: '' };
 }
 
 /* ---------- Nivel / grado / grupo selector (igual criterio que CheckIn Kids) ---------- */
@@ -430,11 +445,11 @@ function processCode(rawText){
   if(openEntry){
     const mins = minutesBetween(new Date(openEntry.salida).getTime(), Date.now());
     banoLogRef.child(openEntry.id).update({ entrada: new Date().toISOString() });
-    return {ok:true, action:'in', student, msg:`${student.name} — regreso registrado (${fmtDuration(mins)} fuera)`};
+    return {ok:true, action:'in', student, entryId: openEntry.id, contact: resolveContactBano(student), msg:`${student.name} — regreso registrado (${fmtDuration(mins)} fuera)`};
   } else {
     const entry = { studentId: student.id, nivel: student.nivel, grade: student.grade, group: student.group, date: todayStr(), salida: new Date().toISOString(), entrada: null };
-    banoLogRef.push(entry);
-    return {ok:true, action:'out', student, msg:`${student.name} — salida al baño registrada`};
+    const ref = banoLogRef.push(entry);
+    return {ok:true, action:'out', student, entryId: ref.key, contact: resolveContactBano(student), msg:`${student.name} — salida al baño registrada`};
   }
 }
 function registerReturn(studentId){
@@ -442,6 +457,12 @@ function registerReturn(studentId){
   if(!openEntry) return;
   banoLogRef.child(openEntry.id).update({ entrada: new Date().toISOString() });
   showToast('Regreso registrado', 'ok');
+}
+function marcarAvisoEnviado(entryId, campo, label){
+  banoLogRef.child(entryId).update({ [campo]: true, [campo+'Hora']: new Date().toISOString(), [campo+'A']: label });
+  showToast('Marcado como avisado a ' + label, 'ok');
+  const btn = document.getElementById('waBtn_'+entryId+'_'+campo);
+  if(btn) btn.outerHTML = `<span style="font-size:12.5px;color:var(--ok-deep);font-weight:700;">✅ Avisado a ${escapeHtml(label)}</span>`;
 }
 function processManualCode(){
   const input = document.getElementById('manualCode');
@@ -452,6 +473,7 @@ function processManualCode(){
 function reportScanResult(res){
   const reticle = document.getElementById('reticle');
   const resultEl = document.getElementById('scanResult');
+  const waBox = document.getElementById('scanWaBtn');
   if(!reticle || !resultEl) { showToast(res.msg, res.ok ? 'ok':'err'); return; }
   reticle.classList.remove('ok','err');
   if(res.ok){
@@ -466,6 +488,28 @@ function reportScanResult(res){
     showToast(res.msg, 'err');
   }
   setTimeout(()=>reticle.classList.remove('ok','err'), 900);
+
+  if(waBox){
+    // El aviso por WhatsApp aplica tanto a la SALIDA (primer escaneo) como
+    // al REGRESO (segundo escaneo). No se envía solo: el maestro toca el
+    // botón y se abre WhatsApp con el mensaje ya escrito, listo para enviar.
+    if(res.ok && (res.action === 'out' || res.action === 'in') && res.contact && res.contact.tel){
+      let phone = res.contact.tel.replace(/\D/g,'');
+      if(phone.length === 10) phone = '52' + phone;
+      const s = res.student;
+      const campo = res.action === 'out' ? 'notificadoSalida' : 'notificadoRegreso';
+      const msg = res.action === 'out'
+        ? `Hola, le informamos que ${s.name} (${nivelLabel(s.nivel)} ${s.grade} ${s.group}) salió al baño a las ${fmtTime(new Date())}.`
+        : `Hola, le informamos que ${s.name} (${nivelLabel(s.nivel)} ${s.grade} ${s.group}) ya regresó del baño al salón a las ${fmtTime(new Date())}.`;
+      const link = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+      const label = res.contact.label;
+      waBox.innerHTML = `<a id="waBtn_${res.entryId}_${campo}" href="${link}" target="_blank" class="btn btn-ok btn-sm" style="text-decoration:none;" onclick="marcarAvisoEnviado('${res.entryId}','${campo}','${label.replace(/'/g,"\\'")}')">📲 Avisar a ${escapeHtml(label)} por WhatsApp</a>`;
+    } else if(res.ok && (res.action === 'out' || res.action === 'in')){
+      waBox.innerHTML = `<span style="font-size:12.5px;color:var(--slate);">Sin teléfono de padre/tutor registrado para este alumno.</span>`;
+    } else {
+      waBox.innerHTML = '';
+    }
+  }
 }
 
 /* ---------- Escáner (cámara + jsQR) ---------- */
@@ -547,11 +591,13 @@ function renderEnBano(){
     const cls = s ? `${nivelLabel(s.nivel)} · ${s.grade} ${s.group}` : '—';
     const mins = minutesBetween(new Date(b.salida).getTime(), Date.now());
     const long = mins >= OUT_ALERT_MINUTES;
+    const aviso = b.notificadoSalida ? `<span style="font-size:11px;color:var(--ok-deep);font-weight:700;">✅ ${escapeHtml(b.notificadoSalidaA||'')}</span>` : `<span style="font-size:11px;color:var(--slate);">— sin avisar</span>`;
     return `<tr>
       <td>${escapeHtml(name)}</td>
       <td>${cls}</td>
       <td class="mono">${fmtTime(b.salida)}</td>
       <td><span class="badge out${long?' long':''}">${fmtDuration(mins)}${long?' ⚠':''}</span></td>
+      <td>${aviso}</td>
       <td><button class="btn btn-ok btn-sm" onclick="registerReturn('${b.studentId}')">Registrar regreso</button></td>
     </tr>`;
   }).join('');
@@ -573,6 +619,8 @@ function renderHistorial(){
   empty.style.display='none';
   body.innerHTML = rows.map(({b,s})=>{
     const durMins = b.entrada ? minutesBetween(new Date(b.salida).getTime(), new Date(b.entrada).getTime()) : null;
+    const avSal = b.notificadoSalida ? `✅ salida (${escapeHtml(b.notificadoSalidaA||'')})` : '— salida';
+    const avReg = b.entrada ? (b.notificadoRegreso ? `✅ regreso (${escapeHtml(b.notificadoRegresoA||'')})` : '— regreso') : '';
     return `<tr>
       <td class="mono">${fmtDate(b.date)}</td>
       <td>${escapeHtml(s.name)}</td>
@@ -580,17 +628,18 @@ function renderHistorial(){
       <td class="mono">${fmtTime(b.salida)}</td>
       <td class="mono">${b.entrada ? fmtTime(b.entrada) : '<span class="badge out">en curso</span>'}</td>
       <td>${durMins!==null ? fmtDuration(durMins) : '—'}</td>
+      <td style="font-size:11.5px;color:var(--slate);white-space:nowrap;">${avSal}${avReg?'<br>'+avReg:''}</td>
     </tr>`;
   }).join('');
 }
 
 function exportHistorialCsv(){
   if(banoLog.length === 0){ showToast('No hay registros todavía', 'err'); return; }
-  const rows = [['Fecha','Alumno','Nivel','Grado','Grupo','Salida','Entrada','Duración (min)']];
+  const rows = [['Fecha','Alumno','Nivel','Grado','Grupo','Salida','Entrada','Duración (min)','Avisado salida','Avisado a (salida)','Avisado regreso','Avisado a (regreso)']];
   banoLog.slice().sort((a,b)=> new Date(a.salida)-new Date(b.salida)).forEach(b=>{
     const s = students.find(x=>x.id===b.studentId);
     const durMins = b.entrada ? minutesBetween(new Date(b.salida).getTime(), new Date(b.entrada).getTime()) : '';
-    rows.push([b.date, s?s.name:'', s?nivelLabel(s.nivel):'', s?s.grade:'', s?s.group:'', fmtTime(b.salida), b.entrada?fmtTime(b.entrada):'', durMins]);
+    rows.push([b.date, s?s.name:'', s?nivelLabel(s.nivel):'', s?s.grade:'', s?s.group:'', fmtTime(b.salida), b.entrada?fmtTime(b.entrada):'', durMins, b.notificadoSalida?'Sí':'No', b.notificadoSalidaA||'', b.notificadoRegreso?'Sí':'No', b.notificadoRegresoA||'']);
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(["\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
