@@ -10226,6 +10226,15 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
   @media(max-width:640px){ .toolbar{flex-direction:column;align-items:stretch;} }
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:18px;}
+.modal-bg{position:fixed;inset:0;background:rgba(30,42,56,.5);display:none;align-items:center;justify-content:center;z-index:60;padding:20px;overflow-y:auto;}
+.modal-bg.show{display:flex;}
+.modal{background:var(--white);border-radius:18px;padding:26px;max-width:420px;width:100%;text-align:center;margin:auto;}
+.modal.wide{max-width:600px;text-align:left;}
+.modal p.note{color:var(--slate);font-size:13px;line-height:1.5;}
+.modal-actions{display:flex;gap:8px;justify-content:center;margin-top:6px;flex-wrap:wrap;}
+.field{margin-bottom:16px;text-align:left;}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+.field select,.field textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;box-sizing:border-box;}
 </style>
 </head>
 <body>
@@ -10241,7 +10250,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       </div>
     </div>
     <div class="stats">
-      <div class="stat-chip alert"><b id="statOut">0</b><span>En baño ahora</span></div>
+      <div class="stat-chip alert" style="cursor:pointer;" onclick="openEnBanoModal()" title="Ver quiénes siguen en el baño"><b id="statOut">0</b><span>En baño ahora</span></div>
       <div class="stat-chip"><b id="statToday">0</b><span>Salidas hoy</span></div>
       <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
     </div>
@@ -10263,7 +10272,6 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         <div class="off" id="scanOff">La cámara está apagada.<br>Pulsa "Activar cámara" para escanear.</div>
       </div>
       <div class="scan-result" id="scanResult">&nbsp;</div>
-      <div id="scanWaBtn" style="margin-bottom:14px;"></div>
       <div style="display:flex;gap:10px;justify-content:center;margin-bottom:18px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" id="scanToggleBtn" onclick="toggleScanner()">Activar cámara</button>
       </div>
@@ -10308,6 +10316,42 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   </section>
 
   <footer class="brand-footer">Un sistema de <b>CHAVARRÍA PRODUCCIONES</b></footer>
+</div>
+
+<!-- Modal: avisar a la familia -->
+<div class="modal-bg" id="banoNotifyModal">
+  <div class="modal">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">Avisar a la familia</b>
+    <p class="note" id="banoNotifyIntro"></p>
+    <div class="field">
+      <label>Mensaje</label>
+      <textarea id="banoNotifyMessage" rows="3"></textarea>
+    </div>
+    <p class="note" style="font-size:11px;">Se abrirá WhatsApp o Mensajes con el número y el texto ya listos; solo falta pulsar enviar dentro de esa app.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeBanoNotifyModal()">No enviar</button>
+      <button class="btn btn-sage btn-sm" onclick="sendBanoNotifySMS()">Enviar SMS</button>
+      <button class="btn btn-primary btn-sm" onclick="sendBanoNotifyWhatsApp()">Enviar por WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: alumnos en el baño -->
+<div class="modal-bg" id="enBanoModal">
+  <div class="modal wide">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">Alumnos en el baño</b>
+    <p class="note">Alumnos que salieron al baño y aún no registran regreso.</p>
+    <div style="max-height:55vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Alumno</th><th>Nivel/Grado/Grupo</th><th>Salió a las</th><th>Tiempo fuera</th><th></th></tr></thead>
+        <tbody id="enBanoModalBody"></tbody>
+      </table>
+      <div class="empty" id="enBanoModalEmpty" style="display:none;"><b>Nadie en el baño 🎉</b>Todos los alumnos están en su salón.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-sm" onclick="closeEnBanoModal()">Cerrar</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -10556,17 +10600,14 @@ function processCode(rawText){
     return {ok:true, action:'out', student, entryId: ref.key, contact: resolveContactBano(student), msg:`${student.name} — salida al baño registrada`};
   }
 }
+function marcarAvisoEnviado(entryId, campo, label){
+  banoLogRef.child(entryId).update({ [campo]: true, [campo+'Hora']: new Date().toISOString(), [campo+'A']: label });
+}
 function registerReturn(studentId){
   const openEntry = banoLog.find(b => b.studentId === studentId && !b.entrada);
   if(!openEntry) return;
   banoLogRef.child(openEntry.id).update({ entrada: new Date().toISOString() });
   showToast('Regreso registrado', 'ok');
-}
-function marcarAvisoEnviado(entryId, campo, label){
-  banoLogRef.child(entryId).update({ [campo]: true, [campo+'Hora']: new Date().toISOString(), [campo+'A']: label });
-  showToast('Marcado como avisado a ' + label, 'ok');
-  const btn = document.getElementById('waBtn_'+entryId+'_'+campo);
-  if(btn) btn.outerHTML = `<span style="font-size:12.5px;color:var(--ok-deep);font-weight:700;">✅ Avisado a ${escapeHtml(label)}</span>`;
 }
 function processManualCode(){
   const input = document.getElementById('manualCode');
@@ -10577,8 +10618,7 @@ function processManualCode(){
 function reportScanResult(res){
   const reticle = document.getElementById('reticle');
   const resultEl = document.getElementById('scanResult');
-  const waBox = document.getElementById('scanWaBtn');
-  if(!reticle || !resultEl) { showToast(res.msg, res.ok ? 'ok':'err'); return; }
+  if(!reticle || !resultEl) { showToast(res.msg, res.ok ? 'ok':'err'); maybeOfferBanoNotify(res); return; }
   reticle.classList.remove('ok','err');
   if(res.ok){
     reticle.classList.add('ok');
@@ -10592,28 +10632,76 @@ function reportScanResult(res){
     showToast(res.msg, 'err');
   }
   setTimeout(()=>reticle.classList.remove('ok','err'), 900);
+  maybeOfferBanoNotify(res);
+}
 
-  if(waBox){
-    // El aviso por WhatsApp aplica tanto a la SALIDA (primer escaneo) como
-    // al REGRESO (segundo escaneo). No se envía solo: el maestro toca el
-    // botón y se abre WhatsApp con el mensaje ya escrito, listo para enviar.
-    if(res.ok && (res.action === 'out' || res.action === 'in') && res.contact && res.contact.tel){
-      let phone = res.contact.tel.replace(/\D/g,'');
-      if(phone.length === 10) phone = '52' + phone;
-      const s = res.student;
-      const campo = res.action === 'out' ? 'notificadoSalida' : 'notificadoRegreso';
-      const msg = res.action === 'out'
-        ? `Hola, le informamos que ${s.name} (${nivelLabel(s.nivel)} ${s.grade} ${s.group}) salió al baño a las ${fmtTime(new Date())}.`
-        : `Hola, le informamos que ${s.name} (${nivelLabel(s.nivel)} ${s.grade} ${s.group}) ya regresó del baño al salón a las ${fmtTime(new Date())}.`;
-      const link = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
-      const label = res.contact.label;
-      waBox.innerHTML = `<a id="waBtn_${res.entryId}_${campo}" href="${link}" target="_blank" class="btn btn-ok btn-sm" style="text-decoration:none;" onclick="marcarAvisoEnviado('${res.entryId}','${campo}','${label.replace(/'/g,"\\'")}')">📲 Avisar a ${escapeHtml(label)} por WhatsApp</a>`;
-    } else if(res.ok && (res.action === 'out' || res.action === 'in')){
-      waBox.innerHTML = `<span style="font-size:12.5px;color:var(--slate);">Sin teléfono de padre/tutor registrado para este alumno.</span>`;
-    } else {
-      waBox.innerHTML = '';
-    }
-  }
+/* ---------- Modal de aviso a la familia (SMS / WhatsApp) ---------- */
+let banoNotifyCtx = null;
+function maybeOfferBanoNotify(res){
+  if(!(res.ok && (res.action === 'out' || res.action === 'in'))) return;
+  if(!res.contact || !res.contact.tel) return;
+  const s = res.student;
+  const campo = res.action === 'out' ? 'notificadoSalida' : 'notificadoRegreso';
+  const timeStr = fmtTime(new Date());
+  const msg = res.action === 'out'
+    ? `Hola, le informamos que ${s.name} (${nivelLabel(s.nivel)} ${s.grade} ${s.group}) salió al baño a las ${timeStr}.`
+    : `Hola, le informamos que ${s.name} (${nivelLabel(s.nivel)} ${s.grade} ${s.group}) ya regresó del baño al salón a las ${timeStr}.`;
+  banoNotifyCtx = { entryId: res.entryId, campo, label: res.contact.label, tel: res.contact.tel };
+  document.getElementById('banoNotifyIntro').textContent = `Avisar a ${res.contact.label}:`;
+  document.getElementById('banoNotifyMessage').value = msg;
+  document.getElementById('banoNotifyModal').classList.add('show');
+}
+function closeBanoNotifyModal(){
+  document.getElementById('banoNotifyModal').classList.remove('show');
+  banoNotifyCtx = null;
+}
+function sendBanoNotifyWhatsApp(){
+  if(!banoNotifyCtx) return;
+  const msg = document.getElementById('banoNotifyMessage').value.trim();
+  let phone = banoNotifyCtx.tel.replace(/\D/g,'');
+  if(phone.length === 10) phone = '52' + phone;
+  if(!phone || !msg){ showToast('Falta el número o el mensaje', 'err'); return; }
+  window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
+  marcarAvisoEnviado(banoNotifyCtx.entryId, banoNotifyCtx.campo, banoNotifyCtx.label);
+  closeBanoNotifyModal();
+}
+function sendBanoNotifySMS(){
+  if(!banoNotifyCtx) return;
+  const msg = document.getElementById('banoNotifyMessage').value.trim();
+  const digits = banoNotifyCtx.tel.replace(/\D/g,'');
+  if(!digits || !msg){ showToast('Falta el número o el mensaje', 'err'); return; }
+  window.location.href = 'sms:' + digits + '?body=' + encodeURIComponent(msg);
+  marcarAvisoEnviado(banoNotifyCtx.entryId, banoNotifyCtx.campo, banoNotifyCtx.label);
+  closeBanoNotifyModal();
+}
+
+/* ---------- Modal: alumnos actualmente en el baño ---------- */
+function openEnBanoModal(){
+  renderEnBanoModal();
+  document.getElementById('enBanoModal').classList.add('show');
+}
+function closeEnBanoModal(){
+  document.getElementById('enBanoModal').classList.remove('show');
+}
+function renderEnBanoModal(){
+  const body = document.getElementById('enBanoModalBody');
+  const empty = document.getElementById('enBanoModalEmpty');
+  if(!body) return;
+  const open = banoLog.filter(b => !b.entrada).map(b => ({b, s: students.find(x=>x.id===b.studentId)})).filter(x=>x.s)
+    .sort((a,b2) => new Date(a.b.salida) - new Date(b2.b.salida));
+  if(open.length === 0){ body.innerHTML = ''; if(empty) empty.style.display = 'block'; return; }
+  if(empty) empty.style.display = 'none';
+  body.innerHTML = open.map(({b,s}) => {
+    const mins = minutesBetween(new Date(b.salida).getTime(), Date.now());
+    const long = mins >= OUT_ALERT_MINUTES;
+    return `<tr>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${nivelLabel(s.nivel)} ${s.grade} ${s.group}</td>
+      <td class="mono">${fmtTime(b.salida)}</td>
+      <td><span class="badge out${long?' long':''}">${fmtDuration(mins)}${long?' ⚠':''}</span></td>
+      <td><button class="btn btn-ok btn-sm" onclick="registerReturn('${b.studentId}'); renderEnBanoModal();">Registrar regreso</button></td>
+    </tr>`;
+  }).join('');
 }
 
 /* ---------- Escáner (cámara + jsQR) ---------- */
@@ -10672,6 +10760,7 @@ let liveTimerInterval = null;
 function renderAll(){
   renderStats();
   renderEnBano();
+  if(document.getElementById('enBanoModal') && document.getElementById('enBanoModal').classList.contains('show')) renderEnBanoModal();
   if(document.getElementById('scanClassSelector')) renderClassSelector('scan');
   if(document.getElementById('panel-historial').classList.contains('active')) renderHistorial();
 }
