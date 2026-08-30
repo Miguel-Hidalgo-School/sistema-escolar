@@ -177,6 +177,7 @@ secSchoolInfo: { nombre: '', cct: '', materia: '', docente: '', logoURL: '', log
 secSelectedGrade: '1°',
 secSelectedGrupo: 'A',
 secEditingId: null,
+secMateriaActiva: 1,
 secDatosEditingId: null,
 secReportGrade: null,
 formativosPri: {},
@@ -1061,29 +1062,37 @@ if (state.secEditingId === id) state.secEditingId = null;
 showToast('Alumno eliminado');
 render();
 }
+function secPeriodosField() { return state.secMateriaActiva === 2 ? 'periodosM2' : 'periodos'; }
+function secMateriaNombreActiva() {
+const si = state.secSchoolInfo || {};
+return state.secMateriaActiva === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia');
+}
+function setSecMateriaActiva(n) { state.secMateriaActiva = n; render(); }
 let pendingSecGrades = {};
 function updateSecGradeLive(id, periodo, value) {
 const s = state.secStudents.find(x => x.id === id);
 if (!s) return;
+const field = secPeriodosField();
 const v = value === '' ? null : Number(value);
-if (!s.periodos) s.periodos = [null,null,null];
-s.periodos = [...s.periodos];
-s.periodos[periodo] = v;
-pendingSecGrades[id] = s.periodos;
+if (!s[field]) s[field] = [null,null,null];
+s[field] = [...s[field]];
+s[field][periodo] = v;
+pendingSecGrades[id] = { field, value: s[field] };
 const finalEl = document.getElementById('secfinal-'+id);
 if (finalEl) {
-const suma = s.periodos.reduce((a,b) => a + (typeof b === 'number' ? b : 0), 0);
+const suma = s[field].reduce((a,b) => a + (typeof b === 'number' ? b : 0), 0);
 finalEl.textContent = suma.toFixed(1);
 }
 }
 function commitSecGrade(id) {
 if (pendingSecGrades[id]) {
-secStudentsRef.child(id).update({ periodos: pendingSecGrades[id] });
+secStudentsRef.child(id).update({ [pendingSecGrades[id].field]: pendingSecGrades[id].value });
 delete pendingSecGrades[id];
 }
 }
-function secStudentFinal(s) {
-const periodos = s.periodos || [null,null,null];
+function secStudentFinal(s, materiaActivaOverride) {
+const field = (materiaActivaOverride || state.secMateriaActiva) === 2 ? 'periodosM2' : 'periodos';
+const periodos = s[field] || [null,null,null];
 const capturados = periodos.filter(v => typeof v === 'number');
 const suma = capturados.reduce((a,b) => a+b, 0);
 const promedio = suma / 3;
@@ -2064,6 +2073,7 @@ ${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la secundaria" value="${si.nombre||''}" oninput="updateSecSchoolFieldLocal('nombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSecSchoolFieldLocal('cct',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la materia" value="${si.materia||''}" oninput="updateSecSchoolFieldLocal('materia',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la 2da materia (opcional, solo si impartes dos)" value="${si.materia2||''}" oninput="updateSecSchoolFieldLocal('materia2',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre del docente" value="${si.docente||''}" oninput="updateSecSchoolFieldLocal('docente',this.value)" />
 <p style="font-weight:600;font-size:0.85em;margin:6px 0 8px;color:#6b7280;">👤 Director(a) de la secundaria</p>
 <p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usará para compartir evaluaciones cuando no haya teléfono del padre/madre/tutor registrado.</p>
@@ -2079,6 +2089,7 @@ ${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-
 `;
 }
 function renderSecAlumnos() {
+const si = state.secSchoolInfo || {};
 const list = state.secStudents.filter(s => s.grade === state.secSelectedGrade && (s.grupo || 'A') === state.secSelectedGrupo);
 let html = `<div class="grade-pills">` + GRADOS_SEC.map(g => `<button class="${g===state.secSelectedGrade?'active':''}" onclick="setSecGrade('${g}')">${g}</button>`).join('') + `</div>`;
 html += `<div class="grade-pills purple">` + GRUPOS_SEC.map(gr => `<button class="${gr===state.secSelectedGrupo?'active':''}" onclick="setSecGrupo('${gr}')">Grupo ${gr}</button>`).join('') + `</div>`;
@@ -2090,13 +2101,19 @@ html += `
 </div>
 </div>
 <button class="btn btn-purple" style="margin-bottom:12px;" onclick="openSecReporte('${state.secSelectedGrade}','${state.secSelectedGrupo}')">📄 Ver reporte de ${state.secSelectedGrade} ${state.secSelectedGrupo} Secundaria</button>`;
+if (si.materia2) {
+html += `<div class="row-flex" style="margin-bottom:12px;">
+<button class="btn ${state.secMateriaActiva!==2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(1)">${si.materia || 'Materia 1'}</button>
+<button class="btn ${state.secMateriaActiva===2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(2)">${si.materia2}</button>
+</div>`;
+}
 if (!list.length) {
 html += `<p class="empty-note">Sin alumnos en ${state.secSelectedGrade} Grupo ${state.secSelectedGrupo} de Secundaria aún.</p>`;
 } else {
 list.forEach(s => {
 const { suma } = secStudentFinal(s);
 const editing = state.secEditingId === s.id;
-const p = s.periodos || [null,null,null];
+const p = s[secPeriodosField()] || [null,null,null];
 html += `<div class="card">
 <div class="student-row">
 <div class="info" onclick="toggleSecEdit('${s.id}')" style="width:100%;">
@@ -2205,7 +2222,14 @@ function renderSecReporte() {
 const { grade, grupo } = state.secReportGrade || {};
 const si = state.secSchoolInfo;
 const list = state.secStudents.filter(s => s.grade === grade && (s.grupo || 'A') === grupo);
-let html = `<div class="card boleta-sheet">
+let html = '';
+if (si.materia2) {
+html += `<div class="row-flex no-print" style="margin-bottom:12px;">
+<button class="btn ${state.secMateriaActiva!==2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(1)">${si.materia || 'Materia 1'}</button>
+<button class="btn ${state.secMateriaActiva===2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(2)">${si.materia2}</button>
+</div>`;
+}
+html += `<div class="card boleta-sheet">
 <div class="boleta-header">
 <div style="width:56px;flex-shrink:0;text-align:center;">
 ${si.logoURL ? `<img src="${si.logoURL}" style="width:34px;height:34px;border-radius:999px;object-fit:cover;margin:0 auto;display:block;" />` : `<div class="badge-circle" style="background:#065f46;margin:0 auto;">STE</div>`}
@@ -2221,7 +2245,7 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:34px;height:34px;border-ra
 </div>
 <div class="info-block">
 <p class="label">MATERIA</p>
-<p class="value">${si.materia || '—'}</p>
+<p class="value">${secMateriaNombreActiva()}</p>
 </div>
 <div class="info-block">
 <p class="label">DOCENTE</p>
@@ -2237,7 +2261,7 @@ const enRiesgo = [];
 const enProyeccion = [];
 const PERIODO_LABELS_SEC = ['1er','2do','3er'];
 list.forEach(s => {
-const p = s.periodos || [null,null,null];
+const p = s[secPeriodosField()] || [null,null,null];
 const info = secStudentFinal(s);
 let estatusTxt, estatusColor;
 if (info.completo) {
@@ -2435,6 +2459,8 @@ if (existing && existing.criterios && existing.criterios.length) {
 criterios = existing.criterios.map(c => ({ ...c }));
 } else if (nivel === 'primaria') {
 criterios = MATERIAS.map(m => ({ nombre: m, nivel: 'amarillo', comentario: '' }));
+} else if (state.secSchoolInfo.materia2) {
+criterios = [state.secSchoolInfo.materia || 'Materia', state.secSchoolInfo.materia2].map(m => ({ nombre: m, nivel: 'amarillo', comentario: '' }));
 } else {
 criterios = [{ nombre: state.secSchoolInfo.materia || 'Materia', nivel: 'amarillo', comentario: '' }];
 }
@@ -2693,7 +2719,7 @@ function setTareaFilterGrupo(g) { state.tareaFilterGrupo = g; state.tareaSelecte
 function openTareaForm(nivel) {
 state.tareaNueva = {
 titulo: '', tipo: 'aula',
-materia: nivel === 'secundaria' ? (state.secSchoolInfo.materia || '') : (state.tareaFilterMateria || MATERIAS[0]),
+materia: nivel === 'secundaria' ? secMateriaNombreActiva() : (state.tareaFilterMateria || MATERIAS[0]),
 grade: state.tareaFilterGrade || (nivel === 'primaria' ? GRADOS[0] : GRADOS_SEC[0]),
 grupo: state.tareaFilterGrupo || (nivel === 'secundaria' ? GRUPOS_SEC[0] : ''),
 fecha: new Date().toISOString().slice(0, 10)
@@ -2827,9 +2853,9 @@ function renderTareasImprimible(nivel) {
 const list = nivel === 'primaria' ? state.students : state.secStudents;
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
 const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
-const tareasGrupo = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : t.grupo === state.tareaFilterGrupo)).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
+const materiaActualPdf = nivel === 'primaria' ? state.tareaFilterMateria : secMateriaNombreActiva();
+const tareasGrupo = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : (t.grupo === state.tareaFilterGrupo && (!si.materia2 || t.materia === materiaActualPdf)))).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
 const alumnos = list.filter(s => s.grade === state.tareaFilterGrade && (nivel==='primaria' || s.grupo === state.tareaFilterGrupo)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-const materiaActualPdf = nivel === 'primaria' ? state.tareaFilterMateria : (state.secSchoolInfo.materia || 'Materia');
 let html = `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
 <button class="btn btn-gray" style="flex:1;" onclick="state.tareaPrintMode=false;render();">← Volver</button>
 <button class="btn btn-dark" style="flex:2;" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
@@ -2874,13 +2900,14 @@ return html;
 }
 function esc2(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function renderTareas(nivel) {
+const si = state.secSchoolInfo || {};
 const list = nivel === 'primaria' ? state.students : state.secStudents;
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
 const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
 if (!state.tareaFilterGrade) state.tareaFilterGrade = gradeOptions[0];
 if (nivel === 'secundaria' && !state.tareaFilterGrupo) state.tareaFilterGrupo = GRUPOS_SEC[0];
 if (nivel === 'primaria' && !state.tareaFilterMateria) state.tareaFilterMateria = MATERIAS[0];
-const materiaActual = nivel === 'primaria' ? state.tareaFilterMateria : (state.secSchoolInfo.materia || 'Materia');
+const materiaActual = nivel === 'primaria' ? state.tareaFilterMateria : secMateriaNombreActiva();
 if (state.tareaPrintMode) return renderTareasImprimible(nivel);
 let html = `<div class="card">
 <p style="font-weight:600;font-size:0.9em;margin-bottom:8px;">📝 Cumplimiento de Tareas — ${esc2(materiaActual)} — ${state.tareaFilterGrade}${nivel==='secundaria'?(' '+state.tareaFilterGrupo):''}</p>`;
@@ -2888,6 +2915,12 @@ if (nivel === 'primaria') {
 html += `<select style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;margin-bottom:8px;" onchange="setTareaFilterMateria(this.value)">
 ${MATERIAS.map(m=>`<option value="${m}" ${state.tareaFilterMateria===m?'selected':''}>${m}</option>`).join('')}
 </select>`;
+}
+if (nivel === 'secundaria' && si.materia2) {
+html += `<div class="row-flex" style="margin-bottom:8px;">
+<button class="btn ${state.secMateriaActiva!==2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(1)">${si.materia || 'Materia 1'}</button>
+<button class="btn ${state.secMateriaActiva===2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(2)">${si.materia2}</button>
+</div>`;
 }
 html += `<div style="display:flex;gap:6px;margin-bottom:8px;">
 <select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="setTareaFilterGrade('${nivel}',this.value)">
@@ -2937,7 +2970,7 @@ html += `</div>
 </div>`;
 }
 
-const tareasFiltradas = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : t.grupo === state.tareaFilterGrupo)).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+const tareasFiltradas = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : (t.grupo === state.tareaFilterGrupo && (!si.materia2 || t.materia === materiaActual)))).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
 
 if (!tareasFiltradas.length) {
 html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">No hay tareas registradas para este grado${nivel==='secundaria'?'/grupo':''} todavía.</p></div>`;
@@ -3069,7 +3102,8 @@ function guardarPeriodosSumativa() {
 sumativaPeriodosRef.set(sumativaPeriodos()).then(() => showToast('💾 Fechas de periodos guardadas')).catch(() => showToast('No se pudo guardar'));
 }
 function sumativaMateriaKey(nivel) {
-return nivel === 'primaria' ? (state.sumativaFilterMateria || MATERIAS[0]) : 'general';
+if (nivel === 'primaria') return state.sumativaFilterMateria || MATERIAS[0];
+return state.secSchoolInfo.materia2 ? secMateriaNombreActiva() : 'general';
 }
 function calcularPromedioTareas(nivel, studentId, grade, grupo, materia, periodoId) {
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
@@ -3077,7 +3111,7 @@ const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
 // calificadas o no). La suma de lo ya calificado se divide entre el total de tareas
 // asignadas, así el promedio avanza en vivo conforme se van calificando, en vez de
 // esperar a que todas tengan nota para poder mostrar algo.
-const asignadas = Object.values(map).filter(t => t.grade === grade && (nivel === 'primaria' ? t.materia === materia : t.grupo === grupo) && fechaEnPeriodo(t.fecha, periodoId) && t.entregas && t.entregas[studentId]);
+const asignadas = Object.values(map).filter(t => t.grade === grade && (nivel === 'primaria' ? t.materia === materia : (t.grupo === grupo && (materia === 'general' || t.materia === materia))) && fechaEnPeriodo(t.fecha, periodoId) && t.entregas && t.entregas[studentId]);
 if (!asignadas.length) return null; // de verdad no hay tareas asignadas todavía
 const suma = asignadas.reduce((a, t) => a + (typeof t.entregas[studentId].calificacion === 'number' ? t.entregas[studentId].calificacion : 0), 0);
 return suma / asignadas.length;
@@ -3179,7 +3213,7 @@ const periodoIndex = { p1: 0, p2: 1, p3: 2 }[periodoActivo];
 const PERIODO_LABELS = { p1: '1er Periodo', p2: '2do Periodo', p3: '3er Periodo' };
 const alumnos = list.filter(s => s.grade === grade && (nivel === 'primaria' || s.grupo === grupo));
 if (!alumnos.length) { showToast('No hay alumnos en este grado' + (nivel === 'secundaria' ? '/grupo' : '')); return; }
-const materiaTxt = nivel === 'primaria' ? (' — ' + sumativaMateriaKey(nivel)) : '';
+const materiaTxt = nivel === 'primaria' ? (' — ' + sumativaMateriaKey(nivel)) : (' — ' + secMateriaNombreActiva());
 if (!confirm(`¿Cerrar la evaluación Sumativa de ${PERIODO_LABELS[periodoActivo]}${materiaTxt} para ${alumnos.length} alumno(s)?\n\nLa calificación acumulada de hoy se escribirá en Calificaciones, ${grade}${nivel === 'secundaria' ? (' Grupo ' + grupo) : ''}. Podrás editarla manualmente ahí después si algo cambia.`)) return;
 alumnos.forEach(s => {
 const r = calcularFinalSumativa(nivel, s, periodoActivo);
@@ -3192,10 +3226,11 @@ grades[materia][periodoIndex] = val;
 studentsRef.child(s.id).update({ grades });
 s.grades = grades;
 } else {
-const periodos = s.periodos ? [...s.periodos] : [null, null, null];
+const field = secPeriodosField();
+const periodos = s[field] ? [...s[field]] : [null, null, null];
 periodos[periodoIndex] = val;
-secStudentsRef.child(s.id).update({ periodos });
-s.periodos = periodos;
+secStudentsRef.child(s.id).update({ [field]: periodos });
+s[field] = periodos;
 }
 });
 showToast(`🔒 Sumativa cerrada: ${alumnos.length} alumno(s) actualizados en Calificaciones`);
@@ -3280,6 +3315,13 @@ if (nivel === 'primaria') {
 html += `<div class="card"><select style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="state.sumativaFilterMateria=this.value;render();">
 ${MATERIAS.map(m => `<option value="${m}" ${state.sumativaFilterMateria === m ? 'selected' : ''}>${m}</option>`).join('')}
 </select></div>`;
+}
+if (nivel === 'secundaria' && state.secSchoolInfo.materia2) {
+const si = state.secSchoolInfo;
+html += `<div class="card"><div class="row-flex">
+<button class="btn ${state.secMateriaActiva!==2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(1)">${si.materia || 'Materia 1'}</button>
+<button class="btn ${state.secMateriaActiva===2?'btn-blue':'btn-gray'}" style="flex:1;" onclick="setSecMateriaActiva(2)">${si.materia2}</button>
+</div></div>`;
 }
 html += `<div class="card"><div style="display:flex;gap:6px;">
 <select style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:0.82em;" onchange="state.sumativaFilterGrade=this.value;render();">
