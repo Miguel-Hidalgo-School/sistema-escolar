@@ -13261,6 +13261,8 @@ const ckAuth = firebase.auth();
 const ckDb = firebase.database();
 let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
 let ckCheckinStudentsRef = null; // lista propia, solo para cuentas SOLO CheckIn Kids
+let ckSecSchoolRef = null;
+let ckDirectorTelefono = '';
 let ckSyncReady = false;
 function ckDbBase(uid, isAdmin) {
   return isAdmin ? CK_DB_ROOT_ADMIN : ('usuarios/' + uid);
@@ -13272,6 +13274,7 @@ function ckBindRefs(base) {
     ckStudentsRef = null;
     ckSecStudentsRef = null;
     ckCheckinStudentsRef = ckDb.ref(base + '/checkinStudents');
+    ckSecSchoolRef = null;
   } else {
     // Con las reglas nuevas de Firebase, leer 'students' sin accesoPrimaria (o
     // 'secStudents' sin accesoSecundaria) da error de permisos. Por eso solo se
@@ -13279,6 +13282,14 @@ function ckBindRefs(base) {
     ckStudentsRef = ckAccesoPrimaria ? ckDb.ref(base + '/students') : null;
     ckSecStudentsRef = ckAccesoSecundaria ? ckDb.ref(base + '/secStudents') : null;
     ckCheckinStudentsRef = null;
+    // El teléfono del director(a) de secundaria sirve de contacto de respaldo
+    // cuando el alumno no tiene teléfono de madre, padre ni tutor capturado.
+    ckSecSchoolRef = ckAccesoSecundaria ? ckDb.ref(base + '/secSchoolInfo') : null;
+    if (ckSecSchoolRef) {
+      ckSecSchoolRef.on('value', snap => { ckDirectorTelefono = (snap.val() || {}).directorTelefono || ''; });
+    } else {
+      ckDirectorTelefono = '';
+    }
   }
   ckAttendanceRef = ckDb.ref(base + '/checkinAttendance');
 }
@@ -13878,7 +13889,10 @@ function maybeOfferNotify(res){
   (student.pickupAuthorized || []).forEach(p=>{
     if(p.phone) recipients.push({ label:`${p.name || 'Persona autorizada'} (${p.phone})${p.relation ? ' · '+p.relation : ''}`, phone: p.phone });
   });
-  if(recipients.length === 0) return; // no hay ningún teléfono registrado, no se puede avisar
+  if(recipients.length === 0 && student.nivel === 'secundaria' && ckDirectorTelefono){
+    recipients.push({ label:`Director(a) — sin contacto de familia registrado (${ckDirectorTelefono})`, phone: ckDirectorTelefono });
+  }
+  if(recipients.length === 0){ showToast(`${student.name} no tiene teléfono de madre, padre ni tutor capturado — agrégalo en su registro para poder avisar por WhatsApp/SMS.`, 'err'); return; }
 
   const timeStr = new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', hour12:true});
   const select = document.getElementById('notifyRecipientSelect');
