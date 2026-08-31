@@ -371,12 +371,25 @@
             <label>Mes a exportar</label>
             <input type="month" id="monthPicker">
           </div>
-          <button class="btn btn-primary btn-sm" onclick="exportMonthlyList()">Descargar lista mensual</button>
+          <div class="mini-field">
+            <label>Nivel educativo</label>
+            <select id="monthlyNivelFilter" onchange="fillMonthlyGradoOptions()">
+              <option value="">Todos</option>
+              <option value="primaria">Primaria</option>
+              <option value="secundaria">Secundaria</option>
+            </select>
+          </div>
+          <div class="mini-field">
+            <label>Grado</label>
+            <select id="monthlyGradoFilter"><option value="">Todos</option></select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="exportMonthlyList(true)">Descargar con datos de padres</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportMonthlyList(false)">Descargar solo datos del alumno</button>
         </div>
         <button class="btn btn-danger btn-sm" onclick="clearAllHistory()">Vaciar historial completo</button>
       </div>
       <p class="note" style="color:var(--slate);font-size:12px;margin:-8px 0 16px;">
-        La lista mensual agrupa los días hábiles (lunes a viernes) en semanas de 5 días a partir de la fecha de inicio de ciclo. Cada semana se asigna al mes donde caen más de sus 5 días. El Excel se descarga con celdas y bordes bien definidos.
+        La lista mensual agrupa los días hábiles (lunes a viernes) en semanas de 5 días a partir de la fecha de inicio de ciclo (semana 1 = esa fecha en adelante), y la numeración de semanas continúa de un mes al siguiente sin reiniciarse. Incluye columna de Total de asistencias del periodo. Filtra por nivel y grado, y elige si la descarga lleva datos de padres o solo del alumno.
       </p>
       <table>
         <thead><tr><th>Fecha</th><th>Alumno</th><th>Grado/Grupo</th><th>Entrada</th><th>Salida</th><th>Estado</th><th></th></tr></thead>
@@ -14331,6 +14344,12 @@ function mondayOf(date){
   d.setHours(0,0,0,0);
   return d;
 }
+function fillMonthlyGradoOptions(){
+  const nivel = document.getElementById('monthlyNivelFilter').value;
+  const sel = document.getElementById('monthlyGradoFilter');
+  const grados = nivel ? CK_GRADOS_POR_NIVEL[nivel] : ['1°','2°','3°','4°','5°','6°'];
+  sel.innerHTML = '<option value="">Todos</option>' + grados.map(g=>`<option value="${g}">${g}</option>`).join('');
+}
 function generateWeeksAssignedToMonth(cycleStartStr, targetYear, targetMonthIndex){
   let weekStart = mondayOf(new Date(cycleStartStr+'T00:00:00'));
   const weeks = [];
@@ -14344,7 +14363,9 @@ function generateWeeksAssignedToMonth(cycleStartStr, targetYear, targetMonthInde
     days.forEach(dt=>{ const key = dt.getFullYear()+'-'+dt.getMonth(); counts[key]=(counts[key]||0)+1; });
     let majorKey = Object.keys(counts).reduce((a,b)=> counts[a]>=counts[b] ? a : b);
     const [my, mm] = majorKey.split('-').map(Number);
-    if(my===targetYear && mm===targetMonthIndex) weeks.push(days);
+    // weekNum es continuo desde el inicio de ciclo (semana 1, 2, 3...),
+    // NO se reinicia en cada mes exportado.
+    if(my===targetYear && mm===targetMonthIndex) weeks.push({ days, weekNum: i+1 });
     if(my > targetYear || (my===targetYear && mm > targetMonthIndex)) break;
     weekStart = new Date(weekStart); weekStart.setDate(weekStart.getDate()+7);
   }
@@ -14353,40 +14374,45 @@ function generateWeeksAssignedToMonth(cycleStartStr, targetYear, targetMonthInde
 const MONTH_NAMES_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 const WEEKDAY_ABBR = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
 
-async function exportMonthlyList(){
+async function exportMonthlyList(incluirPadres){
   if(students.length===0){ showToast('No hay alumnos registrados todavía', 'err'); return; }
   const monthVal = document.getElementById('monthPicker').value;
   const cycleStart = document.getElementById('cycleStartInput').value || '2026-08-01';
+  const nivelFiltro = document.getElementById('monthlyNivelFilter').value;
+  const gradoFiltro = document.getElementById('monthlyGradoFilter').value;
   if(!monthVal){ showToast('Selecciona un mes', 'err'); return; }
   const [yearStr, monStr] = monthVal.split('-');
   const year = parseInt(yearStr,10);
   const monthIdx = parseInt(monStr,10)-1;
 
-  const weeks = generateWeeksAssignedToMonth(cycleStart, year, monthIdx);
-  if(weeks.length===0){ showToast('No se encontraron semanas hábiles para ese mes con el ciclo indicado', 'err'); return; }
+  const weeksInfo = generateWeeksAssignedToMonth(cycleStart, year, monthIdx);
+  if(weeksInfo.length===0){ showToast('No se encontraron semanas hábiles para ese mes con el ciclo indicado', 'err'); return; }
+  const weeks = weeksInfo.map(w=>w.days);
   const allDays = weeks.flat();
   const todayIso = todayStr();
-  const fixedHeaders = ['MATRÍCULA','ALUMNO','MADRE/PADRE','GRADO/GRUPO'];
-  const totalCols = fixedHeaders.length + allDays.length;
+  const fixedHeaders = incluirPadres ? ['MATRÍCULA','ALUMNO','MADRE/PADRE','GRADO/GRUPO'] : ['MATRÍCULA','ALUMNO','GRADO/GRUPO'];
+  const totalCols = fixedHeaders.length + allDays.length + 1; // +1 columna Total
   const schoolName = (loadJSON(SCHOOL_KEY,'') || '').toUpperCase();
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(MONTH_NAMES_ES[monthIdx].slice(0,28));
 
   // Fila título
-  const titleRow = ws.addRow([`${schoolName ? schoolName+' — ' : ''}LISTA DE ASISTENCIA MENSUAL — ${MONTH_NAMES_ES[monthIdx]} ${year}`]);
+  const nivelTxt = nivelFiltro ? ' — ' + ckNivelLabel(nivelFiltro) : '';
+  const gradoTxt = gradoFiltro ? ' ' + gradoFiltro : '';
+  const titleRow = ws.addRow([`${schoolName ? schoolName+' — ' : ''}LISTA DE ASISTENCIA MENSUAL — ${MONTH_NAMES_ES[monthIdx]} ${year}${nivelTxt}${gradoTxt}`]);
   ws.mergeCells(1,1,1,totalCols);
   titleRow.getCell(1).font = {bold:true, size:13};
   titleRow.getCell(1).alignment = {horizontal:'center', vertical:'middle'};
   titleRow.height = 24;
 
-  // Fila de semanas
+  // Fila de semanas (numeración continua desde el inicio de ciclo)
   const weekRowValues = new Array(totalCols).fill('');
   let cursor = fixedHeaders.length;
-  weeks.forEach((w,wi)=>{ weekRowValues[cursor] = `SEMANA ${wi+1}`; cursor += 5; });
+  weeksInfo.forEach(w=>{ weekRowValues[cursor] = `SEMANA ${w.weekNum}`; cursor += 5; });
   const weekRow = ws.addRow(weekRowValues);
   cursor = fixedHeaders.length;
-  weeks.forEach(()=>{ ws.mergeCells(2, cursor+1, 2, cursor+5); cursor += 5; });
+  weeksInfo.forEach(()=>{ ws.mergeCells(2, cursor+1, 2, cursor+5); cursor += 5; });
   weekRow.eachCell({includeEmpty:true}, c=>{
     c.font = {bold:true, color:{argb:'FF1E2A38'}};
     c.alignment = {horizontal:'center', vertical:'middle'};
@@ -14395,43 +14421,54 @@ async function exportMonthlyList(){
   weekRow.height = 18;
 
   // Fila de encabezados de fecha
-  const headerValues = [...fixedHeaders, ...allDays.map(d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${WEEKDAY_ABBR[d.getDay()]}`)];
+  const headerValues = [...fixedHeaders, ...allDays.map(d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${WEEKDAY_ABBR[d.getDay()]}`), 'TOTAL'];
   const headerRow = ws.addRow(headerValues);
   styleHeaderRow(headerRow);
   headerRow.height = 26;
 
-  // Filas de alumnos
-  const sortedStudents = [...students].sort((a,b)=>
-    (a.grade+a.group).localeCompare(b.grade+b.group) || a.name.localeCompare(b.name));
+  // Filas de alumnos (filtradas por nivel/grado)
+  const sortedStudents = [...students]
+    .filter(s => !nivelFiltro || s.nivel === nivelFiltro)
+    .filter(s => !gradoFiltro || s.grade === gradoFiltro)
+    .sort((a,b)=> (a.grade+a.group).localeCompare(b.grade+b.group) || a.name.localeCompare(b.name));
+
+  if(sortedStudents.length===0){ showToast('No hay alumnos con ese nivel/grado', 'err'); return; }
 
   sortedStudents.forEach(s=>{
-    const rowVals = [s.folio, s.name, primaryContactName(s), `${s.grade} ${s.group}`];
+    const rowVals = incluirPadres ? [s.folio, s.name, primaryContactName(s), `${s.grade} ${s.group}`] : [s.folio, s.name, `${s.grade} ${s.group}`];
+    let totalAsistencias = 0;
     allDays.forEach(d=>{
       const dStr = dateToStr(d);
       if(dStr > todayIso){ rowVals.push(''); return; }
       const entry = attendance.find(a => a.studentId===s.id && a.date===dStr && a.checkin);
+      if(entry) totalAsistencias++;
       rowVals.push(entry ? 'A' : 'F');
     });
+    rowVals.push(totalAsistencias);
     const row = ws.addRow(rowVals);
     row.eachCell({includeEmpty:true}, (cell, colNum)=>{
       cell.alignment = {vertical:'middle', horizontal: colNum>fixedHeaders.length ? 'center' : 'left'};
-      if(colNum>fixedHeaders.length){
+      if(colNum>fixedHeaders.length && colNum<=fixedHeaders.length+allDays.length){
         if(cell.value==='F') cell.font = {color:{argb:'FFC94734'}, bold:true};
         else if(cell.value==='A') cell.font = {color:{argb:'FF447A5C'}, bold:true};
       }
+      if(colNum===totalCols) cell.font = {bold:true};
     });
   });
 
   applyAllBorders(ws, ws.rowCount, totalCols);
 
-  ws.getColumn(1).width = 8;
-  ws.getColumn(2).width = 24;
-  ws.getColumn(3).width = 22;
-  ws.getColumn(4).width = 12;
+  let col = 1;
+  ws.getColumn(col++).width = 8;
+  ws.getColumn(col++).width = 24;
+  if(incluirPadres) ws.getColumn(col++).width = 22;
+  ws.getColumn(col++).width = 12;
   for(let i=0;i<allDays.length;i++) ws.getColumn(fixedHeaders.length+1+i).width = 8;
-  ws.views = [{state:'frozen', xSplit:4, ySplit:3}];
+  ws.getColumn(totalCols).width = 10;
+  ws.views = [{state:'frozen', xSplit:fixedHeaders.length, ySplit:3}];
 
-  await downloadWorkbook(wb, `lista_asistencia_${MONTH_NAMES_ES[monthIdx].toLowerCase()}_${year}_${schoolSlug()}.xlsx`);
+  const sufijo = incluirPadres ? 'con_padres' : 'solo_alumno';
+  await downloadWorkbook(wb, `lista_asistencia_${MONTH_NAMES_ES[monthIdx].toLowerCase()}_${year}_${sufijo}_${schoolSlug()}.xlsx`);
   showToast(`Lista de ${MONTH_NAMES_ES[monthIdx]} descargada (${weeks.length} semanas)`, 'ok');
 }
 
