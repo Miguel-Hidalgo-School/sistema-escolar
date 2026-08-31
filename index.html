@@ -1036,7 +1036,7 @@ const name = input.value.trim();
 if (!name) return;
 if (btn) { btn.textContent = 'Agregando...'; btn.disabled = true; }
 const id = secStudentsRef.push().key;
-secStudentsRef.child(id).set({ name, grade: state.secSelectedGrade, grupo: state.secSelectedGrupo, periodos: [null,null,null] })
+secStudentsRef.child(id).set({ name, grade: state.secSelectedGrade, grupo: state.secSelectedGrupo, periodos: [null,null,null], periodosAuto: [true,true,true], periodosM2: [null,null,null], periodosAutoM2: [true,true,true] })
 .then(() => showToast('✅ Alumno agregado'))
 .catch(() => showToast('❌ Error al agregar'))
 .finally(() => { if (btn) { btn.textContent = 'Agregar'; btn.disabled = false; } });
@@ -1063,6 +1063,12 @@ showToast('Alumno eliminado');
 render();
 }
 function secPeriodosField() { return state.secMateriaActiva === 2 ? 'periodosM2' : 'periodos'; }
+function secPeriodosAutoField() { return state.secMateriaActiva === 2 ? 'periodosAutoM2' : 'periodosAuto'; }
+function secMateriaKeyFor(mNum) {
+const si = state.secSchoolInfo || {};
+if (!si.materia2) return 'general';
+return mNum === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia 1');
+}
 function secMateriaNombreActiva() {
 const si = state.secSchoolInfo || {};
 return state.secMateriaActiva === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia');
@@ -1073,11 +1079,15 @@ function updateSecGradeLive(id, periodo, value) {
 const s = state.secStudents.find(x => x.id === id);
 if (!s) return;
 const field = secPeriodosField();
+const autoField = secPeriodosAutoField();
 const v = value === '' ? null : Number(value);
 if (!s[field]) s[field] = [null,null,null];
 s[field] = [...s[field]];
 s[field][periodo] = v;
-pendingSecGrades[id] = { field, value: s[field] };
+if (!s[autoField]) s[autoField] = [true,true,true];
+s[autoField] = [...s[autoField]];
+s[autoField][periodo] = false;
+pendingSecGrades[id] = { field, value: s[field], autoField, autoValue: s[autoField] };
 const finalEl = document.getElementById('secfinal-'+id);
 if (finalEl) {
 const suma = s[field].reduce((a,b) => a + (typeof b === 'number' ? b : 0), 0);
@@ -1086,9 +1096,47 @@ finalEl.textContent = suma.toFixed(1);
 }
 function commitSecGrade(id) {
 if (pendingSecGrades[id]) {
-secStudentsRef.child(id).update({ [pendingSecGrades[id].field]: pendingSecGrades[id].value });
+const p = pendingSecGrades[id];
+secStudentsRef.child(id).update({ [p.field]: p.value, [p.autoField]: p.autoValue });
 delete pendingSecGrades[id];
 }
+}
+function reactivarAutoSumativa(nivel, grade, grupo) {
+if (nivel !== 'secundaria') return;
+const list = state.secStudents.filter(s => s.grade === grade && (s.grupo||'A') === grupo);
+list.forEach(s => {
+secStudentsRef.child(s.id).update({ periodosAuto: [true,true,true], periodosAutoM2: [true,true,true] });
+s.periodosAuto = [true,true,true];
+s.periodosAutoM2 = [true,true,true];
+});
+showToast('🔄 Sincronización automática reactivada para este grupo');
+setTimeout(autoSyncSumativaSecundaria, 300);
+}
+function autoSyncSumativaSecundaria() {
+if (!secStudentsRef || !state.secStudents || !state.secStudents.length) return;
+const materiasNums = state.secSchoolInfo.materia2 ? [1,2] : [1];
+state.secStudents.forEach(s => {
+const updates = {};
+materiasNums.forEach(mNum => {
+const field = mNum === 2 ? 'periodosM2' : 'periodos';
+const autoField = mNum === 2 ? 'periodosAutoM2' : 'periodosAuto';
+const auto = s[autoField] || [true,true,true];
+const current = s[field] || [null,null,null];
+const mk = secMateriaKeyFor(mNum);
+const next = [...current];
+let changed = false;
+['p1','p2','p3'].forEach((pid, idx) => {
+if (auto[idx] === false) return;
+const config = sumativaConfigArr('secundaria');
+const r = calcularFinalSumativa('secundaria', s, pid, mk);
+if (r.faltan.length === config.length) return;
+const val = Math.round(r.total * 10) / 10;
+if (next[idx] !== val) { next[idx] = val; changed = true; }
+});
+if (changed) { updates[field] = next; s[field] = next; }
+});
+if (Object.keys(updates).length) secStudentsRef.child(s.id).update(updates);
+});
 }
 function secStudentFinal(s, materiaActivaOverride) {
 const field = (materiaActivaOverride || state.secMateriaActiva) === 2 ? 'periodosM2' : 'periodos';
@@ -1502,6 +1550,7 @@ if (state.nivel === 'primaria') {
 app.innerHTML = renderTopbar() + renderTabs() + '<main>' + renderTabContent() + '</main>';
 } else {
 app.innerHTML = renderTopbar() + renderSecTabs() + '<main>' + renderSecTabContent() + '</main>';
+try { autoSyncSumativaSecundaria(); } catch(e) {}
 }
 }
 function updateLoginInitial() {
@@ -3116,9 +3165,9 @@ if (!asignadas.length) return null; // de verdad no hay tareas asignadas todaví
 const suma = asignadas.reduce((a, t) => a + (typeof t.entregas[studentId].calificacion === 'number' ? t.entregas[studentId].calificacion : 0), 0);
 return suma / asignadas.length;
 }
-function getSumativaValor(nivel, studentId, componentId, periodoId) {
+function getSumativaValor(nivel, studentId, componentId, periodoId, materiaKeyOverride) {
 const map = nivel === 'primaria' ? state.sumativaCalifPri : state.sumativaCalifSec;
-const mk = sumativaMateriaKey(nivel);
+const mk = materiaKeyOverride || sumativaMateriaKey(nivel);
 return (map[studentId] && map[studentId][mk] && map[studentId][mk][periodoId] && map[studentId][mk][periodoId][componentId] != null) ? map[studentId][mk][periodoId][componentId] : null;
 }
 function setSumativaValorLocal(nivel, studentId, componentId, periodoId, value) {
@@ -3128,6 +3177,22 @@ if (!map[studentId]) map[studentId] = {};
 if (!map[studentId][mk]) map[studentId][mk] = {};
 if (!map[studentId][mk][periodoId]) map[studentId][mk][periodoId] = {};
 map[studentId][mk][periodoId][componentId] = value === '' ? null : Number(value);
+actualizarTotalSumativaLive(nivel, studentId, periodoId);
+}
+function actualizarTotalSumativaLive(nivel, studentId, periodoId) {
+const list = nivel === 'primaria' ? state.students : state.secStudents;
+const s = list.find(x => x.id === studentId);
+if (!s) return;
+const r = calcularFinalSumativa(nivel, s, periodoId);
+const totalEl = document.getElementById('sumTotal-'+nivel+'-'+studentId);
+const faltanEl = document.getElementById('sumFaltan-'+nivel+'-'+studentId);
+if (totalEl) {
+totalEl.textContent = r.total.toFixed(1);
+totalEl.style.color = r.total >= 6 ? '#059669' : '#b91c1c';
+}
+if (faltanEl) {
+faltanEl.textContent = r.faltan.length ? 'Acumulado hasta hoy (falta capturar: ' + r.faltan.join(', ') + ')' : 'Calificación acumulada del periodo';
+}
 }
 function guardarSumativaGrupo(nivel) {
 const ref = nivel === 'primaria' ? sumativaCalifPriRef : sumativaCalifSecRef;
@@ -3174,10 +3239,10 @@ valor = calcularAsistenciaSumativa(nivel, s.id, periodoId);
 } else if (c.id === 'examen') {
 // Si no se captura una calificación de examen, se calcula en automático
 // de forma proporcional a lo que el alumno lleva en Tareas.
-const manual = getSumativaValor(nivel, s.id, c.id, periodoId);
+const manual = getSumativaValor(nivel, s.id, c.id, periodoId, mk);
 valor = manual != null ? manual : tareasValor;
 } else {
-valor = c.automatico ? tareasValor : getSumativaValor(nivel, s.id, c.id, periodoId);
+valor = c.automatico ? tareasValor : getSumativaValor(nivel, s.id, c.id, periodoId, mk);
 }
 if (valor == null) faltan.push(c.nombre);
 total += (valor || 0) * ((Number(c.porcentaje) || 0) / 100);
@@ -3364,14 +3429,19 @@ html += `<div style="display:flex;justify-content:space-between;align-items:cent
 }
 });
 html += `<div style="border-top:1px solid #e5e7eb;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-<span style="font-size:0.75em;font-weight:700;">${r.faltan.length ? 'Acumulado hasta hoy (falta capturar: ' + esc2(r.faltan.join(', ')) + ')' : 'Calificación acumulada del periodo'}</span>
-<span style="font-size:1em;font-weight:800;color:${r.total >= 6 ? '#059669' : '#b91c1c'};">${r.total.toFixed(1)}</span>
+<span id="sumFaltan-${nivel}-${s.id}" style="font-size:0.75em;font-weight:700;">${r.faltan.length ? 'Acumulado hasta hoy (falta capturar: ' + esc2(r.faltan.join(', ')) + ')' : 'Calificación acumulada del periodo'}</span>
+<span id="sumTotal-${nivel}-${s.id}" style="font-size:1em;font-weight:800;color:${r.total >= 6 ? '#059669' : '#b91c1c'};">${r.total.toFixed(1)}</span>
 </div>
 </div>`;
 });
-html += `<button class="btn btn-green" style="width:100%;" onclick="guardarSumativaGrupo('${nivel}')">💾 Guardar calificaciones del grupo</button>
-<button class="btn btn-dark" style="width:100%;margin-top:6px;" onclick="cerrarEvaluacionSumativa('${nivel}')">🔒 Cerrar evaluación Sumativa (pasar a Calificaciones)</button>
+html += `<button class="btn btn-green" style="width:100%;" onclick="guardarSumativaGrupo('${nivel}')">💾 Guardar calificaciones del grupo</button>`;
+if (nivel === 'secundaria') {
+html += `<button class="btn btn-dark" style="width:100%;margin-top:6px;" onclick="reactivarAutoSumativa('${nivel}','${state.sumativaFilterGrade}','${state.sumativaFilterGrupo}')">🔄 Reactivar sincronización automática de este grupo</button>
+<p style="font-size:0.7em;color:#9ca3af;margin-top:6px;text-align:center;">Calificaciones se actualiza solo, en automático, conforme captures tareas, asistencias y estos rubros. Si editas un periodo a mano allá, ese periodo deja de actualizarse solo — usa este botón si quieres regresarlo a automático.</p>`;
+} else {
+html += `<button class="btn btn-dark" style="width:100%;margin-top:6px;" onclick="cerrarEvaluacionSumativa('${nivel}')">🔒 Cerrar evaluación Sumativa (pasar a Calificaciones)</button>
 <p style="font-size:0.7em;color:#9ca3af;margin-top:6px;text-align:center;">Cerrar no borra nada: solo copia la calificación acumulada de hoy a Calificaciones. Puedes cerrar de nuevo más adelante para actualizarla, o editarla manualmente allá.</p>`;
+}
 }
 return html;
 }
