@@ -538,11 +538,32 @@ return out;
 }
 function openUserAdmin() {
 if (!state.isAdmin) return;
+const pinIngresado = prompt('Ingresa tu PIN para entrar a Gestionar usuarios:');
+if (pinIngresado === null) return;
+if (pinIngresado.trim() !== getPinGestionUsuarios()) {
+alert('PIN incorrecto.');
+return;
+}
 state.showUserAdmin = true;
 state.userAdminScope = 'all';
 state.adminUsersList = null;
 render();
 cargarListaUsuarios();
+}
+// PIN para entrar a "Gestionar usuarios". Se guarda por dispositivo en
+// localStorage; si nunca se ha cambiado, usa 6103 como valor por defecto.
+function getPinGestionUsuarios() {
+return localStorage.getItem('pin_gestionar_usuarios') || '6103';
+}
+function cambiarPinGestionUsuarios() {
+const actual = getPinGestionUsuarios();
+const pinActualIngresado = prompt('Ingresa el PIN actual:');
+if (pinActualIngresado === null) return;
+if (pinActualIngresado.trim() !== actual) { alert('PIN actual incorrecto.'); return; }
+const nuevo = prompt('Ingresa el nuevo PIN (solo números):');
+if (nuevo === null || nuevo.trim() === '') return;
+localStorage.setItem('pin_gestionar_usuarios', nuevo.trim());
+alert('PIN actualizado correctamente.');
 }
 function openMisUsuarios() {
 if (!state.perfilActual || !state.perfilActual.puedeGestionarUsuarios) return;
@@ -1667,7 +1688,10 @@ let html = `
 <main>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
 <p style="font-weight:700;font-size:1.15em;">${tituloScope}</p>
+<div style="display:flex;gap:8px;">
+${scope === 'all' ? `<button class="btn btn-sm" style="background:#475569;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="cambiarPinGestionUsuarios()">🔑 Cambiar PIN</button>` : ''}
 <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="closeUserAdmin()">← Volver al inicio</button>
+</div>
 </div>
 <div class="card">
 <p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
