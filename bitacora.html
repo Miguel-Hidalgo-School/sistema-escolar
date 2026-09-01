@@ -662,7 +662,7 @@
             const grados = GRADOS_POR_NIVEL[nivelActual];
             const sel = document.getElementById('inputGradoSel');
             sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('')
-                + `<option value="MULTIGRADO">Multigrado</option>`;
+                + (nivelActual === 'Primaria' ? `<option value="MULTIGRADO">Multigrado</option>` : '');
             poblarGrupoSelect();
         }
 
