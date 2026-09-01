@@ -402,6 +402,7 @@
           estoyOnline = true;
           console.log('🟢 Conectado a internet - Sincronizando...');
           sincronizarConFirebase();
+          descargarDeFirebase();
         });
 
         window.addEventListener('offline', () => {
@@ -414,7 +415,10 @@
         // también). En cuanto se confirma, se intenta sincronizar lo pendiente.
         bitAuth.onAuthStateChanged(user => {
           bitUsuarioActual = user;
-          if (user) sincronizarConFirebase();
+          if (user) {
+            sincronizarConFirebase();
+            descargarDeFirebase();
+          }
         });
 
         // Sube a Firebase, de cada nivel, únicamente las incidencias que aún no se
@@ -481,6 +485,51 @@
           }
         }
 
+        // Descarga de Firebase las incidencias que se hayan guardado desde OTROS
+        // dispositivos/redes (ej. la registraste en el celular y la quieres ver
+        // en la computadora) y las fusiona con el historial local, sin duplicar
+        // las que ya existen aquí.
+        async function descargarDeFirebase() {
+          if (!estoyOnline) return;
+          const user = bitUsuarioActual || bitAuth.currentUser;
+          if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
+          try {
+            const snap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
+            const remotos = snap.val() || {};
+            let seActualizoNivelVisible = false;
+
+            for (const nivel of NIVELES_SYNC) {
+              const keyHistorial = `historial_incidencias_${nivel}`;
+              let historial;
+              try { historial = JSON.parse(localStorage.getItem(keyHistorial)) || []; }
+              catch (e) { historial = []; }
+
+              const idsLocales = new Set(historial.map(h => h.id));
+              let huboNuevos = false;
+
+              Object.values(remotos).forEach(item => {
+                if (item.nivel === nivel && !idsLocales.has(item.id)) {
+                  historial.push({ ...item, sincronizado: true });
+                  idsLocales.add(item.id);
+                  huboNuevos = true;
+                }
+              });
+
+              if (huboNuevos) {
+                historial.sort((a, b) => b.id - a.id);
+                localStorage.setItem(keyHistorial, JSON.stringify(historial));
+                if (nivel === nivelActual) seActualizoNivelVisible = true;
+              }
+            }
+
+            if (seActualizoNivelVisible && !document.getElementById('seccionHistorial').classList.contains('hidden')) {
+              renderizarListaHistorial();
+            }
+          } catch (error) {
+            console.error('Error descargando incidencias de Firebase', error);
+          }
+        }
+
         function showSyncNotification(msg, type = 'success') {
           const div = document.createElement('div');
           div.textContent = msg;
@@ -497,7 +546,10 @@
         // Sincroniza cada 60 segundos si está online (red de seguridad, por si algo
         // quedó pendiente: sin internet al guardar, un error momentáneo, etc.)
         setInterval(() => {
-          if (estoyOnline) sincronizarConFirebase();
+          if (estoyOnline) {
+            sincronizarConFirebase();
+            descargarDeFirebase();
+          }
         }, 60000);
 
         let nivelActual = "Primaria";
@@ -856,6 +908,13 @@
             document.getElementById('seccionHistorial').classList.remove('hidden');
             document.getElementById('seccionConfig').classList.add('hidden');
 
+            renderizarListaHistorial();
+            // Al abrir el historial, intenta traer de inmediato lo que se haya
+            // guardado desde otro dispositivo/red (celular, otra compu, etc.).
+            descargarDeFirebase();
+        }
+
+        function renderizarListaHistorial() {
             document.getElementById('lblNivelHistorial').innerText = nivelActual;
             let keyHistorial = `historial_incidencias_${nivelActual}`;
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
