@@ -203,7 +203,7 @@
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">Asunto / Protocolo de Violencia:</label>
                 <select id="inputAsunto" class="w-full p-2 border border-slate-300 rounded text-sm bg-white font-medium text-slate-800">
-                    <option value="SIN INCIDENCIAS">Sin incidencias en el periodo</option>
+                    <option value="SIN INCIDENCIAS">Sin incidencias</option>
                     <option value="MALA CONDUCTA / INCUMPLIMIENTO">Mala conducta / Incumplimiento general</option>
                     <option value="ACCIDENTE ESCOLAR">Accidente escolar</option>
                     <option value="RETARDO EN RECOGER AL ALUMNO AL TÉRMINO DE LA JORNADA ESCOLAR">Retardo en recoger al alumno</option>
@@ -662,7 +662,7 @@
             const grados = GRADOS_POR_NIVEL[nivelActual];
             const sel = document.getElementById('inputGradoSel');
             sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('')
-                + `<option value="MULTIGRADO">Multigrado (varios grados / sin incidencias)</option>`;
+                + `<option value="MULTIGRADO">Multigrado</option>`;
             poblarGrupoSelect();
         }
 
