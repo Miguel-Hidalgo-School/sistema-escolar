@@ -203,6 +203,7 @@
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">Asunto / Protocolo de Violencia:</label>
                 <select id="inputAsunto" class="w-full p-2 border border-slate-300 rounded text-sm bg-white font-medium text-slate-800">
+                    <option value="SIN INCIDENCIAS">Sin incidencias en el periodo</option>
                     <option value="MALA CONDUCTA / INCUMPLIMIENTO">Mala conducta / Incumplimiento general</option>
                     <option value="ACCIDENTE ESCOLAR">Accidente escolar</option>
                     <option value="RETARDO EN RECOGER AL ALUMNO AL TÉRMINO DE LA JORNADA ESCOLAR">Retardo en recoger al alumno</option>
@@ -660,16 +661,26 @@
         function poblarGradoSelect() {
             const grados = GRADOS_POR_NIVEL[nivelActual];
             const sel = document.getElementById('inputGradoSel');
-            sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('');
+            sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('')
+                + `<option value="MULTIGRADO">Multigrado (varios grados / sin incidencias)</option>`;
             poblarGrupoSelect();
         }
 
         function poblarGrupoSelect() {
             const grado = document.getElementById('inputGradoSel').value;
+            const sel = document.getElementById('inputGrupoSel');
+            if (grado === 'MULTIGRADO') {
+                // No aplica un grupo específico: se deja un solo valor vacío y el
+                // select de grupo se desactiva, en vez de forzar a elegir uno.
+                sel.innerHTML = `<option value="">—</option>`;
+                sel.disabled = true;
+                actualizarListaAlumnos();
+                return;
+            }
+            sel.disabled = false;
             const alumnos = alumnosDelNivel().filter(a => a.grade === grado);
             let grupos = [...new Set(alumnos.map(a => a.grupo).filter(Boolean))].sort();
             if (!grupos.length) grupos = GRUPOS_DEFAULT;
-            const sel = document.getElementById('inputGrupoSel');
             sel.innerHTML = grupos.map(g => `<option value="${g}">${g}</option>`).join('');
             actualizarListaAlumnos();
         }
@@ -772,16 +783,19 @@
             const selectAsunto = document.getElementById('inputAsunto');
             const textoAsunto = selectAsunto.options[selectAsunto.selectedIndex].text;
 
+            const gradoSel = document.getElementById('inputGradoSel').value;
+            const grupoSel = document.getElementById('inputGrupoSel').value;
+            const esMultigrado = gradoSel === 'MULTIGRADO';
             const datos = {
                 id: Date.now(),
                 nivel: nivelActual,
                 escuela: document.getElementById('configEscuela').value.toUpperCase(),
                 cct: document.getElementById('configCCT').value.toUpperCase(),
-                alumno: document.getElementById('inputAlumno').value.toUpperCase() || 'SIN NOMBRE',
+                alumno: document.getElementById('inputAlumno').value.toUpperCase() || (esMultigrado ? 'SIN INCIDENCIAS' : 'SIN NOMBRE'),
                 tutor: document.getElementById('inputTutor').value.toUpperCase() || 'NO ESPECIFICADO',
                 docente: document.getElementById('configDocente').value.toUpperCase(),
                 director: document.getElementById('configDirector').value.toUpperCase(),
-                grado: `${document.getElementById('inputGradoSel').value} GRUPO ${document.getElementById('inputGrupoSel').value}`,
+                grado: esMultigrado ? 'MULTIGRADO' : `${gradoSel} GRUPO ${grupoSel}`,
                 asunto: textoAsunto.toUpperCase(),
                 fecha: document.getElementById('inputFecha').value,
                 narrativa: document.getElementById('inputNarrativa').value.toUpperCase(),
