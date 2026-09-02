@@ -1090,6 +1090,23 @@ const si = state.secSchoolInfo || {};
 if (!si.materia2) return 'general';
 return mNum === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia 1');
 }
+// Identificador FIJO de la materia activa de secundaria (m1/m2), que no cambia aunque
+// se edite el texto de "Nombre de la materia" en Inicio. A diferencia de
+// secMateriaKeyFor (que regresa el NOMBRE y se usaba por error como si fuera un id
+// estable), esta función es la que debe usarse para filtrar/guardar datos, para que
+// renombrar una materia nunca vuelva "invisibles" las tareas o calificaciones ya
+// guardadas.
+function secMateriaStableKey(mNum) {
+const si = state.secSchoolInfo || {};
+if (!si.materia2) return 'general';
+return mNum === 2 ? 'm2' : 'm1';
+}
+// Para tareas creadas antes de que existiera materiaKey: no tenían forma de
+// distinguir materia 1 de materia 2, así que se asumen de la materia 1 (la original,
+// ej. Formación Cívica y Ética), que es la que ya existía antes de agregar una segunda.
+function tareaMateriaKeyEfectiva(t) {
+return t.materiaKey || 'm1';
+}
 function secMateriaNombreActiva() {
 const si = state.secSchoolInfo || {};
 return state.secMateriaActiva === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia');
@@ -1143,7 +1160,7 @@ const field = mNum === 2 ? 'periodosM2' : 'periodos';
 const autoField = mNum === 2 ? 'periodosAutoM2' : 'periodosAuto';
 const auto = s[autoField] || [true,true,true];
 const current = s[field] || [null,null,null];
-const mk = secMateriaKeyFor(mNum);
+const mk = secMateriaStableKey(mNum);
 const next = [...current];
 let changed = false;
 ['p1','p2','p3'].forEach((pid, idx) => {
@@ -2813,6 +2830,7 @@ ref.push().set({
 titulo: state.tareaNueva.titulo,
 tipo: state.tareaNueva.tipo,
 materia: state.tareaNueva.materia || '',
+materiaKey: nivel === 'secundaria' ? secMateriaStableKey(state.secMateriaActiva) : null,
 grade: state.tareaNueva.grade,
 grupo: state.tareaNueva.grupo || '',
 fecha: state.tareaNueva.fecha || new Date().toISOString().slice(0, 10),
@@ -2829,6 +2847,14 @@ if (!confirm('¿Eliminar esta tarea? Se perderá el registro de cumplimiento.'))
 const ref = nivel === 'primaria' ? tareasPriRef : tareasSecRef;
 ref.child(id).remove();
 if (state.tareaSelectedId === id) state.tareaSelectedId = null;
+}
+// Reasigna una tarea de secundaria a la otra materia (1 o 2). Sirve para recuperar
+// tareas que se crearon antes de que existiera materiaKey y por eso quedaron
+// agrupadas con la materia equivocada.
+function reasignarMateriaTarea(id, mNum) {
+const si = state.secSchoolInfo || {};
+const nombre = mNum === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia 1');
+tareasSecRef.child(id).update({ materiaKey: secMateriaStableKey(mNum), materia: nombre }).then(() => showToast('📌 Tarea reasignada a ' + nombre)).catch(() => showToast('No se pudo reasignar'));
 }
 function selectTarea(id) { state.tareaSelectedId = state.tareaSelectedId === id ? null : id; render(); }
 function updateTareaEntregaLocal(nivel, tareaId, studentId, field, value) {
@@ -3043,7 +3069,7 @@ html += `</div>
 </div>`;
 }
 
-const tareasFiltradas = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : (t.grupo === state.tareaFilterGrupo && (!si.materia2 || t.materia === materiaActual)))).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+const tareasFiltradas = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : (t.grupo === state.tareaFilterGrupo && (!si.materia2 || tareaMateriaKeyEfectiva(t) === secMateriaStableKey(state.secMateriaActiva))))).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
 
 if (!tareasFiltradas.length) {
 html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">No hay tareas registradas para este grado${nivel==='secundaria'?'/grupo':''} todavía.</p></div>`;
@@ -3060,6 +3086,11 @@ html += `<div class="card" style="margin-bottom:8px;">
 </div>
 <button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:8px;padding:4px 8px;font-size:0.75em;" onclick="event.stopPropagation();deleteTarea('${nivel}','${id}')">✕</button>
 </div>`;
+if (nivel === 'secundaria' && si.materia2) {
+const otraNum = tareaMateriaKeyEfectiva(t) === 'm2' ? 1 : 2;
+const otroNombre = otraNum === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia 1');
+html += `<button style="border:none;background:#eff6ff;color:#2563eb;border-radius:8px;padding:4px 8px;font-size:0.7em;margin-top:6px;" onclick="event.stopPropagation();reasignarMateriaTarea('${id}',${otraNum})">📌 Mover a ${esc2(otroNombre)}</button>`;
+}
 if (state.tareaSelectedId === id) {
 const alumnos = list.filter(s => s.grade === t.grade && (nivel==='primaria' || s.grupo === t.grupo)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
 html += `<div style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;">`;
@@ -3176,17 +3207,21 @@ sumativaPeriodosRef.set(sumativaPeriodos()).then(() => showToast('💾 Fechas de
 }
 function sumativaMateriaKey(nivel) {
 if (nivel === 'primaria') return state.sumativaFilterMateria || MATERIAS[0];
-return state.secSchoolInfo.materia2 ? secMateriaNombreActiva() : 'general';
+return secMateriaStableKey(state.secMateriaActiva);
 }
 function calcularPromedioTareas(nivel, studentId, grade, grupo, materia, periodoId) {
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
-// Regla de 3: se toman TODAS las tareas asignadas al alumno en este periodo (estén
-// calificadas o no). La suma de lo ya calificado se divide entre el total de tareas
-// asignadas, así el promedio avanza en vivo conforme se van calificando, en vez de
-// esperar a que todas tengan nota para poder mostrar algo.
-const asignadas = Object.values(map).filter(t => t.grade === grade && (nivel === 'primaria' ? t.materia === materia : (t.grupo === grupo && (materia === 'general' || t.materia === materia))) && fechaEnPeriodo(t.fecha, periodoId) && t.entregas && t.entregas[studentId]);
+// Regla de 3: se toman TODAS las tareas asignadas al grupo/materia en este periodo
+// (estén calificadas o no), sin importar si el alumno llegó a tener un registro de
+// "entrega" guardado (por ejemplo si se agregó al grupo después de crear la tarea).
+// Lo que no tiene calificación numérica cuenta como 0 en la suma, así una tarea no
+// entregada sí baja el promedio en vez de quedar excluida del cálculo por completo.
+const asignadas = Object.values(map).filter(t => t.grade === grade && (nivel === 'primaria' ? t.materia === materia : (t.grupo === grupo && (materia === 'general' || tareaMateriaKeyEfectiva(t) === materia))) && fechaEnPeriodo(t.fecha, periodoId));
 if (!asignadas.length) return null; // de verdad no hay tareas asignadas todavía
-const suma = asignadas.reduce((a, t) => a + (typeof t.entregas[studentId].calificacion === 'number' ? t.entregas[studentId].calificacion : 0), 0);
+const suma = asignadas.reduce((a, t) => {
+const e = (t.entregas && t.entregas[studentId]) || {};
+return a + (typeof e.calificacion === 'number' ? e.calificacion : 0);
+}, 0);
 return suma / asignadas.length;
 }
 function getSumativaValor(nivel, studentId, componentId, periodoId, materiaKeyOverride) {
