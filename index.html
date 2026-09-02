@@ -2856,6 +2856,10 @@ const si = state.secSchoolInfo || {};
 const nombre = mNum === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia 1');
 tareasSecRef.child(id).update({ materiaKey: secMateriaStableKey(mNum), materia: nombre }).then(() => showToast('📌 Tarea reasignada a ' + nombre)).catch(() => showToast('No se pudo reasignar'));
 }
+function reasignarGrupoTarea(nivel, id, grupo) {
+const ref = nivel === 'primaria' ? tareasPriRef : tareasSecRef;
+ref.child(id).update({ grupo }).then(() => showToast('📌 Tarea movida al Grupo ' + grupo)).catch(() => showToast('No se pudo mover'));
+}
 function selectTarea(id) { state.tareaSelectedId = state.tareaSelectedId === id ? null : id; render(); }
 function updateTareaEntregaLocal(nivel, tareaId, studentId, field, value) {
 const map = nivel === 'primaria' ? state.tareasPri : state.tareasSec;
@@ -3034,8 +3038,11 @@ html += `</div>
 <div style="display:flex;gap:6px;">
 <button class="btn btn-blue" style="flex:1;" onclick="openTareaForm('${nivel}')">➕ Nueva tarea</button>
 <button class="btn btn-dark" style="flex:1;" onclick="state.tareaPrintMode=true;render();">📄 Descargar PDF (lista completa)</button>
-</div>
 </div>`;
+if (nivel === 'secundaria') {
+html += `<button class="btn btn-gray" style="width:100%;margin-top:6px;font-size:0.75em;" onclick="state.tareaDiagnostico=!state.tareaDiagnostico;render();">${state.tareaDiagnostico?'🔍 Ocultar':'🔍 Ver TODAS las tareas de '+state.tareaFilterGrade+' (cualquier grupo/materia)'}</button>`;
+}
+html += `</div>`;
 
 if (state.tareaNueva) {
 const tn = state.tareaNueva;
@@ -3070,6 +3077,27 @@ html += `</div>
 }
 
 const tareasFiltradas = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : (t.grupo === state.tareaFilterGrupo && (!si.materia2 || tareaMateriaKeyEfectiva(t) === secMateriaStableKey(state.secMateriaActiva))))).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+
+if (nivel === 'secundaria' && state.tareaDiagnostico) {
+const todasDelGrado = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+html += `<div class="card" style="border:2px dashed #f59e0b;background:#fffbeb;">
+<p style="font-weight:700;font-size:0.8em;margin-bottom:6px;">🔍 Diagnóstico — TODAS las tareas guardadas de ${state.tareaFilterGrade}, sin filtrar:</p>`;
+if (!todasDelGrado.length) {
+html += `<p style="font-size:0.78em;color:#92400e;">No hay NINGUNA tarea guardada con grade="${state.tareaFilterGrade}" en toda la base de datos de secundaria.</p>`;
+} else {
+todasDelGrado.forEach(([id, t]) => {
+html += `<div style="border:1px solid #fde68a;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:0.72em;">
+<p style="font-weight:600;">${t.tipo==='casa'?'🏠':'🏫'} ${t.titulo||'(sin título)'}</p>
+<p style="color:#92400e;">grade: "${t.grade}" · grupo: "${t.grupo}" · materia: "${t.materia||''}" · materiaKey: "${t.materiaKey||'(sin definir → se trata como Materia 1)'}" · fecha: ${t.fecha||''}</p>
+<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">
+${GRUPOS_SEC.map(g=>`<button style="border:none;background:${t.grupo===g?'#2563eb':'#e5e7eb'};color:${t.grupo===g?'#fff':'#374151'};border-radius:6px;padding:3px 8px;font-size:0.9em;" onclick="reasignarGrupoTarea('${nivel}','${id}','${g}')">Grupo ${g}</button>`).join('')}
+${si.materia2 ? `<button style="border:none;background:#eff6ff;color:#2563eb;border-radius:6px;padding:3px 8px;font-size:0.9em;" onclick="reasignarMateriaTarea('${id}',1)">→ ${esc2(si.materia||'Materia 1')}</button><button style="border:none;background:#eff6ff;color:#2563eb;border-radius:6px;padding:3px 8px;font-size:0.9em;" onclick="reasignarMateriaTarea('${id}',2)">→ ${esc2(si.materia2||'Materia 2')}</button>` : ''}
+</div>
+</div>`;
+});
+}
+html += `</div>`;
+}
 
 if (!tareasFiltradas.length) {
 html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">No hay tareas registradas para este grado${nivel==='secundaria'?'/grupo':''} todavía.</p></div>`;
