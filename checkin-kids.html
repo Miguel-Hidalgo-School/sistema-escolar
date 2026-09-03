@@ -14014,21 +14014,55 @@ function stopScanner(){
 // al abrir WhatsApp desde el aviso de salida— y el navegador detiene el video aunque
 // el stream técnicamente siga activo. En vez de obligar a apagar y prender la cámara
 // a mano, al volver a esta pestaña se reinicia sola si el escáner estaba encendido.
+// El reinicio va por pasos, del más ligero (rápido, sin volver a pedir permiso) al más
+// pesado (nuevo getUserMedia con reintentos), porque en Android la cámara suele seguir
+// "ocupada" un instante justo al regresar y un solo intento inmediato puede fallar.
+let ckReanudandoCamara = false;
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible' && scannerActive) reiniciarStreamScanner();
 });
+window.addEventListener('focus', () => {
+  if(scannerActive) reiniciarStreamScanner();
+});
+window.addEventListener('pageshow', () => {
+  if(scannerActive) reiniciarStreamScanner();
+});
+function ckEsperar(ms){ return new Promise(r => setTimeout(r, ms)); }
 async function reiniciarStreamScanner(){
+  if(ckReanudandoCamara) return; // evita reinicios encimados si el evento dispara varias veces
   const video = document.getElementById('scanVideo');
   if(!video) return; // no estamos en la pantalla del escáner ahora mismo
+  ckReanudandoCamara = true;
   try{
-    if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); }
-    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = scannerStream;
-    await video.play();
-  }catch(e){
-    // Si el reinicio automático falla (por ejemplo la cámara sigue ocupada un
-    // instante), se deja tal cual: el botón "Apagar/Activar cámara" manual sigue
-    // funcionando como respaldo.
+    // Paso 1 (ligero): si el stream original sigue vivo, solo hace falta reengancharlo
+    // y volver a reproducir — no requiere pedir permiso de cámara otra vez.
+    const trackVivo = scannerStream && scannerStream.getVideoTracks()[0] && scannerStream.getVideoTracks()[0].readyState === 'live';
+    if(trackVivo){
+      try{
+        if(video.srcObject !== scannerStream) video.srcObject = scannerStream;
+        await video.play();
+        if(video.readyState >= video.HAVE_CURRENT_DATA){ ckReanudandoCamara = false; return; }
+      }catch(e){ /* seguimos al paso 2 */ }
+    }
+    // Paso 2 (pesado): pedir una cámara nueva, con reintentos porque justo al volver
+    // de segundo plano el sistema puede tardar un instante en soltar la cámara anterior.
+    for(let intento = 1; intento <= 4; intento++){
+      try{
+        if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); scannerStream = null; }
+        scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = scannerStream;
+        await video.play();
+        ckReanudandoCamara = false;
+        return;
+      }catch(e){
+        await ckEsperar(300 * intento); // espera creciente antes de reintentar
+      }
+    }
+    // Si después de varios intentos sigue sin poder, se avisa (antes fallaba en silencio)
+    // y queda el botón manual "Apagar/Activar cámara" como respaldo, sin bloquear nada más.
+    showToast('La cámara no se reactivó sola. Pulsa "Apagar cámara" y luego "Activar cámara".', 'err');
+  } finally {
+    ckReanudandoCamara = false;
   }
 }
 
