@@ -2854,6 +2854,11 @@ if (state.tareaSelectedId === id) state.tareaSelectedId = null;
 function reasignarMateriaTarea(id, mNum) {
 const si = state.secSchoolInfo || {};
 const nombre = mNum === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia 1');
+// Se pide el mismo PIN que para "Gestionar usuarios", como confirmación, para no
+// mover tareas de una materia a otra por un toque accidental.
+const pinIngresado = prompt(`Ingresa tu PIN para mover esta tarea a "${nombre}":`);
+if (pinIngresado === null) return;
+if (pinIngresado.trim() !== getPinGestionUsuarios()) { alert('PIN incorrecto. No se movió la tarea.'); return; }
 tareasSecRef.child(id).update({ materiaKey: secMateriaStableKey(mNum), materia: nombre }).then(() => showToast('📌 Tarea reasignada a ' + nombre)).catch(() => showToast('No se pudo reasignar'));
 }
 function reasignarGrupoTarea(nivel, id, grupo) {
@@ -2880,7 +2885,7 @@ const list = nivel === 'primaria' ? state.students : state.secStudents;
 const s = list.find(x => x.id === studentId);
 const el = document.getElementById('sumlive-' + tareaId + '-' + studentId);
 if (s && t && el) {
-const r = calcularFinalSumativa(nivel, s, state.sumativaPeriodoActivo || 'p1', t.materia);
+const r = calcularFinalSumativa(nivel, s, state.sumativaPeriodoActivo || 'p1', nivel === 'secundaria' ? (t.materiaKey || 'm1') : t.materia);
 el.textContent = 'Llevas en Sumativa: ' + r.total.toFixed(1) + '/10';
 }
 }
