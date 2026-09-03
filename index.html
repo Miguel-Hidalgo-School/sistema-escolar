@@ -149,7 +149,7 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
@@ -209,6 +209,7 @@ mostrarModalTerminos: false,
 intentosScreenshot: 0,
 bloqueadoPorScreenshot: false,
 checkinAttendance: [],
+diasExcluidos: [],
 tareaSelectedId: null,
 tareaFilterGrade: '',
 tareaFilterGrupo: '',
@@ -326,6 +327,7 @@ sumativaCalifPriRef = db.ref(base + '/sumativaCalif/primaria');
 sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
+diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -457,6 +459,11 @@ sumativaCalifSecRef.on('value', snap => { state.sumativaCalifSec = snap.val() ||
 }
 if (puedePrimaria || puedeSecundaria) {
 sumativaPeriodosRef.on('value', snap => { state.sumativaPeriodos = snap.val() || defaultSumativaPeriodos(); render(); }, () => {});
+diasExcluidosRef.on('value', snap => {
+const val = snap.val() || {};
+state.diasExcluidos = Object.keys(val).map(id => ({ id, ...val[id] }));
+render();
+}, () => {});
 }
 if (puedeCheckin) {
 checkinAttendanceRef.on('value', snap => {
@@ -483,6 +490,7 @@ if (sumativaCalifPriRef) sumativaCalifPriRef.off();
 if (sumativaCalifSecRef) sumativaCalifSecRef.off();
 if (sumativaPeriodosRef) sumativaPeriodosRef.off();
 if (checkinAttendanceRef) checkinAttendanceRef.off();
+if (diasExcluidosRef) diasExcluidosRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
@@ -492,6 +500,7 @@ state.tareasSec = {};
 state.disciplinaPri = {};
 state.disciplinaSec = {};
 state.checkinAttendance = [];
+state.diasExcluidos = [];
 state.sumativaConfigPri = null;
 state.sumativaConfigSec = null;
 state.sumativaCalifPri = {};
@@ -3291,26 +3300,45 @@ const ref = nivel === 'primaria' ? sumativaCalifPriRef : sumativaCalifSecRef;
 const map = nivel === 'primaria' ? state.sumativaCalifPri : state.sumativaCalifSec;
 ref.set(map).then(() => showToast('💾 Calificaciones guardadas')).catch(() => showToast('No se pudo guardar'));
 }
-function diasHabilesEnPeriodo(nivel, periodoId) {
+// Fechas marcadas manualmente como "sin QR" para un grado/grupo específico —por
+// ejemplo cuando no alcanzó el tiempo para escanear a todo un grupo ese día—, para
+// que ese día no cuente ni a favor ni en contra de la asistencia de esos alumnos.
+function diasExcluidosSet(nivel, grade, grupo) {
+const set = new Set();
+(state.diasExcluidos || []).forEach(d => {
+if (d.nivel === nivel && d.grade === grade && (nivel === 'primaria' || d.grupo === grupo)) set.add(d.fecha);
+});
+return set;
+}
+function agregarDiaExcluido(nivel, grade, grupo, fecha) {
+if (!fecha) return;
+diasExcluidosRef.push().set({ nivel, grade, grupo: nivel === 'secundaria' ? grupo : null, fecha }).then(() => showToast('📅 Día marcado como sin QR para este grupo')).catch(() => showToast('No se pudo guardar'));
+}
+function quitarDiaExcluido(id) {
+diasExcluidosRef.child(id).remove().then(() => showToast('Día restaurado')).catch(() => showToast('No se pudo quitar'));
+}
+function diasHabilesEnPeriodo(nivel, periodoId, grade, grupo) {
 const roster = nivel === 'primaria' ? state.students : state.secStudents;
 const ids = new Set(roster.map(s => s.id));
 const fechas = new Set();
 (state.checkinAttendance || []).forEach(a => {
 if (a.studentId && ids.has(a.studentId) && fechaEnPeriodo(a.date, periodoId)) fechas.add(a.date);
 });
+if (grade) diasExcluidosSet(nivel, grade, grupo).forEach(f => fechas.delete(f));
 return fechas.size;
 }
-function diasAsistidosEstudiante(studentId, periodoId) {
+function diasAsistidosEstudiante(studentId, periodoId, nivel, grade, grupo) {
+const excluidos = grade ? diasExcluidosSet(nivel, grade, grupo) : new Set();
 const fechas = new Set();
 (state.checkinAttendance || []).forEach(a => {
-if (a.studentId === studentId && fechaEnPeriodo(a.date, periodoId)) fechas.add(a.date);
+if (a.studentId === studentId && fechaEnPeriodo(a.date, periodoId) && !excluidos.has(a.date)) fechas.add(a.date);
 });
 return fechas.size;
 }
-function calcularAsistenciaSumativa(nivel, studentId, periodoId) {
-const habiles = diasHabilesEnPeriodo(nivel, periodoId);
+function calcularAsistenciaSumativa(nivel, studentId, periodoId, grade, grupo) {
+const habiles = diasHabilesEnPeriodo(nivel, periodoId, grade, grupo);
 if (!habiles) return null;
-const asistidos = diasAsistidosEstudiante(studentId, periodoId);
+const asistidos = diasAsistidosEstudiante(studentId, periodoId, nivel, grade, grupo);
 const pct = Math.min(1, asistidos / habiles);
 return Math.round(pct * 10 * 10) / 10;
 }
@@ -3327,7 +3355,7 @@ valor = tareasValor;
 } else if (c.id === 'asistencia' || c.id === 'participacion') {
 // Se calculan solos a partir de los días que el alumno escaneó su QR
 // de entrada en CheckIn Kids dentro de las fechas de este periodo.
-valor = calcularAsistenciaSumativa(nivel, s.id, periodoId);
+valor = calcularAsistenciaSumativa(nivel, s.id, periodoId, s.grade, s.grupo);
 } else if (c.id === 'examen') {
 // Si no se captura una calificación de examen, se calcula en automático
 // de forma proporcional a lo que el alumno lleva en Tareas.
@@ -3491,6 +3519,22 @@ ${GRUPOS_SEC.map(g => `<option value="${g}" ${state.sumativaFilterGrupo === g ? 
 }
 html += `</div></div>`;
 
+{
+const excluidosActuales = (state.diasExcluidos || []).filter(d => d.nivel === nivel && d.grade === state.sumativaFilterGrade && (nivel === 'primaria' || d.grupo === state.sumativaFilterGrupo));
+html += `<div class="card">
+<p style="font-size:0.75em;font-weight:600;color:#92400e;margin-bottom:6px;">📅 Días sin QR para este grado${nivel==='secundaria'?'/grupo':''} <span style="font-weight:400;color:#9ca3af;">(no cuentan ni a favor ni en contra en Asistencia)</span></p>
+<div style="display:flex;gap:6px;margin-bottom:6px;">
+<input type="date" id="inputDiaExcluido" style="flex:1;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:0.8em;" />
+<button class="btn btn-dark" style="flex:0 0 auto;padding:6px 12px;font-size:0.8em;" onclick="agregarDiaExcluido('${nivel}','${state.sumativaFilterGrade}','${state.sumativaFilterGrupo||''}',document.getElementById('inputDiaExcluido').value)">➕ Marcar</button>
+</div>`;
+if (excluidosActuales.length) {
+html += excluidosActuales.map(d => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.75em;padding:3px 0;"><span>${d.fecha}</span><button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:2px 8px;font-size:0.9em;" onclick="quitarDiaExcluido('${d.id}')">Quitar</button></div>`).join('');
+} else {
+html += `<p style="font-size:0.72em;color:#9ca3af;">Ninguno marcado.</p>`;
+}
+html += `</div>`;
+}
+
 const alumnos = list.filter(s => s.grade === state.sumativaFilterGrade && (nivel === 'primaria' || s.grupo === state.sumativaFilterGrupo)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
 if (!alumnos.length) {
@@ -3505,8 +3549,8 @@ if (c.id === 'tareas') {
 const prom = calcularPromedioTareas(nivel, s.id, s.grade, s.grupo, sumativaMateriaKey(nivel), periodoActivo);
 html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78em;margin-bottom:4px;"><span>${esc2(c.nombre)} (${c.porcentaje}%)</span><span style="font-weight:600;">${prom != null ? prom.toFixed(1) : '— sin tareas calificadas'}</span></div>`;
 } else if (c.id === 'asistencia' || c.id === 'participacion') {
-const habiles = diasHabilesEnPeriodo(nivel, periodoActivo);
-const valorAsis = calcularAsistenciaSumativa(nivel, s.id, periodoActivo);
+const habiles = diasHabilesEnPeriodo(nivel, periodoActivo, s.grade, s.grupo);
+const valorAsis = calcularAsistenciaSumativa(nivel, s.id, periodoActivo, s.grade, s.grupo);
 html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78em;margin-bottom:4px;"><span>${esc2(c.nombre)} (${c.porcentaje}%) <span style="color:#9ca3af;">· por QR</span></span><span style="font-weight:600;">${valorAsis != null ? valorAsis.toFixed(1) : (habiles ? '—' : 'sin registros de CheckIn')}</span></div>`;
 } else if (c.id === 'examen') {
 const manual = getSumativaValor(nivel, s.id, c.id, periodoActivo);
