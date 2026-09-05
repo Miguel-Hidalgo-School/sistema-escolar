@@ -132,7 +132,7 @@
                     <button onclick="reiniciarFolioActual()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔄 Reiniciar Folio a 1</button>
                 </div>
             </div>
-            <p class="text-[10px] text-slate-500 -mt-1">El folio ahora se recalcula automáticamente a partir de lo guardado en Firebase, así que no debería reiniciarse aunque borres los datos del sitio. Usa "Fijar último folio usado" solo si necesitas corregirlo manualmente (ej. después de una migración).</p>
+            <p class="text-[10px] text-slate-500 -mt-1">El folio se recalcula solo a partir de lo guardado (aquí y en Firebase): nunca se reinicia por borrar datos del sitio, y si eliminas la incidencia más reciente, su número se libera automáticamente para la siguiente. "Fijar último folio usado" es solo para corregirlo a mano en casos especiales.</p>
 
             <div id="avisoSincronizado" class="hidden text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
                 🔗 Estos datos se cargaron automáticamente desde el Sistema Escolar. Usa "Editar manualmente" solo si necesitas corregir algo.
@@ -812,8 +812,8 @@
         // - Secundarias técnicas/generales numeradas: usa "ST" + el número
         //   completo en vez de solo iniciales (ej. "Secundaria Técnica 32" -> "ST32"),
         //   para que no se confundan planteles distintos con el mismo folio.
-        function calcularSiglaEscuela(nivel) {
-            const nombreOriginal = (plantelPorNivel[nivel].escuela || '').trim();
+        function calcularSiglaEscuela(nivel, nombreOverride) {
+            const nombreOriginal = (typeof nombreOverride === 'string' ? nombreOverride : (plantelPorNivel[nivel].escuela || '')).trim();
             if (!nombreOriginal) return nivel === "Primaria" ? "PRIM" : "SEC";
 
             const nombreLimpio = nombreOriginal.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -849,6 +849,15 @@
         // Así, aunque una de las tres esté vacía o desactualizada, el folio nunca
         // retrocede.
         function calcularMaxFolioExistente(sigla, nivel, ciclo) {
+            return calcularMaxFolioSinContador(sigla, nivel, ciclo, true);
+        }
+
+        // Igual que calcularMaxFolioExistente, pero permite excluir el contador local
+        // de la cuenta (incluirContador=false). Se usa al eliminar una incidencia,
+        // para saber si el folio borrado era realmente el más alto que quedó
+        // registrado en el historial/Firebase, sin que el contador local (que
+        // todavía no se ha actualizado) distorsione la respuesta.
+        function calcularMaxFolioSinContador(sigla, nivel, ciclo, incluirContador) {
             let max = 0;
             const prefijo = `${sigla}-${ciclo}/`;
 
@@ -867,11 +876,22 @@
                 }
             });
 
-            const claveContador = `contador_folio_${sigla}_${nivel}_${ciclo}`;
-            const contadorLocal = parseInt(localStorage.getItem(claveContador)) || 0;
-            max = Math.max(max, contadorLocal);
+            if (incluirContador) {
+                const claveContador = `contador_folio_${sigla}_${nivel}_${ciclo}`;
+                const contadorLocal = parseInt(localStorage.getItem(claveContador)) || 0;
+                max = Math.max(max, contadorLocal);
+            }
 
             return max;
+        }
+
+        // Deduce el ciclo escolar de una incidencia ya guardada. Las nuevas lo
+        // traen explícito (campo "ciclo"); para incidencias guardadas antes de
+        // este cambio, se extrae del propio folio como respaldo.
+        function obtenerCicloDeIncidencia(item) {
+            if (item && item.ciclo) return item.ciclo;
+            const m = /(\d{4}-\d{4})\/\d+\s*$/.exec((item && item.folio) || '');
+            return m ? m[1] : cicloActual;
         }
 
         async function generarFolio(ciclo) {
@@ -944,6 +964,7 @@
                 intervencion: document.getElementById('inputIntervencion').value.toUpperCase(),
                 falta: document.getElementById('inputFalta').value.toUpperCase(),
                 acciones: document.getElementById('inputAcciones').value.toUpperCase(),
+                ciclo: cicloActual,
                 folio: folio
             };
 
@@ -989,6 +1010,11 @@
             document.getElementById('seccionHistorial').classList.add('hidden');
             document.getElementById('seccionFormulario').classList.remove('hidden');
             document.getElementById('seccionConfig').classList.remove('hidden');
+            // Cada vez que se abre el formulario (Nueva Incidencia, o volver desde
+            // el reporte ya guardado) la fecha vuelve a "hoy" por default, para que
+            // no se quede pegada la fecha del último reporte y evitar que se guarde
+            // sin querer una incidencia con la fecha equivocada.
+            document.getElementById('inputFecha').valueAsDate = new Date();
         }
 
         function mostrarHistorial() {
@@ -1059,6 +1085,28 @@
                 const user = bitUsuarioActual || bitAuth.currentUser;
                 if (eliminado && user) {
                     bitDb.ref(`bitacora/${user.uid}/${eliminado.id}`).remove().catch(()=>{});
+                }
+                // También se quita de la caché en memoria (si estaba ahí), para que
+                // el siguiente cálculo de folio no la siga contando.
+                if (eliminado && cacheRemotaBitacora && cacheRemotaBitacora[eliminado.id]) {
+                    delete cacheRemotaBitacora[eliminado.id];
+                }
+                // Si la incidencia borrada era la de folio MÁS ALTO ya guardado para
+                // su sigla/nivel/ciclo (es decir, nadie más generó un folio mayor
+                // después de ella), se libera automáticamente su número: la próxima
+                // incidencia que guardes reutilizará ese folio en vez de saltarlo.
+                // Si en cambio ya existe algo con un folio igual o mayor guardado en
+                // otro lado, no se toca el contador, para evitar que dos incidencias
+                // terminen con el mismo folio.
+                if (eliminado && eliminado.folio) {
+                    const siglaItem = calcularSiglaEscuela(eliminado.nivel, eliminado.escuela);
+                    const cicloItem = obtenerCicloDeIncidencia(eliminado);
+                    const numItem = extraerNumeroFolio(eliminado.folio);
+                    const maxSinContador = calcularMaxFolioSinContador(siglaItem, eliminado.nivel, cicloItem, false);
+                    if (numItem > maxSinContador) {
+                        const claveContador = `contador_folio_${siglaItem}_${eliminado.nivel}_${cicloItem}`;
+                        localStorage.setItem(claveContador, maxSinContador);
+                    }
                 }
                 mostrarHistorial();
             }
