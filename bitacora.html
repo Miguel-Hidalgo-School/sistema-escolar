@@ -128,9 +128,11 @@
                 <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider" id="tituloConfigPersonal">Configuración del Plantel - Primaria</h2>
                 <div class="flex gap-2">
                     <button onclick="toggleEdicionManual()" id="btnToggleEdicion" class="bg-slate-600 hover:bg-slate-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔓 Editar manualmente</button>
+                    <button onclick="fijarUltimoFolioUsado()" class="bg-sky-700 hover:bg-sky-800 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🎯 Fijar último folio usado</button>
                     <button onclick="reiniciarFolioActual()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔄 Reiniciar Folio a 1</button>
                 </div>
             </div>
+            <p class="text-[10px] text-slate-500 -mt-1">El folio ahora se recalcula automáticamente a partir de lo guardado en Firebase, así que no debería reiniciarse aunque borres los datos del sitio. Usa "Fijar último folio usado" solo si necesitas corregirlo manualmente (ej. después de una migración).</p>
 
             <div id="avisoSincronizado" class="hidden text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
                 🔗 Estos datos se cargaron automáticamente desde el Sistema Escolar. Usa "Editar manualmente" solo si necesitas corregir algo.
@@ -394,6 +396,28 @@
         const bitDb = firebase.database();
         let bitUsuarioActual = null; // se llena cuando Firebase confirma la sesión
 
+        // ============ CACHÉ DE FIREBASE PARA CALCULAR FOLIOS ============
+        // Guarda la última copia conocida de "bitacora/{uid}" para poder calcular,
+        // sin ir a la red cada vez, cuál es el folio más alto ya usado en CUALQUIER
+        // dispositivo. Esto es lo que evita que el folio se reinicie si se borran
+        // los datos del sitio en un teléfono: aunque el contador local desaparezca,
+        // el máximo se sigue pudiendo reconstruir desde Firebase.
+        let cacheRemotaBitacora = {};
+        let cacheRemotaCargada = false;
+
+        async function refrescarCacheRemota() {
+          if (!estoyOnline) return;
+          const user = bitUsuarioActual || bitAuth.currentUser;
+          if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
+          try {
+            const snap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
+            cacheRemotaBitacora = snap.val() || {};
+            cacheRemotaCargada = true;
+          } catch (error) {
+            console.error('Error refrescando caché remota de bitácora', error);
+          }
+        }
+
         // ============ SINCRONIZACIÓN OFFLINE-FIRST ============
         let estoyOnline = navigator.onLine;
         const NIVELES_SYNC = ['Primaria', 'Secundaria'];
@@ -494,8 +518,8 @@
           const user = bitUsuarioActual || bitAuth.currentUser;
           if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
           try {
-            const snap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
-            const remotos = snap.val() || {};
+            await refrescarCacheRemota();
+            const remotos = cacheRemotaBitacora;
             let seActualizoNivelVisible = false;
 
             for (const nivel of NIVELES_SYNC) {
@@ -811,11 +835,56 @@
             return sigla.slice(0, 6);
         }
 
-        function generarFolio(ciclo) {
+        // Saca el número consecutivo de un folio ya formado, ej. "MHC-2026-2027/0005" -> 5
+        function extraerNumeroFolio(folioStr) {
+            const m = /\/(\d+)\s*$/.exec(folioStr || '');
+            return m ? parseInt(m[1], 10) : 0;
+        }
+
+        // Calcula el folio más alto ya usado para esta sigla+nivel+ciclo, revisando
+        // TRES fuentes (y quedándose con la mayor, nunca con la más reciente a
+        // secas): el historial guardado en este dispositivo, la última copia
+        // conocida de Firebase (que incluye lo subido desde otros dispositivos),
+        // y el contador local viejo (por compatibilidad con instalaciones previas).
+        // Así, aunque una de las tres esté vacía o desactualizada, el folio nunca
+        // retrocede.
+        function calcularMaxFolioExistente(sigla, nivel, ciclo) {
+            let max = 0;
+            const prefijo = `${sigla}-${ciclo}/`;
+
+            try {
+                const hist = JSON.parse(localStorage.getItem(`historial_incidencias_${nivel}`)) || [];
+                hist.forEach(item => {
+                    if (item.folio && item.folio.startsWith(prefijo)) {
+                        max = Math.max(max, extraerNumeroFolio(item.folio));
+                    }
+                });
+            } catch (e) {}
+
+            Object.values(cacheRemotaBitacora || {}).forEach(item => {
+                if (item.nivel === nivel && item.folio && item.folio.startsWith(prefijo)) {
+                    max = Math.max(max, extraerNumeroFolio(item.folio));
+                }
+            });
+
+            const claveContador = `contador_folio_${sigla}_${nivel}_${ciclo}`;
+            const contadorLocal = parseInt(localStorage.getItem(claveContador)) || 0;
+            max = Math.max(max, contadorLocal);
+
+            return max;
+        }
+
+        async function generarFolio(ciclo) {
             let sigla = calcularSiglaEscuela(nivelActual);
+            // Si en esta sesión todavía no se ha traído nada de Firebase (ej. se
+            // acaba de abrir la app y aún no corre el sync automático), se hace un
+            // último intento por refrescar la caché ANTES de calcular el folio,
+            // para no arriesgarse a repetir un número ya usado en otro dispositivo.
+            if (!cacheRemotaCargada) {
+                await refrescarCacheRemota();
+            }
             let clave = `contador_folio_${sigla}_${nivelActual}_${ciclo}`;
-            let num = parseInt(localStorage.getItem(clave)) || 0;
-            num++;
+            let num = calcularMaxFolioExistente(sigla, nivelActual, ciclo) + 1;
             localStorage.setItem(clave, num);
             return `${sigla}-${ciclo}/${String(num).padStart(4, '0')}`;
         }
@@ -823,13 +892,31 @@
         function reiniciarFolioActual() {
             let sigla = calcularSiglaEscuela(nivelActual);
             let clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
-            if(confirm(`¿Estás seguro de reiniciar el contador de folios de ${nivelActual} (ciclo ${cicloActual}) para que el próximo comience en 1?`)) {
+            if(confirm(`¿Estás seguro de reiniciar el contador de folios de ${nivelActual} (ciclo ${cicloActual}) para que el próximo comience en 1?\n\nOjo: si ya existen incidencias guardadas con folios más altos (en este dispositivo o en Firebase), el sistema los detectará y NO permitirá que el folio retroceda por debajo de ellos.`)) {
                 localStorage.setItem(clave, 0);
-                alert("¡Folio reiniciado con éxito! El próximo registro comenzará en 0001.");
+                alert("Contador local reiniciado. El próximo folio será el siguiente al más alto que el sistema encuentre guardado (local o en Firebase).");
             }
         }
 
-        function guardarYMostrarReporte() {
+        // Permite corregir a mano cuál fue el último folio realmente usado (por
+        // ejemplo, si un reporte se hizo en papel, o si por algún motivo no quedó
+        // sincronizado). El PRÓXIMO folio generado será éste + 1.
+        function fijarUltimoFolioUsado() {
+            let sigla = calcularSiglaEscuela(nivelActual);
+            const actual = calcularMaxFolioExistente(sigla, nivelActual, cicloActual);
+            const entrada = prompt(`Escribe el NÚMERO del último folio realmente usado para ${nivelActual} (ciclo ${cicloActual}).\n\nEj. si el último folio fue ${sigla}-${cicloActual}/0005, escribe: 5\n\nEl sistema detectó actualmente: ${actual}`, actual);
+            if (entrada === null) return;
+            const num = parseInt(entrada, 10);
+            if (isNaN(num) || num < 0) { alert('Escribe solo un número, por ejemplo: 5'); return; }
+            const clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
+            localStorage.setItem(clave, num);
+            alert(`Listo. El próximo folio será ${sigla}-${cicloActual}/${String(num + 1).padStart(4, '0')}.`);
+        }
+
+        async function guardarYMostrarReporte() {
+            const btnGuardar = document.querySelector('#seccionFormulario button[onclick="guardarYMostrarReporte()"]');
+            if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.innerText = '⏳ Guardando...'; }
+
             guardarPersonalEnMemoria();
 
             const selectAsunto = document.getElementById('inputAsunto');
@@ -838,6 +925,7 @@
             const gradoSel = document.getElementById('inputGradoSel').value;
             const grupoSel = document.getElementById('inputGrupoSel').value;
             const esMultigrado = gradoSel === 'MULTIGRADO';
+            const folio = await generarFolio(cicloActual);
             const datos = {
                 id: Date.now(),
                 nivel: nivelActual,
@@ -856,7 +944,7 @@
                 intervencion: document.getElementById('inputIntervencion').value.toUpperCase(),
                 falta: document.getElementById('inputFalta').value.toUpperCase(),
                 acciones: document.getElementById('inputAcciones').value.toUpperCase(),
-                folio: generarFolio(cicloActual)
+                folio: folio
             };
 
             let keyHistorial = `historial_incidencias_${nivelActual}`;
@@ -865,6 +953,7 @@
             localStorage.setItem(keyHistorial, JSON.stringify(historial));
             sincronizarIncidenciaInmediata(nivelActual, datos);
 
+            if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.innerText = '💾 Guardar en Historial y Generar Formato Oficial'; }
             renderizarReporte(datos);
         }
 
