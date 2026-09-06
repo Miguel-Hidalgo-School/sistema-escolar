@@ -2557,7 +2557,7 @@ const otros = state.formativoForm.criterios.filter((x, idx) => idx !== i && x.co
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined })
+body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2571,7 +2571,7 @@ render();
 }
 // Igual que arriba, pero para las cajas de Fortalezas / Áreas de oportunidad,
 // generadas a partir de todos los aspectos ya calificados.
-async function sugerirFortalezasAreas(campo) {
+async function sugerirFortalezasAreas(campo, grade, grupo) {
 const f = state.formativoForm;
 if (!f.criterios.some(c => c.nombre)) { showToast('Califica al menos un aspecto antes de pedir la sugerencia'); return; }
 state.iaCargando = state.iaCargando || {};
@@ -2581,7 +2581,7 @@ try {
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios })
+body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim() })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2815,10 +2815,10 @@ ${PRESETS_OBS.map(p=>`<option value="${p.replace(/"/g,'&quot;')}">${p}</option>`
 if (nivel === 'secundaria') html += `<button class="btn btn-gray" style="margin-bottom:10px;" onclick="addFormativoCriterio()">➕ Agregar aspecto</button>`;
 html += `<p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">✨ Fortalezas</p>
 <textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:4px;text-transform:uppercase;" rows="3" placeholder="Una por línea" oninput="forceUpper(this);updateFormativoField('fortalezas',this.value)">${f.fortalezas||''}</textarea>
-<button style="border:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:5px 10px;font-size:0.72em;font-weight:600;margin-bottom:10px;" ${(state.iaCargando&&state.iaCargando['fortalezas'])?'disabled':''} onclick="sugerirFortalezasAreas('fortalezas')">${(state.iaCargando&&state.iaCargando['fortalezas'])?'⏳ Generando...':'✨ Sugerir con IA'}</button>
+<button style="border:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:5px 10px;font-size:0.72em;font-weight:600;margin-bottom:10px;" ${(state.iaCargando&&state.iaCargando['fortalezas'])?'disabled':''} onclick="sugerirFortalezasAreas('fortalezas','${s.grade||''}','${s.grupo||''}')">${(state.iaCargando&&state.iaCargando['fortalezas'])?'⏳ Generando...':'✨ Sugerir con IA'}</button>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🎯 Áreas de oportunidad</p>
 <textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:4px;text-transform:uppercase;" rows="3" placeholder="Una por línea" oninput="forceUpper(this);updateFormativoField('areasOportunidad',this.value)">${f.areasOportunidad||''}</textarea>
-<button style="border:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:5px 10px;font-size:0.72em;font-weight:600;margin-bottom:10px;" ${(state.iaCargando&&state.iaCargando['areasOportunidad'])?'disabled':''} onclick="sugerirFortalezasAreas('areasOportunidad')">${(state.iaCargando&&state.iaCargando['areasOportunidad'])?'⏳ Generando...':'✨ Sugerir con IA'}</button>
+<button style="border:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:5px 10px;font-size:0.72em;font-weight:600;margin-bottom:10px;" ${(state.iaCargando&&state.iaCargando['areasOportunidad'])?'disabled':''} onclick="sugerirFortalezasAreas('areasOportunidad','${s.grade||''}','${s.grupo||''}')">${(state.iaCargando&&state.iaCargando['areasOportunidad'])?'⏳ Generando...':'✨ Sugerir con IA'}</button>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🧑‍🏫 Recomendación para el docente</p>
 <textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:10px;text-transform:uppercase;" rows="2" oninput="forceUpper(this);updateFormativoField('recomendacionDocente',this.value)">${f.recomendacionDocente||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 6px;">🏠 Sugerencia para el hogar</p>
