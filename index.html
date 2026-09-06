@@ -2557,7 +2557,7 @@ const otros = state.formativoForm.criterios.filter((x, idx) => idx !== i && x.co
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined })
+body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.formativoForm.contextoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2581,7 +2581,7 @@ try {
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim() })
+body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim(), contexto: f.contextoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2788,6 +2788,9 @@ return `<button style="flex:1;min-width:72px;padding:8px 4px;border-radius:8px;b
 }).join('')}
 </div>
 ${f.periodo === 'proyecto' ? `<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;text-transform:uppercase;" placeholder="Nombre del proyecto" value="${f.proyectoNombre||''}" oninput="forceUpper(this);updateFormativoField('proyectoNombre',this.value)" />` : ''}
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 4px;">✨ Contexto para la IA (opcional)</p>
+<p style="font-size:0.7em;color:#9ca3af;margin-bottom:6px;">Describe el momento real del grupo si es relevante — por ejemplo "inicio de ciclo, aún no empezamos lectoescritura formal, al pedirles copiar del pizarrón hacen dibujos". Esto tiene prioridad sobre cualquier suposición general del sistema, y se usa en todas las sugerencias de este alumno.</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.78em;margin-bottom:12px;text-transform:uppercase;" rows="2" oninput="forceUpper(this);updateFormativoField('contextoIA',this.value)">${f.contextoIA||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 8px;">🎯 Nivel de logro por aspecto</p>`;
 f.criterios.forEach((c, i) => {
 html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:8px;">`;
