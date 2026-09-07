@@ -353,7 +353,11 @@
   <section class="panel" id="panel-ausentes">
     <div class="class-selector" id="ausentesClassSelector"></div>
     <div id="ausentesHorarioBox" class="card" style="display:none;">
-      <p class="section-title">⚙️ Horario de clases de Secundaria</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleHorarioSecBox()">
+        <p class="section-title" style="margin:0;">⚙️ Horario de clases de Secundaria</p>
+        <button type="button" class="btn btn-ghost btn-sm" id="horarioSecToggleBtn" style="width:auto;padding:6px 12px;" onclick="event.stopPropagation();toggleHorarioSecBox()">▾ Ver</button>
+      </div>
+      <div id="horarioSecBody" style="display:none;margin-top:10px;">
       <p class="note" style="font-size:12px;color:var(--slate);margin-bottom:10px;">
         La ausencia de un grado/grupo de Secundaria solo se calcula si hoy le toca clase según este horario, y ya pasó su hora de inicio — nunca de todos los grupos a la vez.
       </p>
@@ -361,6 +365,7 @@
       <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" onclick="agregarHorarioSec()">+ Agregar clase</button>
         <button class="btn btn-primary btn-sm" onclick="guardarHorarioSec()">💾 Guardar horario</button>
+      </div>
       </div>
     </div>
     <div id="ausentesResultado"></div>
@@ -13297,7 +13302,7 @@ function renderAusentes(){
   const resultado = document.getElementById('ausentesResultado');
   if(!resultado) return;
   if(box) box.style.display = nivel === 'secundaria' ? 'block' : 'none';
-  if(nivel === 'secundaria') renderHorarioSecRows();
+  if(nivel === 'secundaria') { renderHorarioSecRows(); aplicarEstadoHorarioSecBox(); }
 
   const today = todayStr();
   const idsConEntradaHoy = new Set(attendance.filter(a => a.date === today).map(a => a.studentId));
@@ -13386,6 +13391,19 @@ function renderHorarioSecRows(){
       <button type="button" class="btn btn-danger btn-sm" onclick="quitarHorarioSec(${idx})">Quitar</button>
     </div>
   `).join('');
+}
+function aplicarEstadoHorarioSecBox(){
+  const body = document.getElementById('horarioSecBody');
+  const btn = document.getElementById('horarioSecToggleBtn');
+  if(!body || !btn) return;
+  const abierto = localStorage.getItem('ckHorarioSecAbierto') === '1';
+  body.style.display = abierto ? 'block' : 'none';
+  btn.textContent = abierto ? '▴ Ocultar' : '▾ Ver';
+}
+function toggleHorarioSecBox(){
+  const abierto = localStorage.getItem('ckHorarioSecAbierto') === '1';
+  localStorage.setItem('ckHorarioSecAbierto', abierto ? '0' : '1');
+  aplicarEstadoHorarioSecBox();
 }
 function agregarHorarioSec(){
   horarioSecundaria.push({ grado: CK_GRADOS_POR_NIVEL.secundaria[0], grupo: CK_GRUPOS_POR_NIVEL.secundaria[0], dia: 3, horaInicio: '07:00', horaFin: '08:00' });
