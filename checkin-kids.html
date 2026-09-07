@@ -13473,8 +13473,14 @@ function ckToFirebaseStudent(s){
   };
 }
 // Convierte un alumno del formato compartido (o creado en Sistema Escolar) al formato de CheckIn Kids
+function ckToArraySafe(v){
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object') return Object.keys(v).sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
+  return [];
+}
 function ckFromFirebaseStudent(id, v, nivel){
   v = v || {};
+  const pickupRaw = v.pickupAuthorized || (v.tutorNombre ? [{ name: v.tutorNombre, phone: v.tutorTelefono || '' }] : []);
   return {
     id, nivel: nivel || 'primaria',
     name: v.name || '', grade: v.grade || '1°', group: v.grupo || '', sexo: v.sexo || '',
@@ -13482,7 +13488,7 @@ function ckFromFirebaseStudent(id, v, nivel){
     address: v.address || '', photo: v.foto || '',
     motherName: v.madreNombre || '', motherCurp: v.madreCurp || '', motherPhone: v.madreTelefono || '',
     fatherName: v.padreNombre || '', fatherCurp: v.padreCurp || '', fatherPhone: v.padreTelefono || '',
-    pickupAuthorized: v.pickupAuthorized || (v.tutorNombre ? [{ name: v.tutorNombre, phone: v.tutorTelefono || '' }] : []),
+    pickupAuthorized: ckToArraySafe(pickupRaw).filter(p => p && typeof p === 'object'),
     allergy: v.allergy || '', folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || [],
     createdAt: v.createdAt || new Date().toISOString()
   };
@@ -13840,7 +13846,7 @@ function registerStudent(){
     nivel, name, grade, group, sexo, curp, birthDate, address,
     motherName, motherCurp, motherPhone,
     fatherName, fatherCurp, fatherPhone,
-    pickupAuthorized: regPickupList.filter(p=>p.name.trim()!==''),
+    pickupAuthorized: regPickupList.filter(p=>p && (p.name||'').trim()!==''),
     enroll, allergy,
     photo: regPhotoData || null,
     createdAt: new Date().toISOString()
@@ -13930,7 +13936,7 @@ function saveEditStudent(){
   s.fatherName = fatherName;
   s.fatherCurp = document.getElementById('editFatherCurp').value.trim();
   s.fatherPhone = document.getElementById('editFatherPhone').value.trim();
-  s.pickupAuthorized = editPickupList.filter(p=>p.name.trim()!=='');
+  s.pickupAuthorized = editPickupList.filter(p=>p && (p.name||'').trim()!=='');
   s.enroll = enroll;
   s.folio = enroll; // La matrícula es el identificador oficial (evita folios duplicados)
   s.allergy = document.getElementById('editAllergy').value.trim();
