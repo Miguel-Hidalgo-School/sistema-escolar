@@ -191,7 +191,7 @@
     <div class="stats">
       <div class="stat-chip" style="min-width:100px;"><b id="clockDisplay">--:--:--</b><span>Hora del sistema</span></div>
       <div class="stat-chip" id="statInChip" style="cursor:pointer;" onclick="openEnPlantelModal()" title="Ver quiénes siguen en el plantel"><b id="statIn">0</b><span>En plantel</span></div>
-      <div class="stat-chip"><b id="statToday">0</b><span>Hoy</span></div>
+      <div class="stat-chip"><b id="statToday">0</b><span>Hoy</span><span id="statTodayGenero" style="display:block;font-size:9.5px;color:var(--slate);margin-top:2px;"></span></div>
       <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
     </div>
   </header>
@@ -199,6 +199,7 @@
   <nav class="tabs">
     <button class="active" data-tab="escaner">Escáner QR</button>
     <button data-tab="entradas">Entradas</button>
+    <button data-tab="ausentes">Ausentes</button>
     <button data-tab="alumnos">Alumnos</button>
     <button data-tab="registrar">Registro nuevo</button>
     <button data-tab="historial">Historial</button>
@@ -237,6 +238,14 @@
           <div class="field">
             <label>Grupo</label>
             <select id="inGroup"></select>
+          </div>
+          <div class="field">
+            <label>Sexo</label>
+            <select id="inSexo">
+              <option value="">— Selecciona —</option>
+              <option value="M">Niño</option>
+              <option value="F">Niña</option>
+            </select>
           </div>
           <div class="field">
             <label>Matrícula <span class="req">*</span></label>
@@ -339,6 +348,26 @@
       <div id="entradasEmpty" class="empty" style="display:none;"><b>Sin entradas registradas hoy</b>Usa el escáner o el folio manual para marcar la primera.</div>
     </div>
   </section>
+
+  <!-- AUSENTES -->
+  <section class="panel" id="panel-ausentes">
+    <div class="class-selector" id="ausentesClassSelector"></div>
+    <div id="ausentesHorarioBox" class="card" style="display:none;">
+      <p class="section-title">⚙️ Horario de clases de Secundaria</p>
+      <p class="note" style="font-size:12px;color:var(--slate);margin-bottom:10px;">
+        La ausencia de un grado/grupo de Secundaria solo se calcula si hoy le toca clase según este horario, y ya pasó su hora de inicio — nunca de todos los grupos a la vez.
+      </p>
+      <div id="ausentesHorarioRows"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="agregarHorarioSec()">+ Agregar clase</button>
+        <button class="btn btn-primary btn-sm" onclick="guardarHorarioSec()">💾 Guardar horario</button>
+      </div>
+    </div>
+    <div id="ausentesResultado"></div>
+  </section>
+
+  <!-- ENTRADAS (fin) -->
+  <!-- (marcador solo para claridad visual del diff, no altera nada) -->
 
   <!-- ALUMNOS -->
   <section class="panel" id="panel-alumnos">
@@ -493,6 +522,14 @@
       </div>
       <div class="field"><label>Grado</label><select id="editGrade"></select></div>
       <div class="field"><label>Grupo</label><select id="editGroup"></select></div>
+      <div class="field">
+        <label>Sexo</label>
+        <select id="editSexo">
+          <option value="">— Selecciona —</option>
+          <option value="M">Niño</option>
+          <option value="F">Niña</option>
+        </select>
+      </div>
       <div class="field"><label>Matrícula <span class="req">*</span></label><input id="editEnroll"></div>
     </div>
     <div class="grid3">
@@ -13100,7 +13137,8 @@ const ckFilters = {
   scan:      { nivel: 'primaria', grado: null, grupo: null },
   alumnos:   { nivel: 'primaria', grado: null, grupo: null },
   entradas:  { nivel: 'primaria' },
-  enPlantel: { nivel: 'primaria' }
+  enPlantel: { nivel: 'primaria' },
+  ausentes:  { nivel: 'primaria' }
 };
 
 // Niveles a los que esta cuenta tiene acceso (se llenan al iniciar sesión, según
@@ -13210,10 +13248,11 @@ function ckRenderClassSelector(scope){
     : scope === 'alumnos' ? 'alumnosClassSelector'
     : scope === 'entradas' ? 'entradasClassSelector'
     : scope === 'enPlantel' ? 'enPlantelClassSelector'
+    : scope === 'ausentes' ? 'ausentesClassSelector'
     : null;
   const el = containerId && document.getElementById(containerId);
   if(!el) return;
-  el.innerHTML = (scope === 'entradas' || scope === 'enPlantel') ? ckNivelToggleHtml(scope) : ckClassSelectorHtml(scope);
+  el.innerHTML = (scope === 'entradas' || scope === 'enPlantel' || scope === 'ausentes') ? ckNivelToggleHtml(scope) : ckClassSelectorHtml(scope);
 }
 
 function ckSetNivel(scope, nivel){
@@ -13238,6 +13277,125 @@ function ckOnFilterChanged(scope){
   if(scope === 'alumnos') renderAlumnos();
   if(scope === 'entradas') renderEntradas();
   if(scope === 'enPlantel') renderEnPlantelList();
+  if(scope === 'ausentes') renderAusentes();
+}
+
+/* ---------- Ausentes (misma lógica visual que "En plantel", pero al revés:
+   quién NO ha registrado entrada hoy). En primaria es de lunes a viernes y
+   multigrado (no se separa por grado/grupo). En secundaria solo se revisa el
+   grado/grupo que, según el horario configurado abajo, tiene clase hoy y ya
+   pasó su hora de inicio — nunca se junta con los demás grupos. ---------- */
+const DIAS_SEMANA_CK = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+function ausenciaAplicaHoyPrimaria(){
+  const d = new Date().getDay(); // 0=domingo ... 6=sábado
+  return d >= 1 && d <= 5; // lunes a viernes
+}
+function renderAusentes(){
+  ckRenderClassSelector('ausentes');
+  const nivel = ckFilters.ausentes.nivel;
+  const box = document.getElementById('ausentesHorarioBox');
+  const resultado = document.getElementById('ausentesResultado');
+  if(!resultado) return;
+  if(box) box.style.display = nivel === 'secundaria' ? 'block' : 'none';
+  if(nivel === 'secundaria') renderHorarioSecRows();
+
+  const today = todayStr();
+  const idsConEntradaHoy = new Set(attendance.filter(a => a.date === today).map(a => a.studentId));
+
+  if(nivel === 'primaria'){
+    if(!ausenciaAplicaHoyPrimaria()){
+      resultado.innerHTML = `<div class="card"><div class="empty" style="display:block;"><b>Hoy no aplica (fin de semana)</b>La asistencia de Primaria se revisa de lunes a viernes.</div></div>`;
+      return;
+    }
+    // Primaria no tiene horario por grado/grupo como Secundaria (es un solo grupo
+    // por grado, "multigrado" en el sentido de que se atiende junto), pero el
+    // grado sí existe y se muestra por separado para que sea más fácil de leer.
+    let html = '';
+    CK_GRADOS_POR_NIVEL.primaria.forEach(grado => {
+      const delGrado = students.filter(s => (s.nivel||'primaria') === 'primaria' && s.grade === grado);
+      if(!delGrado.length) return; // no hay alumnos registrados en ese grado
+      const ausentes = delGrado.filter(s => !idsConEntradaHoy.has(s.id));
+      html += ausentesTablaHtml(ausentes, `${grado} de Primaria`);
+    });
+    resultado.innerHTML = html || `<div class="card"><div class="empty" style="display:block;"><b>Sin alumnos de Primaria registrados</b></div></div>`;
+    return;
+  }
+
+  // Secundaria: por cada grado/grupo con clase programada hoy
+  const dia = new Date().getDay();
+  const ahora = new Date();
+  const minutosAhora = ahora.getHours()*60 + ahora.getMinutes();
+  const clasesHoy = (horarioSecundaria||[]).filter(h => Number(h.dia) === dia);
+  if(!clasesHoy.length){
+    resultado.innerHTML = `<div class="card"><div class="empty" style="display:block;"><b>Sin clases de Secundaria hoy</b>Según el horario de abajo, hoy (${DIAS_SEMANA_CK[dia]}) no tienes ningún grupo programado.</div></div>`;
+    return;
+  }
+  let html = '';
+  clasesHoy.forEach(h => {
+    const [hh, mm] = (h.horaInicio||'00:00').split(':').map(Number);
+    const minutosInicio = (hh||0)*60 + (mm||0);
+    const grupoTitulo = `${h.grado} ${h.grupo} (clase ${h.horaInicio||'?'}–${h.horaFin||'?'})`;
+    if(minutosAhora < minutosInicio){
+      html += `<div class="card"><p class="section-title">${escapeHtml(grupoTitulo)}</p><p class="note" style="font-size:12.5px;color:var(--slate);">Su clase empieza a las ${h.horaInicio} — todavía no aplica revisar ausencias.</p></div>`;
+      return;
+    }
+    const grupoStudents = students.filter(s => (s.nivel||'primaria') === 'secundaria' && s.grade === h.grado && s.group === h.grupo);
+    const ausentes = grupoStudents.filter(s => !idsConEntradaHoy.has(s.id));
+    html += ausentesTablaHtml(ausentes, grupoTitulo);
+  });
+  resultado.innerHTML = html;
+}
+function ausentesTablaHtml(ausentes, tituloGrupo){
+  let niños = 0, niñas = 0;
+  ausentes.forEach(s => { if(s.sexo === 'M') niños++; else if(s.sexo === 'F') niñas++; });
+  const resumenGenero = (niños || niñas) ? ` · 👦 ${niños} · 👧 ${niñas}` : '';
+  if(!ausentes.length){
+    return `<div class="card"><p class="section-title">${escapeHtml(tituloGrupo)}</p><div class="empty" style="display:block;"><b>Nadie ausente 🎉</b>Todos ya registraron su entrada.</div></div>`;
+  }
+  return `<div class="card">
+    <p class="section-title">${escapeHtml(tituloGrupo)} — ${ausentes.length} ausente${ausentes.length!==1?'s':''}${resumenGenero}</p>
+    <table>
+      <thead><tr><th>Alumno</th><th>Grado/Grupo</th><th>Sexo</th></tr></thead>
+      <tbody>${ausentes.map(s => `<tr><td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td><td>${ckNivelLabel(s.nivel,true)} ${s.grade} ${s.group}</td><td>${s.sexo==='M'?'👦 Niño':s.sexo==='F'?'👧 Niña':'—'}</td></tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+/* ---------- Editor del horario de clases de Secundaria (para saber cuándo
+   revisar ausencias de cada grado/grupo) ---------- */
+function renderHorarioSecRows(){
+  const el = document.getElementById('ausentesHorarioRows');
+  if(!el) return;
+  if(!horarioSecundaria.length){
+    el.innerHTML = `<p class="note" style="font-size:12px;color:var(--slate);margin:0 0 8px;">Sin clases configuradas todavía — agrega al menos una.</p>`;
+    return;
+  }
+  el.innerHTML = horarioSecundaria.map((h, idx) => `
+    <div class="pickup-row">
+      <select onchange="updateHorarioSecField(${idx},'grado',this.value)">
+        ${CK_GRADOS_POR_NIVEL.secundaria.map(g=>`<option value="${g}" ${h.grado===g?'selected':''}>${g}</option>`).join('')}
+      </select>
+      <select onchange="updateHorarioSecField(${idx},'grupo',this.value)">
+        ${CK_GRUPOS_POR_NIVEL.secundaria.map(g=>`<option value="${g}" ${h.grupo===g?'selected':''}>Grupo ${g}</option>`).join('')}
+      </select>
+      <select onchange="updateHorarioSecField(${idx},'dia',this.value)">
+        ${DIAS_SEMANA_CK.map((d,i)=>`<option value="${i}" ${Number(h.dia)===i?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <input type="time" value="${h.horaInicio||''}" onchange="updateHorarioSecField(${idx},'horaInicio',this.value)">
+      <input type="time" value="${h.horaFin||''}" onchange="updateHorarioSecField(${idx},'horaFin',this.value)">
+      <button type="button" class="btn btn-danger btn-sm" onclick="quitarHorarioSec(${idx})">Quitar</button>
+    </div>
+  `).join('');
+}
+function agregarHorarioSec(){
+  horarioSecundaria.push({ grado: CK_GRADOS_POR_NIVEL.secundaria[0], grupo: CK_GRUPOS_POR_NIVEL.secundaria[0], dia: 3, horaInicio: '07:00', horaFin: '08:00' });
+  renderHorarioSecRows();
+}
+function quitarHorarioSec(idx){ horarioSecundaria.splice(idx,1); renderHorarioSecRows(); }
+function updateHorarioSecField(idx, field, value){ horarioSecundaria[idx][field] = field === 'dia' ? Number(value) : value; }
+function guardarHorarioSec(){
+  if(!ckHorarioSecRef){ showToast('No se pudo guardar (sin conexión)', 'err'); return; }
+  ckHorarioSecRef.set(horarioSecundaria).then(()=>{ showToast('💾 Horario guardado', 'ok'); renderAusentes(); }).catch(()=> showToast('No se pudo guardar', 'err'));
 }
 
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
@@ -13262,6 +13420,8 @@ const ckDb = firebase.database();
 let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
 let ckCheckinStudentsRef = null; // lista propia, solo para cuentas SOLO CheckIn Kids
 let ckSecSchoolRef = null;
+let ckHorarioSecRef = null;
+let horarioSecundaria = []; // [{grado, grupo, dia (0=domingo..6=sábado), horaInicio:'HH:MM', horaFin:'HH:MM'}]
 let ckDirectorTelefono = '';
 let ckSyncReady = false;
 function ckDbBase(uid, isAdmin) {
@@ -13292,12 +13452,14 @@ function ckBindRefs(base) {
     }
   }
   ckAttendanceRef = ckDb.ref(base + '/checkinAttendance');
+  ckHorarioSecRef = ckDb.ref(base + '/horarioSecundaria');
+  ckHorarioSecRef.on('value', snap => { horarioSecundaria = snap.val() || []; renderAll(); }, () => {});
 }
 
 // Convierte un alumno de CheckIn Kids al formato compartido con Sistema Escolar
 function ckToFirebaseStudent(s){
   return {
-    name: s.name || '', grade: s.grade || '1°', grupo: s.group || '',
+    name: s.name || '', grade: s.grade || '1°', grupo: s.group || '', sexo: s.sexo || '',
     curp: s.curp || '', matricula: s.enroll || '', fechaNacimiento: s.birthDate || '',
     address: s.address || '', foto: s.photo || '',
     madreNombre: s.motherName || '', madreCurp: s.motherCurp || '', madreTelefono: s.motherPhone || '',
@@ -13315,7 +13477,7 @@ function ckFromFirebaseStudent(id, v, nivel){
   v = v || {};
   return {
     id, nivel: nivel || 'primaria',
-    name: v.name || '', grade: v.grade || '1°', group: v.grupo || '',
+    name: v.name || '', grade: v.grade || '1°', group: v.grupo || '', sexo: v.sexo || '',
     curp: v.curp || '', enroll: v.matricula || '', birthDate: v.fechaNacimiento || '',
     address: v.address || '', photo: v.foto || '',
     motherName: v.madreNombre || '', motherCurp: v.madreCurp || '', motherPhone: v.madreTelefono || '',
@@ -13646,6 +13808,7 @@ function registerStudent(){
   const curp = document.getElementById('inCurp').value.trim();
   const grade = document.getElementById('inGrade').value;
   const group = document.getElementById('inGroup').value;
+  const sexo = document.getElementById('inSexo').value;
   const birthDate = document.getElementById('inBirth').value;
   const address = document.getElementById('inAddress').value.trim();
 
@@ -13674,7 +13837,7 @@ function registerStudent(){
   const token = `${QR_PREFIX}|${enroll}|${randomSuffix()}`;
   const student = {
     id: uid(), folio, token, altCodes: [],
-    nivel, name, grade, group, curp, birthDate, address,
+    nivel, name, grade, group, sexo, curp, birthDate, address,
     motherName, motherCurp, motherPhone,
     fatherName, fatherCurp, fatherPhone,
     pickupAuthorized: regPickupList.filter(p=>p.name.trim()!==''),
@@ -13714,6 +13877,7 @@ function openEditModal(studentId){
   updateNivelOptions('edit');
   document.getElementById('editGrade').value = s.grade;
   document.getElementById('editGroup').value = s.group;
+  document.getElementById('editSexo').value = s.sexo || '';
   document.getElementById('editCurp').value = s.curp || '';
   document.getElementById('editBirth').value = s.birthDate || '';
   document.getElementById('editAddress').value = s.address || '';
@@ -13757,6 +13921,7 @@ function saveEditStudent(){
   s.nivel = document.getElementById('editNivel').value;
   s.grade = document.getElementById('editGrade').value;
   s.group = document.getElementById('editGroup').value;
+  s.sexo = document.getElementById('editSexo').value;
   s.birthDate = document.getElementById('editBirth').value;
   s.address = document.getElementById('editAddress').value.trim();
   s.motherName = motherName;
@@ -14014,55 +14179,21 @@ function stopScanner(){
 // al abrir WhatsApp desde el aviso de salida— y el navegador detiene el video aunque
 // el stream técnicamente siga activo. En vez de obligar a apagar y prender la cámara
 // a mano, al volver a esta pestaña se reinicia sola si el escáner estaba encendido.
-// El reinicio va por pasos, del más ligero (rápido, sin volver a pedir permiso) al más
-// pesado (nuevo getUserMedia con reintentos), porque en Android la cámara suele seguir
-// "ocupada" un instante justo al regresar y un solo intento inmediato puede fallar.
-let ckReanudandoCamara = false;
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible' && scannerActive) reiniciarStreamScanner();
 });
-window.addEventListener('focus', () => {
-  if(scannerActive) reiniciarStreamScanner();
-});
-window.addEventListener('pageshow', () => {
-  if(scannerActive) reiniciarStreamScanner();
-});
-function ckEsperar(ms){ return new Promise(r => setTimeout(r, ms)); }
 async function reiniciarStreamScanner(){
-  if(ckReanudandoCamara) return; // evita reinicios encimados si el evento dispara varias veces
   const video = document.getElementById('scanVideo');
   if(!video) return; // no estamos en la pantalla del escáner ahora mismo
-  ckReanudandoCamara = true;
   try{
-    // Paso 1 (ligero): si el stream original sigue vivo, solo hace falta reengancharlo
-    // y volver a reproducir — no requiere pedir permiso de cámara otra vez.
-    const trackVivo = scannerStream && scannerStream.getVideoTracks()[0] && scannerStream.getVideoTracks()[0].readyState === 'live';
-    if(trackVivo){
-      try{
-        if(video.srcObject !== scannerStream) video.srcObject = scannerStream;
-        await video.play();
-        if(video.readyState >= video.HAVE_CURRENT_DATA){ ckReanudandoCamara = false; return; }
-      }catch(e){ /* seguimos al paso 2 */ }
-    }
-    // Paso 2 (pesado): pedir una cámara nueva, con reintentos porque justo al volver
-    // de segundo plano el sistema puede tardar un instante en soltar la cámara anterior.
-    for(let intento = 1; intento <= 4; intento++){
-      try{
-        if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); scannerStream = null; }
-        scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        video.srcObject = scannerStream;
-        await video.play();
-        ckReanudandoCamara = false;
-        return;
-      }catch(e){
-        await ckEsperar(300 * intento); // espera creciente antes de reintentar
-      }
-    }
-    // Si después de varios intentos sigue sin poder, se avisa (antes fallaba en silencio)
-    // y queda el botón manual "Apagar/Activar cámara" como respaldo, sin bloquear nada más.
-    showToast('La cámara no se reactivó sola. Pulsa "Apagar cámara" y luego "Activar cámara".', 'err');
-  } finally {
-    ckReanudandoCamara = false;
+    if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); }
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = scannerStream;
+    await video.play();
+  }catch(e){
+    // Si el reinicio automático falla (por ejemplo la cámara sigue ocupada un
+    // instante), se deja tal cual: el botón "Apagar/Activar cámara" manual sigue
+    // funcionando como respaldo.
   }
 }
 
@@ -14167,6 +14298,18 @@ function renderStats(){
   document.getElementById('statIn').textContent = inNow.length;
   document.getElementById('statToday').textContent = todayEntries.length;
   document.getElementById('statTotal').textContent = students.length;
+  // Desglose por sexo de quienes ya registraron entrada hoy (una sola vez por
+  // alumno, aunque tenga varias entradas ese día).
+  const idsHoy = new Set(todayEntries.map(a => a.studentId));
+  let niños = 0, niñas = 0;
+  idsHoy.forEach(id => {
+    const s = students.find(x => x.id === id);
+    if (!s) return;
+    if (s.sexo === 'M') niños++;
+    else if (s.sexo === 'F') niñas++;
+  });
+  const generoEl = document.getElementById('statTodayGenero');
+  if (generoEl) generoEl.textContent = (niños || niñas) ? `👦 ${niños} · 👧 ${niñas}` : '';
 }
 
 function studentMatchesQuery(s, q){
@@ -14342,6 +14485,7 @@ function renderAll(){
   renderStats();
   renderEntradas();
   renderAlumnos();
+  renderAusentes();
   renderHistory();
   ckRenderClassSelector('scan');
 }
