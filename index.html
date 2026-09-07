@@ -41,8 +41,8 @@ header.topbar h1 { font-size: 1.1em; font-weight: 700; color: #fff; flex: 1; tex
 .userchip { display: flex; align-items: center; gap: 8px; font-size: 0.8em; color: rgba(255,255,255,0.85); }
 .userchip .av { width: 32px; height: 32px; border-radius: 999px; background: #f97316; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8em; }
 .userchip button { border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 0.8em; cursor: pointer; padding: 5px 10px; border-radius: 999px; }
-nav.tabs { display: flex; justify-content: center; overflow-x: auto; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
-nav.tabs button { padding: 12px 16px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer; }
+nav.tabs { display: flex; flex-wrap: wrap; justify-content: center; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
+nav.tabs button { padding: 10px 14px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer; }
 nav.tabs button.active { color: #2563eb; border-color: #7c3aed; font-weight: 700; }
 main { max-width: 640px; width: 100%; margin: 0 auto; padding: 16px; }
 .grade-pills { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
@@ -1948,7 +1948,10 @@ ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</optio
 <input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
 </div>
 <input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentFieldLocal('${s.id}','lenguaIndigena',this.value)" />
-<input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
+<div class="full" style="display:flex;gap:6px;align-items:center;">
+<input style="flex:1;" placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
+<button type="button" style="border:none;background:#dbeafe;color:#1d4ed8;border-radius:8px;padding:9px 10px;font-size:0.68em;font-weight:700;white-space:nowrap;" onclick="autocalcularAsistencias('${s.id}')">🔄 Calcular con CheckIn Kids</button>
+</div>
 <input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentFieldLocal('${s.id}','folio',this.value)" class="full" />
 <p class="section-title">👩 Datos de la madre</p>
 <input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentFieldLocal('${s.id}','madreNombre',this.value)" />
@@ -3439,6 +3442,42 @@ if (!habiles) return null;
 const asistidos = diasAsistidosEstudiante(studentId, periodoId, nivel, grade, grupo);
 const pct = Math.min(1, asistidos / habiles);
 return Math.round(pct * 10 * 10) / 10;
+}
+// Asistencia del CICLO COMPLETO (no de un solo periodo evaluativo), para llenar
+// el campo "Asistencias" de la boleta oficial de Primaria — cuenta TODAS las
+// fechas registradas en CheckIn Kids para ese grupo/alumno, de principio a fin.
+function diasHabilesCicloCompleto(nivel, grade, grupo) {
+const roster = nivel === 'primaria' ? state.students : state.secStudents;
+const ids = new Set(roster.map(s => s.id));
+const fechas = new Set();
+(state.checkinAttendance || []).forEach(a => {
+if (a.studentId && ids.has(a.studentId)) fechas.add(a.date);
+});
+if (grade) diasExcluidosSet(nivel, grade, grupo).forEach(f => fechas.delete(f));
+return fechas.size;
+}
+function diasAsistidosCicloCompleto(studentId, nivel, grade, grupo) {
+const excluidos = grade ? diasExcluidosSet(nivel, grade, grupo) : new Set();
+const fechas = new Set();
+(state.checkinAttendance || []).forEach(a => {
+if (a.studentId === studentId && !excluidos.has(a.date)) fechas.add(a.date);
+});
+return fechas.size;
+}
+// Llena el campo "Asistencias" de la boleta con lo ya registrado en CheckIn Kids,
+// en formato "días asistidos/días hábiles". El maestro conserva el control: el
+// campo sigue siendo editable a mano después, y el cambio solo se guarda de
+// verdad cuando se presiona "Guardar" (igual que el resto de los campos de este
+// formulario) — este botón únicamente lo pre-llena para ahorrar el conteo manual.
+function autocalcularAsistencias(id) {
+const s = state.students.find(x => x.id === id);
+if (!s) return;
+const habiles = diasHabilesCicloCompleto('primaria', s.grade, s.grupo);
+if (!habiles) { showToast('Aún no hay asistencias registradas en CheckIn Kids para este grupo'); return; }
+const asistidos = diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo);
+updateStudentFieldLocal(id, 'asistencias', `${asistidos}/${habiles}`);
+render();
+showToast('🔄 Asistencia calculada desde CheckIn Kids — revisa y guarda');
 }
 function calcularFinalSumativa(nivel, s, periodoId, materiaOverride) {
 const config = sumativaConfigArr(nivel);
