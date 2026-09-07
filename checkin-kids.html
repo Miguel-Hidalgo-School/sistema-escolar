@@ -13876,31 +13876,45 @@ function registerStudent(){
 function openEditModal(studentId){
   const s = students.find(x=>x.id===studentId);
   if(!s) return;
-  document.getElementById('editStudentId').value = s.id;
-  document.getElementById('editName').value = s.name;
-  document.getElementById('editNivel').value = s.nivel || 'primaria';
-  ckPopulateNivelSelect('editNivel', s.nivel || 'primaria');
-  updateNivelOptions('edit');
-  document.getElementById('editGrade').value = s.grade;
-  document.getElementById('editGroup').value = s.group;
-  document.getElementById('editSexo').value = s.sexo || '';
-  document.getElementById('editCurp').value = s.curp || '';
-  document.getElementById('editBirth').value = s.birthDate || '';
-  document.getElementById('editAddress').value = s.address || '';
-  document.getElementById('editMotherName').value = s.motherName || '';
-  document.getElementById('editMotherCurp').value = s.motherCurp || '';
-  document.getElementById('editMotherPhone').value = s.motherPhone || '';
-  document.getElementById('editFatherName').value = s.fatherName || '';
-  document.getElementById('editFatherCurp').value = s.fatherCurp || '';
-  document.getElementById('editFatherPhone').value = s.fatherPhone || '';
-  document.getElementById('editEnroll').value = s.enroll || '';
-  document.getElementById('editAllergy').value = s.allergy || '';
-  editPickupList = JSON.parse(JSON.stringify(s.pickupAuthorized || []));
-  renderPickupEditor('edit');
-  editPhotoData = s.photo || '';
-  const img = document.getElementById('editPhotoPreview');
-  if(s.photo){ img.src = s.photo; img.classList.add('has-img'); } else { img.src=''; img.classList.remove('has-img'); }
+  const problemas = [];
+  try{
+    document.getElementById('editStudentId').value = s.id;
+    document.getElementById('editName').value = s.name || '';
+  }catch(e){ problemas.push('datos básicos: '+e.message); }
+  try{
+    document.getElementById('editNivel').value = s.nivel || 'primaria';
+    ckPopulateNivelSelect('editNivel', s.nivel || 'primaria');
+    updateNivelOptions('edit');
+    document.getElementById('editGrade').value = s.grade || '';
+    document.getElementById('editGroup').value = s.group || '';
+  }catch(e){ problemas.push('nivel/grado/grupo: '+e.message); }
+  try{
+    document.getElementById('editSexo').value = s.sexo || '';
+    document.getElementById('editCurp').value = s.curp || '';
+    document.getElementById('editBirth').value = s.birthDate || '';
+    document.getElementById('editAddress').value = s.address || '';
+    document.getElementById('editMotherName').value = s.motherName || '';
+    document.getElementById('editMotherCurp').value = s.motherCurp || '';
+    document.getElementById('editMotherPhone').value = s.motherPhone || '';
+    document.getElementById('editFatherName').value = s.fatherName || '';
+    document.getElementById('editFatherCurp').value = s.fatherCurp || '';
+    document.getElementById('editFatherPhone').value = s.fatherPhone || '';
+    document.getElementById('editEnroll').value = s.enroll || '';
+    document.getElementById('editAllergy').value = s.allergy || '';
+  }catch(e){ problemas.push('datos personales: '+e.message); }
+  try{
+    editPickupList = ckToArraySafe(JSON.parse(JSON.stringify(s.pickupAuthorized || []))).filter(p=>p && typeof p==='object');
+    renderPickupEditor('edit');
+  }catch(e){ problemas.push('personas autorizadas: '+e.message); editPickupList = []; try{ renderPickupEditor('edit'); }catch(e2){} }
+  try{
+    editPhotoData = s.photo || '';
+    const img = document.getElementById('editPhotoPreview');
+    if(s.photo){ img.src = s.photo; img.classList.add('has-img'); } else { img.src=''; img.classList.remove('has-img'); }
+  }catch(e){ problemas.push('foto: '+e.message); }
   document.getElementById('editModal').classList.add('show');
+  if(problemas.length){
+    showToast('⚠️ Se abrió, pero hubo un problema con: '+problemas.join(' · ')+'. Toma captura y compártela.', 'err');
+  }
 }
 function saveEditStudent(){
   const id = document.getElementById('editStudentId').value;
