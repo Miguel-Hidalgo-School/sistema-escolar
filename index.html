@@ -1948,10 +1948,7 @@ ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</optio
 <input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
 </div>
 <input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentFieldLocal('${s.id}','lenguaIndigena',this.value)" />
-<div class="full" style="display:flex;gap:6px;align-items:center;">
-<input style="flex:1;" placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
-<button type="button" style="border:none;background:#dbeafe;color:#1d4ed8;border-radius:8px;padding:9px 10px;font-size:0.68em;font-weight:700;white-space:nowrap;" onclick="autocalcularAsistencias('${s.id}')">🔄 Calcular con CheckIn Kids</button>
-</div>
+<input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
 <input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentFieldLocal('${s.id}','folio',this.value)" class="full" />
 <p class="section-title">👩 Datos de la madre</p>
 <input class="full" placeholder="Nombre completo" value="${s.madreNombre||''}" oninput="updateStudentFieldLocal('${s.id}','madreNombre',this.value)" />
@@ -2088,7 +2085,7 @@ ${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MA
 <div class="side-boxes">
 <div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
 <div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
-<div class="box"><p class="l">ASISTENCIAS</p><p class="v">${s.asistencias||'—'}</p></div>
+<div class="box"><p class="l">ASISTENCIAS</p><p class="v">${(() => { const habiles = diasHabilesCicloCompleto('primaria', s.grade, s.grupo); return habiles ? diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo) : (s.asistencias || '—'); })()}</p></div>
 <div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;">${s.folio||'—'}</p></div>
 </div>
 </div>
@@ -3463,21 +3460,6 @@ const fechas = new Set();
 if (a.studentId === studentId && !excluidos.has(a.date)) fechas.add(a.date);
 });
 return fechas.size;
-}
-// Llena el campo "Asistencias" de la boleta con lo ya registrado en CheckIn Kids,
-// en formato "días asistidos/días hábiles". El maestro conserva el control: el
-// campo sigue siendo editable a mano después, y el cambio solo se guarda de
-// verdad cuando se presiona "Guardar" (igual que el resto de los campos de este
-// formulario) — este botón únicamente lo pre-llena para ahorrar el conteo manual.
-function autocalcularAsistencias(id) {
-const s = state.students.find(x => x.id === id);
-if (!s) return;
-const habiles = diasHabilesCicloCompleto('primaria', s.grade, s.grupo);
-if (!habiles) { showToast('Aún no hay asistencias registradas en CheckIn Kids para este grupo'); return; }
-const asistidos = diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo);
-updateStudentFieldLocal(id, 'asistencias', `${asistidos}/${habiles}`);
-render();
-showToast('🔄 Asistencia calculada desde CheckIn Kids — revisa y guarda');
 }
 function calcularFinalSumativa(nivel, s, periodoId, materiaOverride) {
 const config = sumativaConfigArr(nivel);
