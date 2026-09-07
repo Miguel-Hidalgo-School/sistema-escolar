@@ -212,6 +212,7 @@ bloqueadoPorScreenshot: false,
 checkinAttendance: [],
 diasExcluidos: [],
 iaCargando: {},
+iaResumenReporte: null,
 tareaSelectedId: null,
 tareaFilterGrade: '',
 tareaFilterGrupo: '',
@@ -1122,7 +1123,7 @@ function secMateriaNombreActiva() {
 const si = state.secSchoolInfo || {};
 return state.secMateriaActiva === 2 ? (si.materia2 || 'Materia 2') : (si.materia || 'Materia');
 }
-function setSecMateriaActiva(n) { state.secMateriaActiva = n; render(); }
+function setSecMateriaActiva(n) { state.secMateriaActiva = n; state.iaResumenReporte = null; render(); }
 let pendingSecGrades = {};
 function updateSecGradeLive(id, periodo, value) {
 const s = state.secStudents.find(x => x.id === id);
@@ -1215,6 +1216,7 @@ showToast('💾 Datos guardados');
 function openSecReporte(grade, grupo) {
 state.tabHistory.push({ nivel: state.nivel, tab: state.tab, secTab: state.secTab, secReportGrade: state.secReportGrade, boletaStudentId: state.boletaStudentId });
 state.secReportGrade = { grade, grupo };
+state.iaResumenReporte = null; // el resumen anterior ya no aplica a este grado/grupo
 render();
 }
 function tieneAccesoPrimaria() { return state.isAdmin || !state.perfilActual || state.perfilActual.accesoPrimaria !== false; }
@@ -2319,6 +2321,37 @@ html += '</div>';
 });
 return html;
 }
+// Llama al Worker de IA para generar el resumen del reporte de grupo (para
+// Gestión Escolar), a partir de las calificaciones ya calculadas de cada alumno.
+async function generarResumenReporteIA() {
+const { grade, grupo } = state.secReportGrade || {};
+const si = state.secSchoolInfo || {};
+const list = state.secStudents.filter(s => s.grade === grade && (s.grupo || 'A') === grupo);
+if (!list.length) { showToast('No hay alumnos en este grupo para resumir'); return; }
+const alumnos = list.map(s => {
+const p = s[secPeriodosField()] || [null, null, null];
+const info = secStudentFinal(s);
+return { nombre: s.name, p1: p[0], p2: p[1], p3: p[2], suma: Number(info.suma.toFixed(1)), estatus: info.completo ? (info.aprobado ? 'APROBADO' : 'RIESGO') : 'EN CURSO' };
+});
+state.iaCargando = state.iaCargando || {};
+state.iaCargando.reporteResumen = true;
+render();
+try {
+const res = await fetch(IA_WORKER_URL, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ task: 'reporte_resumen', grade, grupo, materia: secMateriaNombreActiva(), docente: si.docente, alumnos })
+});
+const data = await res.json();
+if (!res.ok || !data.texto) { showToast('No se pudo generar el resumen'); return; }
+state.iaResumenReporte = data.texto;
+} catch (e) {
+showToast('No se pudo contactar al servicio de IA (revisa tu conexión)');
+} finally {
+state.iaCargando.reporteResumen = false;
+render();
+}
+}
 function renderSecReporte() {
 const { grade, grupo } = state.secReportGrade || {};
 const si = state.secSchoolInfo;
@@ -2418,6 +2451,11 @@ html += `</div>`;
 html += `<div style="border-top:1px dashed #d1d5db; margin-top:20px; padding-top:14px;">
 <p style="font-size:9px;">Firma del docente: ____________________________</p>
 </div>
+</div>
+<div class="card no-print" style="margin-top:12px;">
+<p style="font-weight:700;font-size:0.85em;margin-bottom:6px;">✨ Resumen para Gestión Escolar</p>
+<button class="btn" style="background:#ede9fe;color:#6d28d9;width:100%;" ${(state.iaCargando&&state.iaCargando.reporteResumen)?'disabled':''} onclick="generarResumenReporteIA()">${(state.iaCargando&&state.iaCargando.reporteResumen)?'⏳ Generando...':(state.iaResumenReporte?'✨ Volver a generar':'✨ Generar resumen con IA')}</button>
+${state.iaResumenReporte ? `<p style="font-size:0.82em;color:#374151;margin-top:8px;white-space:pre-wrap;">${esc2(state.iaResumenReporte)}</p>` : ''}
 </div>
 <div class="no-print" style="margin-top:12px;">
 <button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
@@ -3812,179 +3850,4 @@ orientadorNombre: state.secSchoolInfo.orientadorNombre || ''
 state.disciplinaShareUrl = null;
 render();
 }
-function cerrarReporte() { state.disciplinaReportMode = null; state.disciplinaShareUrl = null; render(); }
-function updateReporteField(field, value) { state.disciplinaReportMode[field] = value; }
-function toggleReporteAccion(field) { state.disciplinaReportMode[field] = !state.disciplinaReportMode[field]; render(); }
-function compartirDisciplina() {
-const rm = state.disciplinaReportMode;
-const nivel = rm.nivel;
-const list = nivel === 'primaria' ? state.students : state.secStudents;
-const s = list.find(x => x.id === rm.studentId);
-const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
-const inc = map[rm.studentId] && map[rm.studentId].incidentes && map[rm.studentId].incidentes[rm.incId];
-if (!s || !inc) return;
-state.disciplinaShareLoading = true; render();
-const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
-const snapshot = {
-nivel,
-studentName: s.name || '', grade: s.grade || '', grupo: s.grupo || '',
-padreNombre: rm.padreNombre || '',
-maestroNombre: rm.maestroNombre || '',
-fecha: rm.fecha || '',
-inc: {
-faltas: inc.faltas || [], otros: inc.otros || '',
-causa: inc.causa || '', protocolo: inc.protocolo || '', descripcion: inc.descripcion || ''
-},
-accionIntervenga: !!rm.accionIntervenga, accionAcudir: !!rm.accionAcudir, accionResguardo: !!rm.accionResguardo,
-citaFecha: rm.citaFecha || '', citaHora: rm.citaHora || '', resguardoDias: rm.resguardoDias || '',
-orientadorNombre: rm.orientadorNombre || '',
-schoolInfo: {
-nombre: si.nombre || '', cct: si.cct || '',
-direccionReporte: si.direccionReporte || '',
-logoURL: nivel === 'secundaria' ? (si.logoURL || '') : '',
-logoURL2: nivel === 'secundaria' ? (si.logoURL2 || '') : ''
-},
-cicloEscolar: getCicloEscolar(),
-createdAt: Date.now(),
-expiresAt: Date.now() + 15 * 24 * 60 * 60 * 1000
-};
-try {
-const ref = db.ref(DB_ROOT + '/reportesDisciplinaCompartidos').push();
-ref.set(snapshot).then(() => {
-const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
-state.disciplinaShareUrl = base + 'disciplina.html?t=' + ref.key;
-state.disciplinaShareLoading = false;
-render();
-}).catch(err => { state.disciplinaShareLoading = false; showToast('No se pudo generar el link: ' + (err && err.message ? err.message : 'error desconocido')); render(); });
-} catch (err) {
-state.disciplinaShareLoading = false;
-showToast('No se pudo generar el link: ' + (err && err.message ? err.message : 'error desconocido'));
-render();
-}
-}
-function copyDisciplinaLink() {
-if (!state.disciplinaShareUrl) return;
-navigator.clipboard.writeText(state.disciplinaShareUrl).then(() => showToast('Link copiado ✅'));
-}
-function enviarDisciplinaWhatsapp(telDigits, studentName) {
-if (!state.disciplinaShareUrl || !telDigits) return;
-let phone = telDigits.replace(/\D/g, '');
-if (phone.length === 10) phone = '52' + phone;
-const msg = `Hola, le comparto el reporte de indisciplina / incumplimiento del reglamento escolar de ${studentName}: ${state.disciplinaShareUrl}`;
-window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
-}
-function renderReporteImprimible() {
-const rm = state.disciplinaReportMode;
-const nivel = rm.nivel;
-const list = nivel === 'primaria' ? state.students : state.secStudents;
-const s = list.find(x => x.id === rm.studentId);
-const map = nivel === 'primaria' ? state.disciplinaPri : state.disciplinaSec;
-const inc = map[rm.studentId].incidentes[rm.incId];
-let html = `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
-<button class="btn btn-gray" style="flex:1;" onclick="cerrarReporte()">← Volver</button>
-<button class="btn btn-dark" style="flex:2;" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-</div>`;
-if (nivel === 'primaria') {
-html += `<div class="card" style="font-size:12px;line-height:1.6;">
-<p style="text-align:center;font-weight:800;font-size:1.5em;margin-bottom:18px;">Reporte escolar</p>
-<p>Sr(a) <input style="border:none;border-bottom:1px solid #000;width:230px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> por medio del presente se le informa que su</p>
-<p style="margin-top:4px;">hijo(a): <strong>${s.name}</strong>, el cual asiste al grupo de <strong>${s.grade||''}${s.grupo?(' '+s.grupo):''}</strong> a cargo del</p>
-<p style="margin-top:4px;">maestro(a): <input style="border:none;border-bottom:1px solid #000;width:230px;font-size:1em;" value="${rm.maestroNombre}" oninput="updateReporteField('maestroNombre',this.value)">, ha incurrido en las siguientes faltas:</p>
-<div style="margin:16px 0;">
-${FALTAS_PRIMARIA.map(falta => `<p style="margin:4px 0;">${(inc.faltas||[]).includes(falta) ? '☑' : '☐'} ${falta}</p>`).join('')}
-<p style="margin:4px 0;">☐ Otros: ${inc.otros ? inc.otros : '_________________________________'}</p>
-</div>
-<p style="margin-top:16px;">Por lo anterior es necesario que:</p>
-<p style="margin:6px 0;">${rm.accionIntervenga?'☑':'☐'} Intervenga desde casa valorando la conducta de su hijo(a) y estableciendo límites y reglas claros.</p>
-<p style="margin:6px 0;">${rm.accionAcudir?'☑':'☐'} Acuda a nuestra institución el día: <input style="border:none;border-bottom:1px solid #000;width:110px;font-size:1em;" value="${rm.citaFecha}" oninput="updateReporteField('citaFecha',this.value)"> a las <input style="border:none;border-bottom:1px solid #000;width:80px;font-size:1em;" value="${rm.citaHora}" oninput="updateReporteField('citaHora',this.value)"> horas para firmar acuerdos y compromisos.</p>
-<p style="margin:6px 0;">${rm.accionResguardo?'☑':'☐'} El alumno(a) queda bajo resguardo familiar por <input style="border:none;border-bottom:1px solid #000;width:50px;font-size:1em;" value="${rm.resguardoDias}" oninput="updateReporteField('resguardoDias',this.value)"> días, como medida precautoria para su seguridad.</p>
-<div class="no-print" style="display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;">
-<button onclick="toggleReporteAccion('accionIntervenga')" class="btn btn-gray" style="flex:1;font-size:0.68em;min-width:100px;">☑/☐ Intervenga</button>
-<button onclick="toggleReporteAccion('accionAcudir')" class="btn btn-gray" style="flex:1;font-size:0.68em;min-width:100px;">☑/☐ Acuda a cita</button>
-<button onclick="toggleReporteAccion('accionResguardo')" class="btn btn-gray" style="flex:1;font-size:0.68em;min-width:100px;">☑/☐ Resguardo</button>
-</div>
-<div style="display:flex;justify-content:space-between;margin-top:70px;">
-<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del docente</div>
-<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">Firma del padre/madre</div>
-</div>
-<p style="text-align:center;letter-spacing:1px;font-size:0.68em;color:#334155;margin-top:16px;white-space:nowrap;overflow:hidden;">»»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»«« »»««</p>
-</div>`;
-} else {
-const causaLbl = { leve: 'CAUSA LEVE', grave: 'CAUSA GRAVE', muygrave: 'CAUSA MUY GRAVE' };
-const protLbl = { fisico_directo: 'FÍSICO DIRECTO', fisico_indirecto: 'FÍSICO INDIRECTO', sexual: 'SEXUAL', psicologico: 'PSICOLÓGICO', exclusion: 'POR EXCLUSIÓN SOCIAL', cyberbullying: 'POR CYBERBULLYING' };
-const si = state.secSchoolInfo;
-html += `<div class="card" style="font-size:10.5px;line-height:1.6;">
-<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;">
-<div style="height:80px;width:90px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;">${si.logoURL2 ? `<img src="${si.logoURL2}" style="max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain;" />` : ''}</div>
-<div style="text-align:center;flex:1;">
-<p style="font-weight:700;">DIRECCIÓN GENERAL DE SECUNDARIAS TÉCNICAS</p>
-<p>SECTOR 06</p>
-<p style="font-weight:700;font-size:1.05em;">${si.nombre || 'ESCUELA SECUNDARIA TÉCNICA'}</p>
-<p>C.C.T. ${si.cct || ''}</p>
-<p>${si.direccionReporte || 'SAN MARCOS, MPIO. DE TONILA, JAL.'}</p>
-<p>CICLO ESCOLAR ${getCicloEscolar()}</p>
-</div>
-<div style="height:60px;width:70px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;">${si.logoURL ? `<img src="${si.logoURL}" style="max-height:100%;max-width:100%;width:auto;height:auto;object-fit:contain;" />` : ''}</div>
-</div>
-<p>PADRE DE FAMILIA O TUTOR: <input style="border:none;border-bottom:1px solid #000;width:220px;font-size:1em;" value="${rm.padreNombre}" oninput="updateReporteField('padreNombre',this.value)"> &nbsp; FECHA: <input type="date" style="border:none;border-bottom:1px solid #000;font-size:1em;" value="${rm.fecha}" oninput="updateReporteField('fecha',this.value)"></p>
-<p style="text-align:center;font-weight:700;margin:12px 0;font-size:1.1em;">REPORTE DE INDISCIPLINA</p>
-<p>POR ESTE MEDIO SE LE NOTIFICA A USTED QUE SU HIJO(A): <strong>${(s.name||'').toUpperCase()}</strong> DEL GRUPO <strong>${s.grade||''}${s.grupo||''}</strong> TIENE REPORTE DE INDISCIPLINA POR LOS ACTOS QUE AMERITAN MEDIDAS DISCIPLINARIAS A LOS ALUMNOS POR FALTAR AL REGLAMENTO ESCOLAR Y QUE SE CLASIFICAN EN EL SIGUIENTE PUNTO:</p>
-<p style="margin-top:10px;">${Object.entries(causaLbl).map(([k,v]) => `${inc.causa===k?'☑':'☐'} ${v}`).join(' &nbsp; &nbsp; ')}</p>
-<p style="margin-top:10px;">PROTOCOLO EN CASO DE VIOLENCIA (si aplica): ${Object.entries(protLbl).map(([k,v]) => `${inc.protocolo===k?'☑':'☐'} ${v}`).join(' &nbsp; ')}</p>
-<p style="margin-top:12px;">CAUSA POR LO QUE SE LE REPORTA:</p>
-<p style="border:1px solid #000;min-height:55px;padding:6px;margin-top:4px;">${(inc.descripcion||'').toUpperCase()}</p>
-<div style="display:flex;justify-content:space-between;margin-top:50px;">
-<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">PROFR(A). DEL MÓDULO<br>NOMBRE Y FIRMA</div>
-<div style="text-align:center;width:44%;border-top:1px solid #000;padding-top:4px;">ACEPTA EL REPORTE<br>NOMBRE Y FIRMA DEL ALUMNO(A)</div>
-</div>
-<p style="margin-top:36px;border-top:1px solid #000;padding-top:4px;text-align:center;">L.T.S. <input style="border:none;border-bottom:1px solid #000;text-align:center;font-size:1em;" value="${rm.orientadorNombre}" oninput="updateReporteField('orientadorNombre',this.value)"></p>
-</div>`;
-}
-const contactDisc = resolveContact(s, nivel);
-html += `<div class="no-print" style="margin-top:12px;">
-<button class="btn btn-blue" style="width:100%;" onclick="compartirDisciplina()" ${state.disciplinaShareLoading ? 'disabled' : ''}>🔗 ${state.disciplinaShareLoading ? 'Generando...' : 'Compartir con el padre'}</button>
-</div>`;
-if (state.disciplinaShareUrl) {
-html += `<div class="no-print card" style="margin-top:10px;border:1px solid #bfdbfe;background:#eff6ff;">
-<p style="font-weight:700;font-size:0.85em;color:#1d4ed8;margin-bottom:6px;">✅ Link generado (válido 15 días)</p>
-<p style="font-size:0.78em;color:#374151;word-break:break-all;background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:8px;margin-bottom:8px;">${state.disciplinaShareUrl}</p>
-<p style="font-size:0.72em;color:#6b7280;margin-bottom:8px;">${contactDisc.tel ? `Contacto detectado — ${contactDisc.label}: ${contactDisc.tel}` : 'Sin teléfono registrado para este alumno.'}</p>
-<div style="display:flex;gap:8px;">
-<button class="btn btn-blue" style="flex:1;" onclick="copyDisciplinaLink()">📋 Copiar link</button>
-${contactDisc.tel ? `<button class="btn btn-green" style="flex:1;" onclick="enviarDisciplinaWhatsapp('${contactDisc.tel.replace(/[^0-9]/g,'')}','${(s.name||'').replace(/'/g,"\\'")}')">📲 WhatsApp</button>` : ''}
-</div>
-</div>`;
-}
-return html;
-}
-// ---------------- Init ----------------
-// ---------------- Mayúsculas automáticas en toda la app ----------------
-// Aplica a inputs de texto sin tipo especial y a textareas (no afecta
-// email, password, date, number, etc.), incluso en campos creados
-// dinámicamente vía innerHTML.
-document.addEventListener('input', function (e) {
-var el = e.target;
-if (!el || typeof el.matches !== 'function') return;
-if (!el.matches('input[type="text"], input:not([type]), textarea')) return;
-var start = el.selectionStart, end = el.selectionEnd;
-var upper = el.value.toUpperCase();
-if (upper !== el.value) {
-el.value = upper;
-if (start !== null && typeof el.setSelectionRange === 'function') {
-try { el.setSelectionRange(start, end); } catch (err) {}
-}
-}
-});
-
-initFirebase();
-
-// Registro del service worker: hace que el sitio se pueda "Instalar"
-// como app de verdad (ícono + pantalla completa), no solo como acceso directo.
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
-}
-</script>
-</body>
-</html>
+function cerrarReporte() { state.disciplinaReportMode = null; state.disciplinaShareUrl = null; render(); }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
