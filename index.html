@@ -150,7 +150,7 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, contextoGrupoIARef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
@@ -192,9 +192,6 @@ formativoShareTel: '',
 formativoAcuseInfo: null,
 formativoFilterGrade: '',
 formativoFilterGrupo: '',
-contextoGrupoIA: '',
-contextoGrupoIAKey: null,
-contextoGrupoIACache: {},
 tareasPri: {},
 tareasSec: {},
 tareaNueva: null,
@@ -214,6 +211,9 @@ intentosScreenshot: 0,
 bloqueadoPorScreenshot: false,
 checkinAttendance: [],
 diasExcluidos: [],
+mural: [],
+muralForm: { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' },
+muralShareUrl: '',
 iaCargando: {},
 iaResumenReporte: null,
 tareaSelectedId: null,
@@ -334,42 +334,11 @@ sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
-contextoGrupoIARef = db.ref(base + '/contextoGrupoIA');
-}
-// Construye una llave válida de Firebase (sin ./#$[]) para identificar un
-// grupo concreto: nivel + grado + grupo (secundaria) — así el contexto que el
-// docente escribe para la IA se guarda "por grupo" y se reutiliza siempre que
-// vuelva a abrir ese mismo grado/grupo, en vez de perderse cada vez.
-function claveGrupoIA(nivel, grado, grupo) {
-const limpia = s => String(s || 'x').replace(/[.#$\[\]\/]/g, '_');
-return nivel === 'secundaria' ? `sec_${limpia(grado)}_${limpia(grupo)}` : `pri_${limpia(grado)}`;
-}
-function cargarContextoGrupoIA(nivel) {
-const grado = state.formativoFilterGrade;
-const grupo = state.formativoFilterGrupo;
-const key = claveGrupoIA(nivel, grado, grupo);
-if (state.contextoGrupoIAKey === key) return; // ya está cargado este grupo
-state.contextoGrupoIAKey = key;
-state.contextoGrupoIA = state.contextoGrupoIACache[key] || '';
-if (!contextoGrupoIARef) return;
-contextoGrupoIARef.child(key).once('value').then(snap => {
-const val = snap.val() || '';
-state.contextoGrupoIACache[key] = val;
-if (state.contextoGrupoIAKey === key) { state.contextoGrupoIA = val; render(); }
-}).catch(() => {});
-}
-let guardarContextoGrupoIATimer = null;
-function actualizarContextoGrupoIA(nivel, value) {
-state.contextoGrupoIA = value;
-const key = state.contextoGrupoIAKey;
-if (!key) return;
-state.contextoGrupoIACache[key] = value;
-// Guardado con "debounce": espera un momento sin teclear antes de guardar en
-// Firebase, para no mandar una escritura por cada letra tecleada.
-clearTimeout(guardarContextoGrupoIATimer);
-guardarContextoGrupoIATimer = setTimeout(() => {
-if (contextoGrupoIARef) contextoGrupoIARef.child(key).set(value).catch(() => {});
-}, 900);
+// El mural SIEMPRE vive en la raíz compartida (DB_ROOT), sin importar si quien
+// publica es la cuenta admin o una cuenta individual de maestro — así un solo
+// link de mural.html sirve para toda la escuela, en vez de quedar aislado dentro
+// de la carpeta privada de cada cuenta.
+muralRef = db.ref(DB_ROOT + '/mural');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -506,6 +475,11 @@ const val = snap.val() || {};
 state.diasExcluidos = Object.keys(val).map(id => ({ id, ...val[id] }));
 render();
 }, () => {});
+muralRef.on('value', snap => {
+const val = snap.val() || {};
+state.mural = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+render();
+}, () => {});
 }
 if (puedeCheckin) {
 checkinAttendanceRef.on('value', snap => {
@@ -533,6 +507,7 @@ if (sumativaCalifSecRef) sumativaCalifSecRef.off();
 if (sumativaPeriodosRef) sumativaPeriodosRef.off();
 if (checkinAttendanceRef) checkinAttendanceRef.off();
 if (diasExcluidosRef) diasExcluidosRef.off();
+if (muralRef) muralRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
@@ -543,9 +518,7 @@ state.disciplinaPri = {};
 state.disciplinaSec = {};
 state.checkinAttendance = [];
 state.diasExcluidos = [];
-state.contextoGrupoIA = '';
-state.contextoGrupoIAKey = null;
-state.contextoGrupoIACache = {};
+state.mural = [];
 state.sumativaConfigPri = null;
 state.sumativaConfigSec = null;
 state.sumativaCalifPri = {};
@@ -1842,13 +1815,13 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['bitacora','Bitácora'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['mural','Mural'],['bitacora','Bitácora'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab)) || (id==='evaluacion' && ['formativo','sumativa'].includes(state.tab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('primaria')" : `setTab('${id}')`}">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['bitacora','Bitácora']];
+  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['mural','Mural'],['bitacora','Bitácora']];
   return '<nav class="tabs">' + tabs.map(([id,label]) =>
     `<button class="${state.secTab===id || (id==='evaluacion' && ['formativo','sumativa'].includes(state.secTab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('secundaria')" : `setSecTab('${id}')`}">${label}</button>`
   ).join('') + '</nav>';
@@ -1891,6 +1864,7 @@ if (state.tab === 'sumativa') return nav + renderSumativa('primaria');
 if (state.tab === 'evaluacion') return nav + renderEvaluacionSelector('primaria');
 if (state.tab === 'tareas') return nav + renderTareas('primaria');
 if (state.tab === 'disciplina') return nav + renderDisciplina('primaria');
+if (state.tab === 'mural') return nav + renderMural('primaria');
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
@@ -1905,6 +1879,7 @@ if (state.secTab === 'sumativa') return nav + renderSumativa('secundaria');
 if (state.secTab === 'evaluacion') return nav + renderEvaluacionSelector('secundaria');
 if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
 if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
+if (state.secTab === 'mural') return nav + renderMural('secundaria');
 return '';
 }
 function renderInicio() {
@@ -2637,7 +2612,7 @@ const otros = state.formativoForm.criterios.filter((x, idx) => idx !== i && x.co
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.contextoGrupoIA || undefined })
+body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.formativoForm.contextoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2661,7 +2636,7 @@ try {
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim(), contexto: state.contextoGrupoIA || undefined })
+body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim(), contexto: f.contextoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2681,8 +2656,8 @@ function setFormativoPeriodo(p) {
 state.formativoForm.periodo = p;
 render();
 }
-function setFormativoFilterGrade(g) { state.formativoFilterGrade = g; state.formativoStudentId = null; state.formativoForm = null; cargarContextoGrupoIA(state.nivel); render(); }
-function setFormativoFilterGrupo(g) { state.formativoFilterGrupo = g; state.formativoStudentId = null; state.formativoForm = null; cargarContextoGrupoIA(state.nivel); render(); }
+function setFormativoFilterGrade(g) { state.formativoFilterGrade = g; state.formativoStudentId = null; state.formativoForm = null; render(); }
+function setFormativoFilterGrupo(g) { state.formativoFilterGrupo = g; state.formativoStudentId = null; state.formativoForm = null; render(); }
 function selectFormativoStudent(nivel, id) {
 if (!id) { state.formativoStudentId = null; state.formativoForm = null; state.formativoShareUrl = null; render(); return; }
 const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
@@ -2827,7 +2802,6 @@ const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec
 const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
 if (!state.formativoFilterGrade) state.formativoFilterGrade = gradeOptions[0];
 if (nivel === 'secundaria' && !state.formativoFilterGrupo) state.formativoFilterGrupo = GRUPOS_SEC[0];
-cargarContextoGrupoIA(nivel);
 const filtered = list.filter(s => s.grade === state.formativoFilterGrade && (nivel==='primaria' || (s.grupo||'A') === state.formativoFilterGrupo));
 const sorted = [...filtered].sort((a,b) => (a.name||'').localeCompare(b.name||''));
 let html = `<div class="card">
@@ -2852,9 +2826,6 @@ return `<option value="${s.id}" ${state.formativoStudentId===s.id?'selected':''}
 }).join('')}
 </select>
 <p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${sorted.filter(s=>dataMap[s.id]).length} de ${sorted.length} alumnos evaluados en este grupo</p>
-<p style="font-weight:600;font-size:0.85em;margin:14px 0 4px;">✨ Contexto de este grupo para la IA (opcional)</p>
-<p style="font-size:0.7em;color:#9ca3af;margin-bottom:6px;">Describe el momento real del grupo si es relevante — por ejemplo "inicio de ciclo, aún no empezamos lectoescritura formal, al pedirles copiar del pizarrón hacen dibujos". Esto tiene prioridad sobre cualquier suposición general del sistema, se usa en todas las sugerencias de este grupo, y <b>queda guardado</b>: la próxima vez que entres a este mismo grado${nivel==='secundaria'?'/grupo':''} lo vas a encontrar aquí tal como lo dejaste.</p>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.78em;text-transform:uppercase;" rows="2" oninput="forceUpper(this);actualizarContextoGrupoIA('${nivel}',this.value)">${state.contextoGrupoIA||''}</textarea>
 </div>`;
 if (!list.length) { html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">Aún no hay alumnos registrados en este nivel.</p></div>`; return html; }
 if (!state.formativoStudentId || !state.formativoForm) return html;
@@ -2872,6 +2843,9 @@ return `<button style="flex:1;min-width:72px;padding:8px 4px;border-radius:8px;b
 }).join('')}
 </div>
 ${f.periodo === 'proyecto' ? `<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;text-transform:uppercase;" placeholder="Nombre del proyecto" value="${f.proyectoNombre||''}" oninput="forceUpper(this);updateFormativoField('proyectoNombre',this.value)" />` : ''}
+<p style="font-weight:600;font-size:0.85em;margin:10px 0 4px;">✨ Contexto para la IA (opcional)</p>
+<p style="font-size:0.7em;color:#9ca3af;margin-bottom:6px;">Describe el momento real del grupo si es relevante — por ejemplo "inicio de ciclo, aún no empezamos lectoescritura formal, al pedirles copiar del pizarrón hacen dibujos". Esto tiene prioridad sobre cualquier suposición general del sistema, y se usa en todas las sugerencias de este alumno.</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.78em;margin-bottom:12px;text-transform:uppercase;" rows="2" oninput="forceUpper(this);updateFormativoField('contextoIA',this.value)">${f.contextoIA||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 8px;">🎯 Nivel de logro por aspecto</p>`;
 f.criterios.forEach((c, i) => {
 html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:8px;">`;
@@ -3975,6 +3949,110 @@ if (phone.length === 10) phone = '52' + phone;
 const msg = `Hola, le comparto el reporte de indisciplina / incumplimiento del reglamento escolar de ${studentName}: ${state.disciplinaShareUrl}`;
 window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
+// ============ MURAL DE AVISOS ============
+function updateMuralFormLocal(field, value) { state.muralForm[field] = value; }
+function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo' && alcance !== 'grupoMulti') { state.muralForm.grupo = ''; } render(); }
+function publicarAviso(nivel) {
+const f = state.muralForm;
+if (!f.titulo.trim() || !f.mensaje.trim()) { showToast('Ponle título y mensaje al aviso'); return; }
+if (f.alcance === 'grado' && !f.grade) { showToast('Elige el grado'); return; }
+if (f.alcance === 'grupo' && (!f.grade || !f.grupo)) { showToast('Elige grado y grupo'); return; }
+if (f.alcance === 'grupoMulti' && !f.grupo) { showToast('Elige el grupo'); return; }
+const aviso = {
+titulo: f.titulo.trim(),
+mensaje: f.mensaje.trim(),
+nivel: f.alcance === 'todos' ? 'todos' : nivel,
+// En "grupoMulti" (grupo multigrado) NO se guarda grado — así el aviso le
+// llega a las familias sin importar cuál de los varios grados combinados
+// tiene su hijo/a, mientras el grupo coincida.
+grade: f.alcance === 'grado' || f.alcance === 'grupo' ? f.grade : null,
+grupo: (f.alcance === 'grupo' || f.alcance === 'grupoMulti') ? f.grupo : null,
+autor: (state.perfilActual && state.perfilActual.nombre) || '',
+createdAt: Date.now()
+};
+muralRef.push().set(aviso).then(() => {
+state.muralForm = { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' };
+showToast('📢 Aviso publicado');
+render();
+}).catch(() => showToast('No se pudo publicar el aviso'));
+}
+function eliminarAviso(id) {
+if (!confirm('¿Eliminar este aviso del mural?')) return;
+muralRef.child(id).remove().then(() => showToast('Aviso eliminado')).catch(() => showToast('No se pudo eliminar'));
+}
+function linkMural() {
+const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
+return base + 'mural.html';
+}
+function copiarLinkMural() {
+navigator.clipboard.writeText(linkMural()).then(() => showToast('Link del mural copiado ✅'));
+}
+// Abre WhatsApp SIN un número de teléfono fijo: así WhatsApp deja que el maestro
+// elija a quién mandárselo (por ejemplo el grupo de padres de familia), en vez de
+// mandarlo a una sola persona.
+function compartirMuralWhatsapp() {
+const msg = `📢 Nuevo aviso de la escuela. Consúltalo aquí: ${linkMural()}`;
+window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+function renderMural(nivel) {
+const f = state.muralForm;
+const avisos = (state.mural || []).filter(a => a.nivel === 'todos' || a.nivel === nivel);
+let html = `<div class="card">
+<p style="font-weight:700;margin-bottom:10px;">📢 Publicar un aviso nuevo</p>
+<input class="full" placeholder="Título del aviso" value="${esc2(f.titulo)}" oninput="updateMuralFormLocal('titulo',this.value)" style="margin-bottom:8px;" />
+<textarea placeholder="Escribe el mensaje..." rows="3" oninput="updateMuralFormLocal('mensaje',this.value)" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.85em;margin-bottom:10px;">${esc2(f.mensaje)}</textarea>
+<p style="font-size:0.75em;font-weight:600;color:#6b7280;margin-bottom:6px;">¿A quién va dirigido?</p>
+<div class="row-flex" style="margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+<button class="btn btn-sm ${f.alcance==='nivel'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('nivel')">Todo ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'}</button>
+<button class="btn btn-sm ${f.alcance==='grado'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grado')">Un grado</button>
+<button class="btn btn-sm ${f.alcance==='grupo'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupo')">Un grupo</button>
+${nivel === 'primaria' ? `<button class="btn btn-sm ${f.alcance==='grupoMulti'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupoMulti')">Grupo multigrado (varios grados)</button>` : ''}
+<button class="btn btn-sm ${f.alcance==='todos'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('todos')">Toda la escuela</button>
+</div>`;
+if (f.alcance === 'grado' || f.alcance === 'grupo') {
+const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+html += `<div class="grade-pills">` + gradeOptions.map(g => `<button class="${g===f.grade?'active':''}" onclick="setMuralGrade('${g}')">${g}</button>`).join('') + `</div>`;
+}
+if (f.alcance === 'grupo' && f.grade) {
+const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D'];
+html += `<div class="grade-pills" style="margin-top:6px;">` + grupos.map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
+}
+if (f.alcance === 'grupoMulti') {
+html += `<p style="font-size:0.72em;color:#6b7280;margin-bottom:4px;">Le llegará a todas las familias de este grupo, sin importar cuál de los grados combinados tenga su hijo/a.</p>`;
+html += `<div class="grade-pills">` + ['A','B','C','D'].map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
+}
+html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="publicarAviso('${nivel}')">📢 Publicar aviso</button>
+</div>
+<div class="card">
+<p style="font-weight:700;margin-bottom:4px;">🔗 Compartir el mural</p>
+<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Un solo link para todos los papás — al abrirlo eligen el grado/grupo de su hijo y ven los avisos que les corresponden. Compártelo una vez (por ejemplo en tu grupo de WhatsApp de padres) y ya no hace falta volver a mandarlo cada vez que publiques un aviso nuevo.</p>
+<div class="row-flex" style="gap:8px;">
+<button class="btn btn-gray" style="flex:1;" onclick="copiarLinkMural()">📋 Copiar link</button>
+<button class="btn" style="flex:1;background:#dcfce7;color:#166534;" onclick="compartirMuralWhatsapp()">📲 Enviar por WhatsApp</button>
+</div>
+</div>
+<div class="card">
+<p style="font-weight:700;margin-bottom:10px;">🗂️ Avisos publicados</p>`;
+if (!avisos.length) {
+html += `<p style="font-size:0.8em;color:#9ca3af;">Todavía no has publicado ningún aviso.</p>`;
+} else {
+avisos.forEach(a => {
+const destino = a.nivel === 'todos' ? 'Toda la escuela' : (a.grupo ? `${a.grade} Grupo ${a.grupo}` : (a.grade ? a.grade : (nivel === 'primaria' ? 'Primaria' : 'Secundaria')));
+const fecha = new Date(a.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+<div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
+<p style="font-weight:700;font-size:0.9em;">${esc2(a.titulo)}</p>
+<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:3px 8px;font-size:0.85em;flex-shrink:0;" onclick="eliminarAviso('${a.id}')">🗑️</button>
+</div>
+<p style="font-size:0.82em;color:#374151;margin-top:4px;white-space:pre-wrap;">${esc2(a.mensaje)}</p>
+<p style="font-size:0.7em;color:#9ca3af;margin-top:6px;">🎯 ${destino} · ${fecha}</p>
+</div>`;
+});
+}
+html += `</div>`;
+return html;
+}
+function setMuralGrade(g) { state.muralForm.grade = g; state.muralForm.grupo = ''; render(); }
 function renderReporteImprimible() {
 const rm = state.disciplinaReportMode;
 const nivel = rm.nivel;
