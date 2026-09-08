@@ -150,7 +150,7 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, contextoGrupoIARef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
@@ -192,6 +192,9 @@ formativoShareTel: '',
 formativoAcuseInfo: null,
 formativoFilterGrade: '',
 formativoFilterGrupo: '',
+contextoGrupoIA: '',
+contextoGrupoIAKey: null,
+contextoGrupoIACache: {},
 tareasPri: {},
 tareasSec: {},
 tareaNueva: null,
@@ -331,6 +334,42 @@ sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
+contextoGrupoIARef = db.ref(base + '/contextoGrupoIA');
+}
+// Construye una llave válida de Firebase (sin ./#$[]) para identificar un
+// grupo concreto: nivel + grado + grupo (secundaria) — así el contexto que el
+// docente escribe para la IA se guarda "por grupo" y se reutiliza siempre que
+// vuelva a abrir ese mismo grado/grupo, en vez de perderse cada vez.
+function claveGrupoIA(nivel, grado, grupo) {
+const limpia = s => String(s || 'x').replace(/[.#$\[\]\/]/g, '_');
+return nivel === 'secundaria' ? `sec_${limpia(grado)}_${limpia(grupo)}` : `pri_${limpia(grado)}`;
+}
+function cargarContextoGrupoIA(nivel) {
+const grado = state.formativoFilterGrade;
+const grupo = state.formativoFilterGrupo;
+const key = claveGrupoIA(nivel, grado, grupo);
+if (state.contextoGrupoIAKey === key) return; // ya está cargado este grupo
+state.contextoGrupoIAKey = key;
+state.contextoGrupoIA = state.contextoGrupoIACache[key] || '';
+if (!contextoGrupoIARef) return;
+contextoGrupoIARef.child(key).once('value').then(snap => {
+const val = snap.val() || '';
+state.contextoGrupoIACache[key] = val;
+if (state.contextoGrupoIAKey === key) { state.contextoGrupoIA = val; render(); }
+}).catch(() => {});
+}
+let guardarContextoGrupoIATimer = null;
+function actualizarContextoGrupoIA(nivel, value) {
+state.contextoGrupoIA = value;
+const key = state.contextoGrupoIAKey;
+if (!key) return;
+state.contextoGrupoIACache[key] = value;
+// Guardado con "debounce": espera un momento sin teclear antes de guardar en
+// Firebase, para no mandar una escritura por cada letra tecleada.
+clearTimeout(guardarContextoGrupoIATimer);
+guardarContextoGrupoIATimer = setTimeout(() => {
+if (contextoGrupoIARef) contextoGrupoIARef.child(key).set(value).catch(() => {});
+}, 900);
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -504,6 +543,9 @@ state.disciplinaPri = {};
 state.disciplinaSec = {};
 state.checkinAttendance = [];
 state.diasExcluidos = [];
+state.contextoGrupoIA = '';
+state.contextoGrupoIAKey = null;
+state.contextoGrupoIACache = {};
 state.sumativaConfigPri = null;
 state.sumativaConfigSec = null;
 state.sumativaCalifPri = {};
@@ -2595,7 +2637,7 @@ const otros = state.formativoForm.criterios.filter((x, idx) => idx !== i && x.co
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.formativoForm.contextoIA || undefined })
+body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.contextoGrupoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2619,7 +2661,7 @@ try {
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim(), contexto: f.contextoIA || undefined })
+body: JSON.stringify({ task: 'formativo_fortalezas_areas', campo, criterios: f.criterios, textoAnterior: f[campo] || undefined, grado: `${grade || ''} ${grupo || ''}`.trim(), contexto: state.contextoGrupoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
@@ -2639,8 +2681,8 @@ function setFormativoPeriodo(p) {
 state.formativoForm.periodo = p;
 render();
 }
-function setFormativoFilterGrade(g) { state.formativoFilterGrade = g; state.formativoStudentId = null; state.formativoForm = null; render(); }
-function setFormativoFilterGrupo(g) { state.formativoFilterGrupo = g; state.formativoStudentId = null; state.formativoForm = null; render(); }
+function setFormativoFilterGrade(g) { state.formativoFilterGrade = g; state.formativoStudentId = null; state.formativoForm = null; cargarContextoGrupoIA(state.nivel); render(); }
+function setFormativoFilterGrupo(g) { state.formativoFilterGrupo = g; state.formativoStudentId = null; state.formativoForm = null; cargarContextoGrupoIA(state.nivel); render(); }
 function selectFormativoStudent(nivel, id) {
 if (!id) { state.formativoStudentId = null; state.formativoForm = null; state.formativoShareUrl = null; render(); return; }
 const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec;
@@ -2785,6 +2827,7 @@ const dataMap = nivel === 'primaria' ? state.formativosPri : state.formativosSec
 const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
 if (!state.formativoFilterGrade) state.formativoFilterGrade = gradeOptions[0];
 if (nivel === 'secundaria' && !state.formativoFilterGrupo) state.formativoFilterGrupo = GRUPOS_SEC[0];
+cargarContextoGrupoIA(nivel);
 const filtered = list.filter(s => s.grade === state.formativoFilterGrade && (nivel==='primaria' || (s.grupo||'A') === state.formativoFilterGrupo));
 const sorted = [...filtered].sort((a,b) => (a.name||'').localeCompare(b.name||''));
 let html = `<div class="card">
@@ -2809,6 +2852,9 @@ return `<option value="${s.id}" ${state.formativoStudentId===s.id?'selected':''}
 }).join('')}
 </select>
 <p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${sorted.filter(s=>dataMap[s.id]).length} de ${sorted.length} alumnos evaluados en este grupo</p>
+<p style="font-weight:600;font-size:0.85em;margin:14px 0 4px;">✨ Contexto de este grupo para la IA (opcional)</p>
+<p style="font-size:0.7em;color:#9ca3af;margin-bottom:6px;">Describe el momento real del grupo si es relevante — por ejemplo "inicio de ciclo, aún no empezamos lectoescritura formal, al pedirles copiar del pizarrón hacen dibujos". Esto tiene prioridad sobre cualquier suposición general del sistema, se usa en todas las sugerencias de este grupo, y <b>queda guardado</b>: la próxima vez que entres a este mismo grado${nivel==='secundaria'?'/grupo':''} lo vas a encontrar aquí tal como lo dejaste.</p>
+<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.78em;text-transform:uppercase;" rows="2" oninput="forceUpper(this);actualizarContextoGrupoIA('${nivel}',this.value)">${state.contextoGrupoIA||''}</textarea>
 </div>`;
 if (!list.length) { html += `<div class="card"><p style="font-size:0.8em;color:#9ca3af;">Aún no hay alumnos registrados en este nivel.</p></div>`; return html; }
 if (!state.formativoStudentId || !state.formativoForm) return html;
@@ -2826,9 +2872,6 @@ return `<button style="flex:1;min-width:72px;padding:8px 4px;border-radius:8px;b
 }).join('')}
 </div>
 ${f.periodo === 'proyecto' ? `<input style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.82em;margin-bottom:12px;text-transform:uppercase;" placeholder="Nombre del proyecto" value="${f.proyectoNombre||''}" oninput="forceUpper(this);updateFormativoField('proyectoNombre',this.value)" />` : ''}
-<p style="font-weight:600;font-size:0.85em;margin:10px 0 4px;">✨ Contexto para la IA (opcional)</p>
-<p style="font-size:0.7em;color:#9ca3af;margin-bottom:6px;">Describe el momento real del grupo si es relevante — por ejemplo "inicio de ciclo, aún no empezamos lectoescritura formal, al pedirles copiar del pizarrón hacen dibujos". Esto tiene prioridad sobre cualquier suposición general del sistema, y se usa en todas las sugerencias de este alumno.</p>
-<textarea style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.78em;margin-bottom:12px;text-transform:uppercase;" rows="2" oninput="forceUpper(this);updateFormativoField('contextoIA',this.value)">${f.contextoIA||''}</textarea>
 <p style="font-weight:600;font-size:0.85em;margin:10px 0 8px;">🎯 Nivel de logro por aspecto</p>`;
 f.criterios.forEach((c, i) => {
 html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:8px;">`;
