@@ -14081,25 +14081,54 @@ function cleanPhoneForWhatsapp(phone){
   if(digits.length === 10) digits = '52' + digits; // asume México si son 10 dígitos sin lada de país
   return digits;
 }
+function saludoPorHora(){
+  const h = new Date().getHours();
+  if(h < 12) return 'Buenos días';
+  if(h < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+function tratamientoFormal(recipient){
+  const nombre = (recipient.nombre || '').trim();
+  if(recipient.tipo === 'madre') return nombre ? `Estimada ${nombre}` : 'Estimada mamá';
+  if(recipient.tipo === 'padre') return nombre ? `Estimado ${nombre}` : 'Estimado papá';
+  if(recipient.tipo === 'director') return 'Estimado(a) Director(a)';
+  return nombre ? `Estimado(a) ${nombre}` : 'Estimado(a) familiar';
+}
+function construirMensajeSalida(recipient, student, timeStr){
+  return `${tratamientoFormal(recipient)}, ${saludoPorHora().toLowerCase()}. Le informamos que ${student.name} ya salió de la escuela, a las ${timeStr}. Que tenga muy buen día.`;
+}
+let ckNotifyRecipients = [];
+let ckNotifyContext = null;
+function actualizarMensajeSalidaPorDestinatario(){
+  if(!ckNotifyContext) return;
+  const select = document.getElementById('notifyRecipientSelect');
+  const opt = select.selectedOptions[0];
+  const idx = opt ? parseInt(opt.dataset.idx, 10) : 0;
+  const recipient = ckNotifyRecipients[idx] || {};
+  document.getElementById('notifyMessage').value = construirMensajeSalida(recipient, ckNotifyContext.student, ckNotifyContext.timeStr);
+}
 function maybeOfferNotify(res){
   if(!(res.ok && res.action === 'out')) return;
   const student = res.student;
   const recipients = [];
-  if(student.motherPhone) recipients.push({ label:`Madre — ${student.motherName || 'sin nombre'} (${student.motherPhone})`, phone: student.motherPhone });
-  if(student.fatherPhone) recipients.push({ label:`Padre — ${student.fatherName || 'sin nombre'} (${student.fatherPhone})`, phone: student.fatherPhone });
+  if(student.motherPhone) recipients.push({ label:`Madre — ${student.motherName || 'sin nombre'} (${student.motherPhone})`, phone: student.motherPhone, nombre: student.motherName || '', tipo:'madre' });
+  if(student.fatherPhone) recipients.push({ label:`Padre — ${student.fatherName || 'sin nombre'} (${student.fatherPhone})`, phone: student.fatherPhone, nombre: student.fatherName || '', tipo:'padre' });
   (student.pickupAuthorized || []).forEach(p=>{
-    if(p.phone) recipients.push({ label:`${p.name || 'Persona autorizada'} (${p.phone})${p.relation ? ' · '+p.relation : ''}`, phone: p.phone });
+    if(p.phone) recipients.push({ label:`${p.name || 'Persona autorizada'} (${p.phone})${p.relation ? ' · '+p.relation : ''}`, phone: p.phone, nombre: p.name || '', tipo:'autorizado' });
   });
   if(recipients.length === 0 && student.nivel === 'secundaria' && ckDirectorTelefono){
-    recipients.push({ label:`Director(a) — sin contacto de familia registrado (${ckDirectorTelefono})`, phone: ckDirectorTelefono });
+    recipients.push({ label:`Director(a) — sin contacto de familia registrado (${ckDirectorTelefono})`, phone: ckDirectorTelefono, nombre:'', tipo:'director' });
   }
   if(recipients.length === 0){ showToast(`${student.name} no tiene teléfono de madre, padre ni tutor capturado — agrégalo en su registro para poder avisar por WhatsApp/SMS.`, 'err'); return; }
 
   const timeStr = new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', hour12:true});
+  ckNotifyRecipients = recipients;
+  ckNotifyContext = { student, timeStr };
   const select = document.getElementById('notifyRecipientSelect');
-  select.innerHTML = recipients.map(r=>`<option value="${escapeHtml(r.phone)}">${escapeHtml(r.label)}</option>`).join('');
+  select.innerHTML = recipients.map((r,i)=>`<option value="${escapeHtml(r.phone)}" data-idx="${i}">${escapeHtml(r.label)}</option>`).join('');
+  select.onchange = actualizarMensajeSalidaPorDestinatario;
   document.getElementById('notifyIntro').textContent = `${student.name} registró salida a las ${timeStr}. Elige a quién avisar (por ejemplo, si quien recogió fue una abuela o tía autorizada, puedes avisarle a la madre o al padre):`;
-  document.getElementById('notifyMessage').value = `${student.name} ha salido de la escuela a las ${timeStr}.`;
+  actualizarMensajeSalidaPorDestinatario();
   document.getElementById('notifyModal').classList.add('show');
 }
 function sendNotifyWhatsApp(){
