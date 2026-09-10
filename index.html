@@ -150,7 +150,7 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null, muralConfigRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
@@ -212,6 +212,7 @@ bloqueadoPorScreenshot: false,
 checkinAttendance: [],
 diasExcluidos: [],
 mural: [],
+muralConfig: { logoURL: '' },
 muralForm: { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' },
 muralShareUrl: '',
 iaCargando: {},
@@ -339,6 +340,7 @@ diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
 // link de mural.html sirve para toda la escuela, en vez de quedar aislado dentro
 // de la carpeta privada de cada cuenta.
 muralRef = db.ref(DB_ROOT + '/mural');
+muralConfigRef = db.ref(DB_ROOT + '/muralConfig');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -480,6 +482,10 @@ const val = snap.val() || {};
 state.mural = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
 render();
 }, () => {});
+muralConfigRef.on('value', snap => {
+state.muralConfig = snap.val() || { logoURL: '' };
+render();
+}, () => {});
 }
 if (puedeCheckin) {
 checkinAttendanceRef.on('value', snap => {
@@ -508,6 +514,7 @@ if (sumativaPeriodosRef) sumativaPeriodosRef.off();
 if (checkinAttendanceRef) checkinAttendanceRef.off();
 if (diasExcluidosRef) diasExcluidosRef.off();
 if (muralRef) muralRef.off();
+if (muralConfigRef) muralConfigRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
@@ -1029,6 +1036,25 @@ secSchoolRef.update({ logoURL2: base64 });
 showToast('✅ Segundo logo actualizado');
 render();
 }, () => showToast('❌ Error al procesar la imagen'));
+}
+function uploadMuralLogo(event) {
+const file = event.target.files && event.target.files[0];
+if (!file) return;
+showToast('Procesando logo...');
+resizeImageToBase64(file, 300, 0.75, (base64) => {
+if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
+state.muralConfig.logoURL = base64;
+muralConfigRef.update({ logoURL: base64 });
+showToast('✅ Logo del Mural actualizado');
+render();
+}, () => showToast('❌ Error al procesar la imagen'));
+}
+function quitarMuralLogo() {
+if (!confirm('¿Quitar el logo dedicado del Mural? Volverá a mostrar el logo de Primaria o Secundaria según el nivel que elija cada papá/mamá.')) return;
+state.muralConfig.logoURL = '';
+muralConfigRef.update({ logoURL: '' });
+showToast('Logo del Mural quitado');
+render();
 }
 function uploadStudentPhoto(id, event) {
 const file = event.target.files && event.target.files[0];
@@ -4020,6 +4046,18 @@ html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" oncli
 <div class="row-flex" style="gap:8px;">
 <button class="btn btn-gray" style="flex:1;" onclick="copiarLinkMural()">📋 Copiar link</button>
 <button class="btn" style="flex:1;background:#dcfce7;color:#166534;" onclick="compartirMuralWhatsapp()">📲 Enviar por WhatsApp</button>
+</div>
+</div>
+<div class="card">
+<p style="font-weight:700;margin-bottom:4px;">🖼️ Logo que ven los papás en el Mural</p>
+<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Por defecto, el Mural muestra el logo de Primaria o de Secundaria según el nivel que elija cada papá/mamá (los mismos que subiste en Datos). Si prefieres un logo fijo, el mismo para todos sin importar el nivel, súbelo aquí y ese será el que se use.</p>
+${state.muralConfig.logoURL ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+<img src="${state.muralConfig.logoURL}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:1px solid #e5e7eb;" />
+<span style="font-size:0.8em;color:#166534;font-weight:600;">Logo fijo activo</span>
+</div>` : ''}
+<div class="row-flex" style="gap:8px;">
+<label class="btn btn-gray" style="flex:1;text-align:center;cursor:pointer;">📤 ${state.muralConfig.logoURL ? 'Cambiar' : 'Subir'} logo del Mural<input type="file" accept="image/*" style="display:none;" onchange="uploadMuralLogo(event)"></label>
+${state.muralConfig.logoURL ? `<button class="btn btn-gray" style="flex:1;color:#b91c1c;" onclick="quitarMuralLogo()">🗑️ Quitar</button>` : ''}
 </div>
 </div>
 <div class="card">

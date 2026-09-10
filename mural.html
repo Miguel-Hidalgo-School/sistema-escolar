@@ -115,6 +115,7 @@ let avisosCargados = false;
 
 function setNivel(nivel) {
   sel = { nivel, grade: '', grupo: '' };
+  actualizarLogoYNombre();
   render();
 }
 function setGrado(g) { sel.grade = g; sel.grupo = ''; render(); }
@@ -205,12 +206,34 @@ db.ref('Sistema Escolar/mural').on('value', snap => {
   if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos();
 });
 
-// Nombre/logo de la escuela, solo decorativo — se toma de Primaria o Secundaria, lo que haya.
-db.ref('Sistema Escolar/schoolInfo').once('value').then(snap => {
-  const si = snap.val() || {};
-  if (si.nombre) document.getElementById('schoolName').textContent = si.nombre;
-  if (si.logoURL) { const img = document.getElementById('schoolLogo'); img.src = si.logoURL; img.classList.remove('hidden'); document.getElementById('headerIcon').classList.add('hidden'); }
-}).catch(()=>{});
+// Nombre/logo de la escuela — respeta un logo fijo del Mural si el docente
+// subió uno; si no, usa el logo de Primaria o Secundaria según el nivel que
+// elija cada papá/mamá (se actualiza en cuanto cambian de nivel).
+let logoMural = '', logoPri = '', logoSec = '', nombrePri = '', nombreSec = '';
+function actualizarLogoYNombre(){
+  const nombre = (sel && sel.nivel === 'secundaria' ? nombreSec : nombrePri) || nombrePri || nombreSec;
+  document.getElementById('schoolName').textContent = nombre || '';
+  const logo = logoMural || (sel && sel.nivel === 'secundaria' ? logoSec : logoPri);
+  const img = document.getElementById('schoolLogo');
+  if (logo && logo.trim()) {
+    img.onload = () => { img.classList.remove('hidden'); document.getElementById('headerIcon').classList.add('hidden'); };
+    img.onerror = () => { img.classList.add('hidden'); document.getElementById('headerIcon').classList.remove('hidden'); };
+    img.src = logo.trim();
+  } else {
+    img.classList.add('hidden');
+    document.getElementById('headerIcon').classList.remove('hidden');
+  }
+}
+Promise.all([
+  db.ref('Sistema Escolar/schoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
+  db.ref('Sistema Escolar/secSchoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
+  db.ref('Sistema Escolar/muralConfig').once('value').then(s=>s.val()||{}).catch(()=>({}))
+]).then(([si, ssi, mc])=>{
+  logoPri = si.logoURL || ''; nombrePri = si.nombre || '';
+  logoSec = ssi.logoURL || ''; nombreSec = ssi.nombre || '';
+  logoMural = mc.logoURL || '';
+  actualizarLogoYNombre();
+});
 
 render();
 if (sel && sel.nivel && sel.grade) { verAvisos(); }
