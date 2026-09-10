@@ -3951,22 +3951,18 @@ window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_bla
 }
 // ============ MURAL DE AVISOS ============
 function updateMuralFormLocal(field, value) { state.muralForm[field] = value; }
-function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo' && alcance !== 'grupoMulti') { state.muralForm.grupo = ''; } render(); }
+function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo') { state.muralForm.grupo = ''; } render(); }
 function publicarAviso(nivel) {
 const f = state.muralForm;
 if (!f.titulo.trim() || !f.mensaje.trim()) { showToast('Ponle título y mensaje al aviso'); return; }
 if (f.alcance === 'grado' && !f.grade) { showToast('Elige el grado'); return; }
 if (f.alcance === 'grupo' && (!f.grade || !f.grupo)) { showToast('Elige grado y grupo'); return; }
-if (f.alcance === 'grupoMulti' && !f.grupo) { showToast('Elige el grupo'); return; }
 const aviso = {
 titulo: f.titulo.trim(),
 mensaje: f.mensaje.trim(),
 nivel: f.alcance === 'todos' ? 'todos' : nivel,
-// En "grupoMulti" (grupo multigrado) NO se guarda grado — así el aviso le
-// llega a las familias sin importar cuál de los varios grados combinados
-// tiene su hijo/a, mientras el grupo coincida.
 grade: f.alcance === 'grado' || f.alcance === 'grupo' ? f.grade : null,
-grupo: (f.alcance === 'grupo' || f.alcance === 'grupoMulti') ? f.grupo : null,
+grupo: f.alcance === 'grupo' ? f.grupo : null,
 autor: (state.perfilActual && state.perfilActual.nombre) || '',
 createdAt: Date.now()
 };
@@ -4006,7 +4002,6 @@ let html = `<div class="card">
 <button class="btn btn-sm ${f.alcance==='nivel'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('nivel')">Todo ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'}</button>
 <button class="btn btn-sm ${f.alcance==='grado'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grado')">Un grado</button>
 <button class="btn btn-sm ${f.alcance==='grupo'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupo')">Un grupo</button>
-${nivel === 'primaria' ? `<button class="btn btn-sm ${f.alcance==='grupoMulti'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupoMulti')">Grupo multigrado (varios grados)</button>` : ''}
 <button class="btn btn-sm ${f.alcance==='todos'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('todos')">Toda la escuela</button>
 </div>`;
 if (f.alcance === 'grado' || f.alcance === 'grupo') {
@@ -4016,10 +4011,6 @@ html += `<div class="grade-pills">` + gradeOptions.map(g => `<button class="${g=
 if (f.alcance === 'grupo' && f.grade) {
 const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D'];
 html += `<div class="grade-pills" style="margin-top:6px;">` + grupos.map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
-}
-if (f.alcance === 'grupoMulti') {
-html += `<p style="font-size:0.72em;color:#6b7280;margin-bottom:4px;">Le llegará a todas las familias de este grupo, sin importar cuál de los grados combinados tenga su hijo/a.</p>`;
-html += `<div class="grade-pills">` + ['A','B','C','D'].map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
 }
 html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="publicarAviso('${nivel}')">📢 Publicar aviso</button>
 </div>
