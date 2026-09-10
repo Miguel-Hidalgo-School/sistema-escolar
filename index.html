@@ -4009,7 +4009,7 @@ const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
 html += `<div class="grade-pills">` + gradeOptions.map(g => `<button class="${g===f.grade?'active':''}" onclick="setMuralGrade('${g}')">${g}</button>`).join('') + `</div>`;
 }
 if (f.alcance === 'grupo' && f.grade) {
-const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D'];
+const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B'];
 html += `<div class="grade-pills" style="margin-top:6px;">` + grupos.map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
 }
 html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="publicarAviso('${nivel}')">📢 Publicar aviso</button>

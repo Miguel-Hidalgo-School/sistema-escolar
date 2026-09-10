@@ -106,7 +106,8 @@ firebase.initializeApp(CK_FIREBASE_CONFIG);
 const db = firebase.database();
 const GRADOS_PRI = ['1°','2°','3°','4°','5°','6°'];
 const GRADOS_SEC = ['1°','2°','3°'];
-const GRUPOS = ['A','B','C','D','E','F'];
+const GRUPOS_PRI = ['A','B'];
+const GRUPOS_SEC = ['A','B','C','D','E','F'];
 
 let sel = JSON.parse(localStorage.getItem('mural_seleccion') || 'null');
 let avisos = [];
@@ -130,7 +131,8 @@ function render() {
   document.getElementById('pillsGrado').innerHTML = grados.map(g => `<button class="pill ${sel.grade===g?'active':''}" onclick="setGrado('${g}')">${g}</button>`).join('');
   if (sel.grade) {
     grupoBlock.classList.remove('hidden');
-    document.getElementById('pillsGrupo').innerHTML = GRUPOS.map(g => `<button class="pill ${sel.grupo===g?'active':''}" onclick="setGrupo('${g}')">Grupo ${g}</button>`).join('');
+    const gruposDisponibles = sel.nivel === 'secundaria' ? GRUPOS_SEC : GRUPOS_PRI;
+    document.getElementById('pillsGrupo').innerHTML = gruposDisponibles.map(g => `<button class="pill ${sel.grupo===g?'active':''}" onclick="setGrupo('${g}')">Grupo ${g}</button>`).join('');
     verBtn.style.display = 'block';
   } else {
     grupoBlock.classList.add('hidden');
