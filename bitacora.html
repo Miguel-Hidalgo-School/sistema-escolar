@@ -129,6 +129,7 @@
                 <div class="flex gap-2">
                     <button onclick="toggleEdicionManual()" id="btnToggleEdicion" class="bg-slate-600 hover:bg-slate-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔓 Editar manualmente</button>
                     <button onclick="reiniciarFolioActual()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔄 Reiniciar Folio a 1</button>
+                    <button onclick="ajustarFolioActual()" class="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">✏️ Ajustar folio</button>
                 </div>
             </div>
 
@@ -792,6 +793,23 @@
                 localStorage.setItem(clave, 0);
                 alert("¡Folio reiniciado con éxito! El próximo registro comenzará en 0001.");
             }
+        }
+
+        // Permite fijar el contador exactamente en el último folio que sigue vigente
+        // (por ejemplo, si borraste el 0009 por error y el último válido es el 0008),
+        // para que el siguiente registro continúe justo donde te quedaste, sin
+        // reiniciar todo a 1 ni tener que adivinar.
+        function ajustarFolioActual() {
+            let sigla = calcularSiglaEscuela(nivelActual);
+            let clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
+            let actual = parseInt(localStorage.getItem(clave)) || 0;
+            let entrada = prompt(`Escribe el número del ÚLTIMO folio que sigue vigente (el próximo será uno más que ese).\n\nPor ejemplo, si tu último folio válido es ${sigla}-${cicloActual}/0008, escribe: 8`, actual);
+            if (entrada === null) return; // canceló
+            let num = parseInt(entrada, 10);
+            if (isNaN(num) || num < 0) { alert('Escribe solo un número, sin letras ni el prefijo.'); return; }
+            localStorage.setItem(clave, num);
+            const siguiente = String(num + 1).padStart(4, '0');
+            alert(`Listo. El próximo folio que generes será ${sigla}-${cicloActual}/${siguiente}.`);
         }
 
         function guardarYMostrarReporte() {
