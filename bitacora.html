@@ -156,6 +156,13 @@
                     <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del Director (Vo. Bo.):</label>
                     <input type="text" id="configDirector" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="guardarPersonalEnMemoria(); convertirMayusculas(this)">
                 </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Turno:</label>
+                    <select id="configTurno" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" onchange="guardarPersonalEnMemoria()">
+                        <option value="MATUTINO">Matutino</option>
+                        <option value="VESPERTINO">Vespertino</option>
+                    </select>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-200">
@@ -279,7 +286,7 @@
                 <div class="font-bold uppercase" id="lblEscuela">ESCUELA PRIMARIA</div>
                 <div class="grid grid-cols-2">
                     <div><strong>C.C.T.:</strong> <span id="lblCCT">---</span></div>
-                    <div><strong>Turno:</strong> Matutino</div>
+                    <div><strong>Turno:</strong> <span id="lblTurno">---</span></div>
                 </div>
             </div>
 
@@ -663,15 +670,17 @@
         }
 
         function cargarDatosPlantel() {
-            function resolver(nivel, campo) {
+            function resolver(nivel, campo, valorDefault) {
                 if (!edicionManual && datosPuente && datosPuente[nivel] && datosPuente[nivel][campo]) {
                     return String(datosPuente[nivel][campo]).toUpperCase();
                 }
-                return (localStorage.getItem(`${campo}_${nivel}`) || '').toUpperCase();
+                const guardado = localStorage.getItem(`${campo}_${nivel}`);
+                if (guardado) return guardado.toUpperCase();
+                return valorDefault || '';
             }
             return {
-                "Primaria": { escuela: resolver('Primaria','escuela'), cct: resolver('Primaria','cct'), docente: resolver('Primaria','docente'), director: resolver('Primaria','director') },
-                "Secundaria": { escuela: resolver('Secundaria','escuela'), cct: resolver('Secundaria','cct'), docente: resolver('Secundaria','docente'), director: resolver('Secundaria','director') }
+                "Primaria": { escuela: resolver('Primaria','escuela'), cct: resolver('Primaria','cct'), docente: resolver('Primaria','docente'), director: resolver('Primaria','director'), turno: resolver('Primaria','turno','VESPERTINO') },
+                "Secundaria": { escuela: resolver('Secundaria','escuela'), cct: resolver('Secundaria','cct'), docente: resolver('Secundaria','docente'), director: resolver('Secundaria','director'), turno: resolver('Secundaria','turno','MATUTINO') }
             };
         }
 
@@ -699,6 +708,7 @@
             document.getElementById('configCCT').value = plantelPorNivel[nivelActual].cct;
             document.getElementById('configDocente').value = plantelPorNivel[nivelActual].docente;
             document.getElementById('configDirector').value = plantelPorNivel[nivelActual].director;
+            document.getElementById('configTurno').value = plantelPorNivel[nivelActual].turno;
             actualizarAvisoSincronizado();
         }
 
@@ -707,16 +717,19 @@
             let cct = document.getElementById('configCCT').value.toUpperCase();
             let doc = document.getElementById('configDocente').value.toUpperCase();
             let dir = document.getElementById('configDirector').value.toUpperCase();
+            let tur = document.getElementById('configTurno').value.toUpperCase();
             
             plantelPorNivel[nivelActual].escuela = esc;
             plantelPorNivel[nivelActual].cct = cct;
             plantelPorNivel[nivelActual].docente = doc;
             plantelPorNivel[nivelActual].director = dir;
+            plantelPorNivel[nivelActual].turno = tur;
 
             localStorage.setItem(`escuela_${nivelActual}`, esc);
             localStorage.setItem(`cct_${nivelActual}`, cct);
             localStorage.setItem(`docente_${nivelActual}`, doc);
             localStorage.setItem(`director_${nivelActual}`, dir);
+            localStorage.setItem(`turno_${nivelActual}`, tur);
         }
 
         function actualizarCicloActual() {
@@ -795,6 +808,7 @@
             document.getElementById('configCCT').value = plantelPorNivel[nivel].cct;
             document.getElementById('configDocente').value = plantelPorNivel[nivel].docente;
             document.getElementById('configDirector').value = plantelPorNivel[nivel].director;
+            document.getElementById('configTurno').value = plantelPorNivel[nivel].turno;
 
             actualizarAvisoSincronizado();
             poblarGradoSelect();
@@ -950,6 +964,7 @@
                 tutor: document.getElementById('inputTutor').value.toUpperCase() || 'NO ESPECIFICADO',
                 docente: document.getElementById('configDocente').value.toUpperCase(),
                 director: document.getElementById('configDirector').value.toUpperCase(),
+                turno: document.getElementById('configTurno').value.toUpperCase(),
                 grado: esMultigrado ? 'MULTIGRADO' : `${gradoSel} GRUPO ${grupoSel}`,
                 asunto: textoAsunto.toUpperCase(),
                 fecha: document.getElementById('inputFecha').value,
@@ -976,6 +991,7 @@
         function renderizarReporte(datos) {
             document.getElementById('lblEscuela').innerText = datos.escuela;
             document.getElementById('lblCCT').innerText = datos.cct;
+            document.getElementById('lblTurno').innerText = datos.turno || '---';
             document.getElementById('lblFolio').innerText = "FOLIO: " + datos.folio;
             document.getElementById('viewAlumno').innerText = datos.alumno;
             document.getElementById('viewTutor').innerText = datos.tutor;
@@ -1123,6 +1139,7 @@
                 document.getElementById('configCCT').value = plantelPorNivel["Primaria"].cct;
                 document.getElementById('configDocente').value = plantelPorNivel["Primaria"].docente;
                 document.getElementById('configDirector').value = plantelPorNivel["Primaria"].director;
+                document.getElementById('configTurno').value = plantelPorNivel["Primaria"].turno;
                 actualizarAvisoSincronizado();
                 poblarGradoSelect();
             }
