@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mural de Avisos · Primaria</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',sans-serif;background:#f4f5f7;color:#1f2937;}
+  .app{max-width:560px;margin:0 auto;padding:20px 16px 40px;}
+  header{text-align:center;margin-bottom:20px;}
+  header .icon{font-size:2.4em;}
+  header h1{font-size:1.3em;margin:6px 0 2px;}
+  header p{color:#6b7280;font-size:0.85em;margin:0;}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:14px;}
+  label{display:block;font-size:0.75em;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.02em;margin-bottom:8px;}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .pill{border:1.5px solid #d1d5db;background:#fff;color:#374151;padding:8px 16px;border-radius:20px;font-weight:600;font-size:0.85em;cursor:pointer;}
+  .pill.active{background:#2563eb;border-color:#2563eb;color:#fff;}
+  .btn{width:100%;border:none;background:#2563eb;color:#fff;padding:13px;border-radius:10px;font-weight:700;font-size:0.95em;cursor:pointer;}
+  .change-link{text-align:center;font-size:0.8em;color:#2563eb;margin-bottom:14px;cursor:pointer;text-decoration:underline;}
+  .aviso{background:#fff;border:1px solid #e5e7eb;border-left:4px solid #2563eb;border-radius:10px;padding:14px 16px;margin-bottom:12px;}
+  .aviso h3{margin:0 0 6px;font-size:1em;}
+  .aviso p{margin:0;font-size:0.88em;color:#374151;white-space:pre-wrap;line-height:1.4;}
+  .aviso .meta{margin-top:8px;font-size:0.72em;color:#9ca3af;}
+  .empty{text-align:center;color:#9ca3af;padding:40px 20px;font-size:0.9em;}
+  .hidden{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="icon">📢</div>
+    <h1>Mural de Avisos · Primaria</h1>
+    <p id="subLabel">Selecciona el grado de tu hijo/a</p>
+  </header>
+
+  <div class="card" id="selectorCard">
+    <label>Grado</label>
+    <div class="pills" id="pillsGrado"></div>
+    <div id="grupoBlock" class="hidden">
+      <label>Grupo (opcional)</label>
+      <div class="pills" id="pillsGrupo"></div>
+    </div>
+    <button class="btn" id="verAvisosBtn" style="display:none;" onclick="verAvisos()">Ver avisos</button>
+  </div>
+
+  <div id="avisosView" class="hidden">
+    <p class="change-link" onclick="cambiarSeleccion()">✏️ Cambiar grado</p>
+    <div id="listaAvisos"></div>
+  </div>
+</div>
+
+<script>
+const NIVEL = 'primaria';
+const CK_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+firebase.initializeApp(CK_FIREBASE_CONFIG);
+const db = firebase.database();
+const GRADOS = ['1°','2°','3°','4°','5°','6°'];
+const GRUPOS = ['A','B','C','D'];
+
+let sel = JSON.parse(localStorage.getItem('mural_primaria_seleccion') || 'null') || { grade: '', grupo: '' };
+let avisos = [];
+
+function setGrado(g) { sel.grade = g; sel.grupo = ''; render(); }
+function setGrupo(g) { sel.grupo = sel.grupo === g ? '' : g; render(); }
+
+function render() {
+  document.getElementById('pillsGrado').innerHTML = GRADOS.map(g => `<button class="pill ${sel.grade===g?'active':''}" onclick="setGrado('${g}')">${g}</button>`).join('');
+  const grupoBlock = document.getElementById('grupoBlock');
+  const verBtn = document.getElementById('verAvisosBtn');
+  if (sel.grade) {
+    grupoBlock.classList.remove('hidden');
+    document.getElementById('pillsGrupo').innerHTML = GRUPOS.map(g => `<button class="pill ${sel.grupo===g?'active':''}" onclick="setGrupo('${g}')">${g}</button>`).join('');
+    verBtn.style.display = 'block';
+  } else {
+    grupoBlock.classList.add('hidden');
+    verBtn.style.display = 'none';
+  }
+}
+
+function verAvisos() {
+  localStorage.setItem('mural_primaria_seleccion', JSON.stringify(sel));
+  document.getElementById('selectorCard').classList.add('hidden');
+  document.getElementById('avisosView').classList.remove('hidden');
+  document.getElementById('subLabel').textContent = `${sel.grade}${sel.grupo ? ' ' + sel.grupo : ''}`;
+  renderAvisos();
+}
+function cambiarSeleccion() {
+  document.getElementById('selectorCard').classList.remove('hidden');
+  document.getElementById('avisosView').classList.add('hidden');
+  document.getElementById('subLabel').textContent = 'Selecciona el grado de tu hijo/a';
+}
+
+function renderAvisos() {
+  const lista = document.getElementById('listaAvisos');
+  const filtrados = avisos.filter(a => {
+    if (a.nivel === 'todos') return true;
+    if (a.nivel !== NIVEL) return false;
+    if (a.grade && a.grade !== sel.grade) return false;
+    if (a.grupo && sel.grupo && a.grupo !== sel.grupo) return false;
+    if (a.grupo && !sel.grupo) return false;
+    return true;
+  });
+  if (!filtrados.length) {
+    lista.innerHTML = '<div class="empty">No hay avisos por ahora para este grupo.</div>';
+    return;
+  }
+  // Los avisos de "toda la escuela" se muestran igual que cualquier otro, sin
+  // etiqueta de grado ni de grupo — solo título, mensaje y fecha.
+  lista.innerHTML = filtrados.map(a => {
+    const fecha = new Date(a.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+    return `<div class="aviso"><h3>${escapeHtml(a.titulo)}</h3><p>${escapeHtml(a.mensaje)}</p><div class="meta">${fecha}</div></div>`;
+  }).join('');
+}
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+db.ref('Sistema Escolar/mural').on('value', snap => {
+  const val = snap.val() || {};
+  avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+  if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos();
+});
+
+render();
+if (sel.grade) { verAvisos(); }
+</script>
+</body>
+</html>

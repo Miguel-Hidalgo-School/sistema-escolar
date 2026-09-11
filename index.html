@@ -41,8 +41,8 @@ header.topbar h1 { font-size: 1.1em; font-weight: 700; color: #fff; flex: 1; tex
 .userchip { display: flex; align-items: center; gap: 8px; font-size: 0.8em; color: rgba(255,255,255,0.85); }
 .userchip .av { width: 32px; height: 32px; border-radius: 999px; background: #f97316; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8em; }
 .userchip button { border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 0.8em; cursor: pointer; padding: 5px 10px; border-radius: 999px; }
-nav.tabs { display: flex; justify-content: center; overflow-x: auto; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
-nav.tabs button { padding: 12px 16px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer; }
+nav.tabs { display: flex; flex-wrap: wrap; justify-content: center; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
+nav.tabs button { padding: 10px 14px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer; }
 nav.tabs button.active { color: #2563eb; border-color: #7c3aed; font-weight: 700; }
 main { max-width: 640px; width: 100%; margin: 0 auto; padding: 16px; }
 .grade-pills { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
@@ -134,7 +134,7 @@ const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 const IA_WORKER_URL = 'https://sistema-escolar-ia.beltrannpipee.workers.dev'; // sugerencias de texto con IA (Evaluación Formativa)
 const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
-const ADMIN_EMAIL = 'educacion@chavarria.edu.com'; // única cuenta que es administradora de todo el sistema
+const ADMIN_EMAIL = 'jose.chavarria@jaliscoedu.mx'; // única cuenta que es administradora de todo el sistema — correo real para poder recuperar la contraseña si se olvida
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
 const FIREBASE_CONFIG = {
@@ -150,13 +150,14 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
 user: null,
 authError: '',
+forgotPasswordMsg: '',
 nivel: null,
 tab: 'inicio',
 secTab: 'inicio',
@@ -211,6 +212,9 @@ intentosScreenshot: 0,
 bloqueadoPorScreenshot: false,
 checkinAttendance: [],
 diasExcluidos: [],
+mural: [],
+muralForm: { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' },
+muralShareUrl: '',
 iaCargando: {},
 iaResumenReporte: null,
 tareaSelectedId: null,
@@ -331,6 +335,11 @@ sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
+// El mural SIEMPRE vive en la raíz compartida (DB_ROOT), sin importar si quien
+// publica es la cuenta admin o una cuenta individual de maestro — así un solo
+// link de mural.html sirve para toda la escuela, en vez de quedar aislado dentro
+// de la carpeta privada de cada cuenta.
+muralRef = db.ref(DB_ROOT + '/mural');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -369,16 +378,6 @@ return true; // avisa al que llamó que ya se está navegando fuera de esta pág
 }
 bindRefs();
 if (!state.forcePasswordChange) subscribeData();
-// Si venimos de "⬅️ Volver al Sistema Escolar" en Bitácora, bitacora.html dejó
-// aquí guardado en qué nivel estaba trabajando, para regresar directo a esa
-// interfaz en vez de mostrar el selector de nivel desde cero.
-try {
-const volverANivel = localStorage.getItem('sistemaEscolar_volverANivel');
-if (volverANivel === 'primaria' || volverANivel === 'secundaria') {
-localStorage.removeItem('sistemaEscolar_volverANivel');
-selectNivel(volverANivel);
-}
-} catch (e) { /* si localStorage falla, simplemente se muestra el selector normal */ }
 return false;
 }
 auth.onAuthStateChanged(async u => {
@@ -387,6 +386,12 @@ state.authError = '';
 state.forcePasswordChange = false;
 state.isAdmin = false;
 state.perfilActual = null;
+// Misma limpieza de seguridad: se hace también aquí (no solo al cerrar
+// sesión) para que ninguna cuenta nueva pueda heredar por accidente la
+// pantalla de "Gestionar usuarios" que dejó abierta la sesión anterior.
+state.showUserAdmin = false;
+state.adminUsersList = null;
+state.userAdminScope = null;
 if (u) {
 currentUid = u.uid;
 // Primero cargamos el perfil (si existe) para saber si la cuenta está
@@ -477,6 +482,11 @@ const val = snap.val() || {};
 state.diasExcluidos = Object.keys(val).map(id => ({ id, ...val[id] }));
 render();
 }, () => {});
+muralRef.on('value', snap => {
+const val = snap.val() || {};
+state.mural = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+render();
+}, () => {});
 }
 if (puedeCheckin) {
 checkinAttendanceRef.on('value', snap => {
@@ -504,6 +514,7 @@ if (sumativaCalifSecRef) sumativaCalifSecRef.off();
 if (sumativaPeriodosRef) sumativaPeriodosRef.off();
 if (checkinAttendanceRef) checkinAttendanceRef.off();
 if (diasExcluidosRef) diasExcluidosRef.off();
+if (muralRef) muralRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
@@ -514,11 +525,35 @@ state.disciplinaPri = {};
 state.disciplinaSec = {};
 state.checkinAttendance = [];
 state.diasExcluidos = [];
+state.mural = [];
 state.sumativaConfigPri = null;
 state.sumativaConfigSec = null;
 state.sumativaCalifPri = {};
 state.sumativaCalifSec = {};
 state.sumativaPeriodos = null;
+// Importante para la seguridad entre cuentas: si no se limpia esto al cerrar
+// sesión, cuando otra cuenta inicia sesión justo después en el mismo
+// navegador (sin recargar la página desde cero), por un instante se seguía
+// mostrando la pantalla de "Gestionar usuarios" —con contraseñas y datos de
+// la cuenta anterior— antes de que la nueva sesión terminara de cargar.
+state.showUserAdmin = false;
+state.adminUsersList = null;
+state.userAdminScope = null;
+state.deleteConfirmUid = null;
+}
+async function handleForgotPassword() {
+const email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
+if (!email) { state.authError = 'Escribe tu correo arriba primero.'; state.forgotPasswordMsg = ''; render(); return; }
+try {
+await auth.sendPasswordResetEmail(email);
+state.authError = '';
+state.forgotPasswordMsg = '✅ Si esa cuenta tiene un correo real registrado, te llegará un link para restablecer tu contraseña.';
+render();
+} catch (e) {
+state.forgotPasswordMsg = '';
+state.authError = 'No se pudo enviar el correo de recuperación.';
+render();
+}
 }
 async function handleLoginSubmit() {
 state.authError = '';
@@ -785,8 +820,8 @@ if (!currentKnownPass) throw { code: 'auth/requires-recent-login' };
 const cred = firebase.auth.EmailAuthProvider.credential(u.email, currentKnownPass);
 await u.reauthenticateWithCredential(cred);
 await u.updatePassword(pass1);
-await db.ref('perfiles/' + currentUid).update({ mustChangePassword: false, tempPasswordActual: pass1 });
-state.perfilActual = { ...(state.perfilActual || {}), mustChangePassword: false, tempPasswordActual: pass1 };
+await db.ref('perfiles/' + currentUid).update({ mustChangePassword: false, tempPasswordActual: null });
+state.perfilActual = { ...(state.perfilActual || {}), mustChangePassword: false, tempPasswordActual: null };
 state.forcePasswordChange = false;
 state.pwForm = { current: '', pass1: '', pass2: '' };
 showToast('✅ Contraseña actualizada');
@@ -1272,8 +1307,10 @@ if (!tieneAccesoBanos()) return;
 window.location.href = 'banos.html';
 }
 function goToBitacora(nivel) {
-// Restricción: solo @chavarria.edu.com pueden entrar a Bitácora
-if (state.currentUser && !state.currentUser.email?.endsWith('@chavarria.edu.com')) {
+// Restricción: solo cuentas @chavarria.edu.com pueden entrar a Bitácora — con
+// excepción de la cuenta administradora, que puede usar cualquier correo real
+// (por ejemplo, para poder recuperar su contraseña si se le olvida).
+if (state.currentUser && state.currentUser.email !== ADMIN_EMAIL && !state.currentUser.email?.endsWith('@chavarria.edu.com')) {
   showToast('🚫 Acceso denegado. Solo usuarios @chavarria.edu.com pueden acceder a Bitácora.');
   return;
 }
@@ -1295,6 +1332,7 @@ escuela: si.nombre || '',
 cct: si.cct || '',
 docente: si.encargadoNombre || si.autoridadNombre || '',
 director: si.autoridadNombre || '',
+turno: si.turno || '',
 alumnos: (state.students || []).map(mapAlumno)
 },
 Secundaria: {
@@ -1302,6 +1340,7 @@ escuela: ssi.nombre || '',
 cct: ssi.cct || '',
 docente: ssi.docente || '',
 director: ssi.directorNombre || '',
+turno: ssi.turno || '',
 alumnos: (state.secStudents || []).map(mapAlumno)
 }
 };
@@ -1634,6 +1673,8 @@ return `
 <div class="field"><input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')handleLoginSubmit()" /></div>
 <button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
 ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
+${state.forgotPasswordMsg ? `<p style="font-size:0.8em;color:#166534;text-align:center;margin-top:6px;">${state.forgotPasswordMsg}</p>` : ''}
+<p class="change-link" style="text-align:center;font-size:0.82em;color:#2563eb;margin-top:8px;cursor:pointer;text-decoration:underline;" onclick="handleForgotPassword()">¿Olvidaste tu contraseña?</p>
 <p class="hint">Solo cuentas creadas por el administrador pueden entrar. Si no tienes una, pídesela al administrador del sistema.</p>
 </div>
 </div>`;
@@ -1810,13 +1851,13 @@ return `
 </header>`;
 }
 function renderTabs() {
-const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['bitacora','Bitácora'],['datos','Datos']];
+const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['mural','Mural'],['bitacora','Bitácora'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
 `<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab)) || (id==='evaluacion' && ['formativo','sumativa'].includes(state.tab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('primaria')" : `setTab('${id}')`}">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
-  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['bitacora','Bitácora']];
+  const tabs = [['inicio','Inicio'],['datos','Alumnos'],['alumnos','Calificaciones'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['mural','Mural'],['bitacora','Bitácora']];
   return '<nav class="tabs">' + tabs.map(([id,label]) =>
     `<button class="${state.secTab===id || (id==='evaluacion' && ['formativo','sumativa'].includes(state.secTab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('secundaria')" : `setSecTab('${id}')`}">${label}</button>`
   ).join('') + '</nav>';
@@ -1859,6 +1900,7 @@ if (state.tab === 'sumativa') return nav + renderSumativa('primaria');
 if (state.tab === 'evaluacion') return nav + renderEvaluacionSelector('primaria');
 if (state.tab === 'tareas') return nav + renderTareas('primaria');
 if (state.tab === 'disciplina') return nav + renderDisciplina('primaria');
+if (state.tab === 'mural') return nav + renderMural('primaria');
 if (state.tab === 'datos') return nav + renderDatos();
 return '';
 }
@@ -1873,6 +1915,7 @@ if (state.secTab === 'sumativa') return nav + renderSumativa('secundaria');
 if (state.secTab === 'evaluacion') return nav + renderEvaluacionSelector('secundaria');
 if (state.secTab === 'tareas') return nav + renderTareas('secundaria');
 if (state.secTab === 'disciplina') return nav + renderDisciplina('secundaria');
+if (state.secTab === 'mural') return nav + renderMural('secundaria');
 return '';
 }
 function renderInicio() {
@@ -1896,6 +1939,12 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del encargado de la institución" value="${si.encargadoNombre||''}" oninput="updateSchoolFieldLocal('encargadoNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.autoridadNombre||''}" oninput="updateSchoolFieldLocal('autoridadNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Cargo del director (ej. DIRECTOR/A)" value="${si.autoridadCargo||''}" oninput="updateSchoolFieldLocal('autoridadCargo',this.value)" />
+<label style="display:block;font-size:0.72em;font-weight:700;color:#6b7280;margin-bottom:4px;">Turno</label>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;background:#fff;" onchange="updateSchoolFieldLocal('turno',this.value)">
+<option value="" ${!si.turno?'selected':''}>Selecciona...</option>
+<option value="MATUTINO" ${si.turno==='MATUTINO'?'selected':''}>Matutino</option>
+<option value="VESPERTINO" ${si.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
+</select>
 <div class="row-flex">
 <button class="btn btn-green" style="width:auto;flex:1;" onclick="saveSchoolInfo()">💾 Guardar datos</button>
 <button class="btn btn-red" style="width:auto;flex:1;" onclick="clearSchoolInfo()">🧹 Limpiar</button>
@@ -2095,7 +2144,7 @@ ${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MA
 <div class="side-boxes">
 <div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
 <div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
-<div class="box"><p class="l">ASISTENCIAS</p><p class="v">${s.asistencias||'—'}</p></div>
+<div class="box"><p class="l">ASISTENCIAS</p><p class="v">${(() => { const habiles = diasHabilesCicloCompleto('primaria', s.grade, s.grupo); return habiles ? diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo) : (s.asistencias || '—'); })()}</p></div>
 <div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;">${s.folio||'—'}</p></div>
 </div>
 </div>
@@ -2192,6 +2241,12 @@ ${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-
 <p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usará para compartir evaluaciones cuando no haya teléfono del padre/madre/tutor registrado.</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.directorNombre||''}" oninput="updateSecSchoolFieldLocal('directorNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Teléfono del director(a) (WhatsApp)" value="${si.directorTelefono||''}" oninput="updateSecSchoolFieldLocal('directorTelefono',this.value)" />
+<label style="display:block;font-size:0.72em;font-weight:700;color:#6b7280;margin-bottom:4px;">Turno</label>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;background:#fff;" onchange="updateSecSchoolFieldLocal('turno',this.value)">
+<option value="" ${!si.turno?'selected':''}>Selecciona...</option>
+<option value="MATUTINO" ${si.turno==='MATUTINO'?'selected':''}>Matutino</option>
+<option value="VESPERTINO" ${si.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
+</select>
 <p style="font-weight:600;font-size:0.85em;margin:6px 0 8px;color:#6b7280;">📋 Datos para reportes de indisciplina</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Ubicación (ej. SAN MARCOS, TONILA, JALISCO.)" value="${si.direccionReporte||''}" oninput="updateSecSchoolFieldLocal('direccionReporte',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre de orientador(a) (L.T.S.)" value="${si.orientadorNombre||''}" oninput="updateSecSchoolFieldLocal('orientadorNombre',this.value)" />
@@ -3450,6 +3505,27 @@ const asistidos = diasAsistidosEstudiante(studentId, periodoId, nivel, grade, gr
 const pct = Math.min(1, asistidos / habiles);
 return Math.round(pct * 10 * 10) / 10;
 }
+// Asistencia del CICLO COMPLETO (no de un solo periodo evaluativo), para llenar
+// el campo "Asistencias" de la boleta oficial de Primaria — cuenta TODAS las
+// fechas registradas en CheckIn Kids para ese grupo/alumno, de principio a fin.
+function diasHabilesCicloCompleto(nivel, grade, grupo) {
+const roster = nivel === 'primaria' ? state.students : state.secStudents;
+const ids = new Set(roster.map(s => s.id));
+const fechas = new Set();
+(state.checkinAttendance || []).forEach(a => {
+if (a.studentId && ids.has(a.studentId)) fechas.add(a.date);
+});
+if (grade) diasExcluidosSet(nivel, grade, grupo).forEach(f => fechas.delete(f));
+return fechas.size;
+}
+function diasAsistidosCicloCompleto(studentId, nivel, grade, grupo) {
+const excluidos = grade ? diasExcluidosSet(nivel, grade, grupo) : new Set();
+const fechas = new Set();
+(state.checkinAttendance || []).forEach(a => {
+if (a.studentId === studentId && !excluidos.has(a.date)) fechas.add(a.date);
+});
+return fechas.size;
+}
 function calcularFinalSumativa(nivel, s, periodoId, materiaOverride) {
 const config = sumativaConfigArr(nivel);
 const mk = materiaOverride || sumativaMateriaKey(nivel);
@@ -3921,6 +3997,110 @@ if (phone.length === 10) phone = '52' + phone;
 const msg = `Hola, le comparto el reporte de indisciplina / incumplimiento del reglamento escolar de ${studentName}: ${state.disciplinaShareUrl}`;
 window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_blank');
 }
+// ============ MURAL DE AVISOS ============
+function updateMuralFormLocal(field, value) { state.muralForm[field] = value; }
+function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo' && alcance !== 'grupoMulti') { state.muralForm.grupo = ''; } render(); }
+function publicarAviso(nivel) {
+const f = state.muralForm;
+if (!f.titulo.trim() || !f.mensaje.trim()) { showToast('Ponle título y mensaje al aviso'); return; }
+if (f.alcance === 'grado' && !f.grade) { showToast('Elige el grado'); return; }
+if (f.alcance === 'grupo' && (!f.grade || !f.grupo)) { showToast('Elige grado y grupo'); return; }
+if (f.alcance === 'grupoMulti' && !f.grupo) { showToast('Elige el grupo'); return; }
+const aviso = {
+titulo: f.titulo.trim(),
+mensaje: f.mensaje.trim(),
+nivel: f.alcance === 'todos' ? 'todos' : nivel,
+// En "grupoMulti" (grupo multigrado) NO se guarda grado — así el aviso le
+// llega a las familias sin importar cuál de los varios grados combinados
+// tiene su hijo/a, mientras el grupo coincida.
+grade: f.alcance === 'grado' || f.alcance === 'grupo' ? f.grade : null,
+grupo: (f.alcance === 'grupo' || f.alcance === 'grupoMulti') ? f.grupo : null,
+autor: (state.perfilActual && state.perfilActual.nombre) || '',
+createdAt: Date.now()
+};
+muralRef.push().set(aviso).then(() => {
+state.muralForm = { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' };
+showToast('📢 Aviso publicado');
+render();
+}).catch(() => showToast('No se pudo publicar el aviso'));
+}
+function eliminarAviso(id) {
+if (!confirm('¿Eliminar este aviso del mural?')) return;
+muralRef.child(id).remove().then(() => showToast('Aviso eliminado')).catch(() => showToast('No se pudo eliminar'));
+}
+function linkMural(nivel) {
+const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
+return base + (nivel === 'secundaria' ? 'mural-secundaria.html' : 'mural-primaria.html');
+}
+function copiarLinkMural(nivel) {
+navigator.clipboard.writeText(linkMural(nivel)).then(() => showToast('Link del mural copiado ✅'));
+}
+// Abre WhatsApp SIN un número de teléfono fijo: así WhatsApp deja que el maestro
+// elija a quién mandárselo (por ejemplo el grupo de padres de familia), en vez de
+// mandarlo a una sola persona.
+function compartirMuralWhatsapp(nivel) {
+const msg = `📢 Nuevo aviso de la escuela. Consúltalo aquí: ${linkMural(nivel)}`;
+window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+function renderMural(nivel) {
+const f = state.muralForm;
+const avisos = (state.mural || []).filter(a => a.nivel === 'todos' || a.nivel === nivel);
+let html = `<div class="card">
+<p style="font-weight:700;margin-bottom:10px;">📢 Publicar un aviso nuevo</p>
+<input class="full" placeholder="Título del aviso" value="${esc2(f.titulo)}" oninput="updateMuralFormLocal('titulo',this.value)" style="margin-bottom:8px;" />
+<textarea placeholder="Escribe el mensaje..." rows="3" oninput="updateMuralFormLocal('mensaje',this.value)" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.85em;margin-bottom:10px;">${esc2(f.mensaje)}</textarea>
+<p style="font-size:0.75em;font-weight:600;color:#6b7280;margin-bottom:6px;">¿A quién va dirigido?</p>
+<div class="row-flex" style="margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+<button class="btn btn-sm ${f.alcance==='nivel'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('nivel')">Todo ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'}</button>
+<button class="btn btn-sm ${f.alcance==='grado'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grado')">Un grado</button>
+<button class="btn btn-sm ${f.alcance==='grupo'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupo')">Un grupo</button>
+${nivel === 'primaria' ? `<button class="btn btn-sm ${f.alcance==='grupoMulti'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupoMulti')">Grupo multigrado (varios grados)</button>` : ''}
+<button class="btn btn-sm ${f.alcance==='todos'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('todos')">Toda la escuela</button>
+</div>`;
+if (f.alcance === 'grado' || f.alcance === 'grupo') {
+const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+html += `<div class="grade-pills">` + gradeOptions.map(g => `<button class="${g===f.grade?'active':''}" onclick="setMuralGrade('${g}')">${g}</button>`).join('') + `</div>`;
+}
+if (f.alcance === 'grupo' && f.grade) {
+const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D'];
+html += `<div class="grade-pills" style="margin-top:6px;">` + grupos.map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
+}
+if (f.alcance === 'grupoMulti') {
+html += `<p style="font-size:0.72em;color:#6b7280;margin-bottom:4px;">Le llegará a todas las familias de este grupo, sin importar cuál de los grados combinados tenga su hijo/a.</p>`;
+html += `<div class="grade-pills">` + ['A','B','C','D'].map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
+}
+html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="publicarAviso('${nivel}')">📢 Publicar aviso</button>
+</div>
+<div class="card">
+<p style="font-weight:700;margin-bottom:4px;">🔗 Compartir el mural</p>
+<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Este link es solo para familias de ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'} — al abrirlo eligen el grado/grupo de su hijo y ven los avisos que les corresponden. Compártelo una vez (por ejemplo en tu grupo de WhatsApp de padres) y ya no hace falta volver a mandarlo cada vez que publiques un aviso nuevo.</p>
+<div class="row-flex" style="gap:8px;">
+<button class="btn btn-gray" style="flex:1;" onclick="copiarLinkMural('${nivel}')">📋 Copiar link</button>
+<button class="btn" style="flex:1;background:#dcfce7;color:#166534;" onclick="compartirMuralWhatsapp('${nivel}')">📲 Enviar por WhatsApp</button>
+</div>
+</div>
+<div class="card">
+<p style="font-weight:700;margin-bottom:10px;">🗂️ Avisos publicados</p>`;
+if (!avisos.length) {
+html += `<p style="font-size:0.8em;color:#9ca3af;">Todavía no has publicado ningún aviso.</p>`;
+} else {
+avisos.forEach(a => {
+const destino = a.nivel === 'todos' ? 'Toda la escuela' : (a.grupo ? `${a.grade} Grupo ${a.grupo}` : (a.grade ? a.grade : (nivel === 'primaria' ? 'Primaria' : 'Secundaria')));
+const fecha = new Date(a.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+<div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
+<p style="font-weight:700;font-size:0.9em;">${esc2(a.titulo)}</p>
+<button style="border:none;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:3px 8px;font-size:0.85em;flex-shrink:0;" onclick="eliminarAviso('${a.id}')">🗑️</button>
+</div>
+<p style="font-size:0.82em;color:#374151;margin-top:4px;white-space:pre-wrap;">${esc2(a.mensaje)}</p>
+<p style="font-size:0.7em;color:#9ca3af;margin-top:6px;">🎯 ${destino} · ${fecha}</p>
+</div>`;
+});
+}
+html += `</div>`;
+return html;
+}
+function setMuralGrade(g) { state.muralForm.grade = g; state.muralForm.grupo = ''; render(); }
 function renderReporteImprimible() {
 const rm = state.disciplinaReportMode;
 const nivel = rm.nivel;
