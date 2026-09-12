@@ -1523,20 +1523,28 @@ async function guardarAceptoTerminos() {
       fechaAceptoTerminos: new Date().toISOString(),
       ipAceptacion: 'navegador-detectado'
     });
-    if (!state.perfilActual) state.perfilActual = {};
-    state.perfilActual.aceptoTerminos = true;
-    state.aceptoTerminos = true;
-    state.mostrarModalTerminos = false;
-    // Antes esto se quedaba aquí y la cuenta "avanzaba" a una pantalla sin datos
-    // conectados (o, en el caso de una cuenta solo-Bitácora, sin la redirección a
-    // bitacora-home.html). Ahora se completa el mismo proceso que ocurre en un
-    // login normal ya con los términos aceptados.
+  } catch (e) {
+    console.error('Error guardando aceptación de términos:', e);
+    showToast('❌ No se pudo guardar tu aceptación: ' + (e && e.message ? e.message : e) + '. Avisa al administrador.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; }
+    return;
+  }
+  // A partir de aquí, la aceptación YA quedó guardada en la base de datos —
+  // pase lo que pase de aquí en adelante (por ejemplo, algo falla al redirigir),
+  // nunca se le debe volver a pedir que "acepte" ni mostrarle un error de
+  // permisos, porque el permiso ya se concedió correctamente.
+  if (!state.perfilActual) state.perfilActual = {};
+  state.perfilActual.aceptoTerminos = true;
+  state.aceptoTerminos = true;
+  state.mostrarModalTerminos = false;
+  try {
     const yaNavego = await continuarSesionPostTerminos();
     if (!yaNavego) render();
   } catch (e) {
-    console.error('Error guardando aceptación de términos:', e);
-    showToast('❌ No se pudo guardar tu aceptación (permisos de la base de datos). Avisa al administrador.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; }
+    console.error('Se guardó la aceptación, pero algo falló al continuar:', e);
+    // No se trata como error de permisos (ya se guardó bien) — simplemente se
+    // refresca la página para que arranque limpio con los términos ya aceptados.
+    window.location.reload();
   }
 }
 
