@@ -1,7 +1,5 @@
 <!DOCTYPE html>
-
-
-<div id="circle-cursor" style="position: fixed; pointer-events: none; z-index: 9999; font-weight: 900; font-family: sans-serif; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); color: blue;">
+<div id="circle-cursor" class="no-print" style="position: fixed; pointer-events: none; z-index: 9999; font-weight: 900; font-family: sans-serif; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); color: blue;">
 </div>
 
 <script>
@@ -37,9 +35,6 @@
     }
     animateColors();
 </script>
-
-
-
 
 <html lang="es">
 <head>
@@ -128,10 +123,11 @@
                 <h2 class="text-xs font-bold text-slate-800 uppercase tracking-wider" id="tituloConfigPersonal">Configuración del Plantel - Primaria</h2>
                 <div class="flex gap-2">
                     <button onclick="toggleEdicionManual()" id="btnToggleEdicion" class="bg-slate-600 hover:bg-slate-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔓 Editar manualmente</button>
+                    <button onclick="fijarUltimoFolioUsado()" class="bg-sky-700 hover:bg-sky-800 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🎯 Fijar último folio usado</button>
                     <button onclick="reiniciarFolioActual()" class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">🔄 Reiniciar Folio a 1</button>
-                    <button onclick="ajustarFolioActual()" class="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition">✏️ Ajustar folio</button>
                 </div>
             </div>
+            <p class="text-[10px] text-slate-500 -mt-1">El folio se recalcula solo a partir de lo guardado (aquí y en Firebase): nunca se reinicia por borrar datos del sitio, y si eliminas la incidencia más reciente, su número se libera automáticamente para la siguiente. "Fijar último folio usado" es solo para corregirlo a mano en casos especiales.</p>
 
             <div id="avisoSincronizado" class="hidden text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
                 🔗 Estos datos se cargaron automáticamente desde el Sistema Escolar. Usa "Editar manualmente" solo si necesitas corregir algo.
@@ -159,6 +155,13 @@
                 <div>
                     <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del Director (Vo. Bo.):</label>
                     <input type="text" id="configDirector" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="guardarPersonalEnMemoria(); convertirMayusculas(this)">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Turno:</label>
+                    <select id="configTurno" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" onchange="guardarPersonalEnMemoria()">
+                        <option value="MATUTINO">Matutino</option>
+                        <option value="VESPERTINO">Vespertino</option>
+                    </select>
                 </div>
             </div>
 
@@ -199,19 +202,12 @@
                     <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del padre, madre de familia o tutor:</label>
                     <input type="text" id="inputTutor" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" placeholder="EJ. ROCIO RUIZ PEREZ (se autocompleta, puedes cambiarlo)" oninput="convertirMayusculas(this)">
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">Alumno (a) 2 <span class="font-normal normal-case text-slate-400">(opcional — solo si el asunto involucra a otro alumno/otra familia citada)</span>:</label>
-                    <input type="text" id="inputAlumno2" list="listaAlumnosDatalist" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" placeholder="Déjalo vacío si solo hay un alumno involucrado" oninput="convertirMayusculas(this); autocompletarTutor2()" onchange="autocompletarTutor2()">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">Padre, madre o tutor del alumno (a) 2:</label>
-                    <input type="text" id="inputTutor2" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" placeholder="Se autocompleta al elegir el alumno 2" oninput="convertirMayusculas(this)">
-                </div>
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">Asunto / Protocolo de Violencia:</label>
                 <select id="inputAsunto" class="w-full p-2 border border-slate-300 rounded text-sm bg-white font-medium text-slate-800">
+                    <option value="SIN INCIDENCIAS">Sin incidencias</option>
                     <option value="MALA CONDUCTA / INCUMPLIMIENTO">Mala conducta / Incumplimiento general</option>
                     <option value="ACCIDENTE ESCOLAR">Accidente escolar</option>
                     <option value="RETARDO EN RECOGER AL ALUMNO AL TÉRMINO DE LA JORNADA ESCOLAR">Retardo en recoger al alumno</option>
@@ -290,17 +286,17 @@
                 <div class="font-bold uppercase" id="lblEscuela">ESCUELA PRIMARIA</div>
                 <div class="grid grid-cols-2">
                     <div><strong>C.C.T.:</strong> <span id="lblCCT">---</span></div>
-                    <div><strong>Turno:</strong> Matutino</div>
+                    <div><strong>Turno:</strong> <span id="lblTurno">---</span></div>
                 </div>
             </div>
 
             <table class="w-full border-collapse border border-black">
                 <tr>
-                    <td class="border border-black p-1.5 w-3/5"><strong>Nombre del alumno (a):</strong> <span id="viewAlumno"></span><span id="viewAlumno2Wrap" class="hidden"> y <span id="viewAlumno2"></span></span></td>
+                    <td class="border border-black p-1.5 w-3/5"><strong>Nombre del alumno (a):</strong> <span id="viewAlumno"></span></td>
                     <td class="border border-black p-1.5 w-2/5"><strong>Grado y grupo:</strong> <span id="viewGrado"></span></td>
                 </tr>
                 <tr>
-                    <td class="border border-black p-1.5"><strong>Nombre del padre, madre de familia o tutor:</strong> <span id="viewTutor"></span><span id="viewTutor2Wrap" class="hidden"> y <span id="viewTutor2"></span></span></td>
+                    <td class="border border-black p-1.5"><strong>Nombre del padre, madre de familia o tutor:</strong> <span id="viewTutor"></span></td>
                     <td class="border border-black p-1.5"><strong>Fecha:</strong> <span id="viewFecha"></span></td>
                 </tr>
                 <tr>
@@ -341,17 +337,13 @@
             </div>
 
             <div class="border border-black p-2 leading-snug">
-                <p id="parrafoConformidad"><strong>Manifestación de conformidad:</strong> Yo <span id="confTutor" class="underline font-semibold">[NOMBRE DEL TUTOR]</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.</p>
+                <p><strong>Manifestación de conformidad:</strong> Yo <span id="confTutor" class="underline font-semibold">[NOMBRE DEL TUTOR]</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.</p>
             </div>
 
-            <div class="grid grid-cols-3 gap-6 pt-10 text-center text-[10px]" id="firmasGrid">
+            <div class="grid grid-cols-3 gap-6 pt-10 text-center text-[10px]">
                 <div class="border-t border-black pt-1 px-2">
                     <span id="firmTutor" class="font-bold block uppercase text-slate-900">[NOMBRE DEL TUTOR]</span>
                     <span class="text-slate-600">Nombre y firma del padre, madre o tutor</span>
-                </div>
-                <div class="border-t border-black pt-1 px-2 hidden" id="firmTutor2Box">
-                    <span id="firmTutor2" class="font-bold block uppercase text-slate-900"></span>
-                    <span class="text-slate-600">Nombre y firma del padre, madre o tutor (alumno 2)</span>
                 </div>
                 <div class="border-t border-black pt-1 px-2">
                     <span id="firmDocente" class="font-bold block uppercase text-slate-900">LIC. AARÓN CHAVARRÍA</span>
@@ -406,6 +398,28 @@
         const bitDb = firebase.database();
         let bitUsuarioActual = null; // se llena cuando Firebase confirma la sesión
 
+        // ============ CACHÉ DE FIREBASE PARA CALCULAR FOLIOS ============
+        // Guarda la última copia conocida de "bitacora/{uid}" para poder calcular,
+        // sin ir a la red cada vez, cuál es el folio más alto ya usado en CUALQUIER
+        // dispositivo. Esto es lo que evita que el folio se reinicie si se borran
+        // los datos del sitio en un teléfono: aunque el contador local desaparezca,
+        // el máximo se sigue pudiendo reconstruir desde Firebase.
+        let cacheRemotaBitacora = {};
+        let cacheRemotaCargada = false;
+
+        async function refrescarCacheRemota() {
+          if (!estoyOnline) return;
+          const user = bitUsuarioActual || bitAuth.currentUser;
+          if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
+          try {
+            const snap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
+            cacheRemotaBitacora = snap.val() || {};
+            cacheRemotaCargada = true;
+          } catch (error) {
+            console.error('Error refrescando caché remota de bitácora', error);
+          }
+        }
+
         // ============ SINCRONIZACIÓN OFFLINE-FIRST ============
         let estoyOnline = navigator.onLine;
         const NIVELES_SYNC = ['Primaria', 'Secundaria'];
@@ -414,6 +428,7 @@
           estoyOnline = true;
           console.log('🟢 Conectado a internet - Sincronizando...');
           sincronizarConFirebase();
+          descargarDeFirebase();
         });
 
         window.addEventListener('offline', () => {
@@ -426,7 +441,10 @@
         // también). En cuanto se confirma, se intenta sincronizar lo pendiente.
         bitAuth.onAuthStateChanged(user => {
           bitUsuarioActual = user;
-          if (user) sincronizarConFirebase();
+          if (user) {
+            sincronizarConFirebase();
+            descargarDeFirebase();
+          }
         });
 
         // Sube a Firebase, de cada nivel, únicamente las incidencias que aún no se
@@ -493,6 +511,51 @@
           }
         }
 
+        // Descarga de Firebase las incidencias que se hayan guardado desde OTROS
+        // dispositivos/redes (ej. la registraste en el celular y la quieres ver
+        // en la computadora) y las fusiona con el historial local, sin duplicar
+        // las que ya existen aquí.
+        async function descargarDeFirebase() {
+          if (!estoyOnline) return;
+          const user = bitUsuarioActual || bitAuth.currentUser;
+          if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
+          try {
+            await refrescarCacheRemota();
+            const remotos = cacheRemotaBitacora;
+            let seActualizoNivelVisible = false;
+
+            for (const nivel of NIVELES_SYNC) {
+              const keyHistorial = `historial_incidencias_${nivel}`;
+              let historial;
+              try { historial = JSON.parse(localStorage.getItem(keyHistorial)) || []; }
+              catch (e) { historial = []; }
+
+              const idsLocales = new Set(historial.map(h => h.id));
+              let huboNuevos = false;
+
+              Object.values(remotos).forEach(item => {
+                if (item.nivel === nivel && !idsLocales.has(item.id)) {
+                  historial.push({ ...item, sincronizado: true });
+                  idsLocales.add(item.id);
+                  huboNuevos = true;
+                }
+              });
+
+              if (huboNuevos) {
+                historial.sort((a, b) => b.id - a.id);
+                localStorage.setItem(keyHistorial, JSON.stringify(historial));
+                if (nivel === nivelActual) seActualizoNivelVisible = true;
+              }
+            }
+
+            if (seActualizoNivelVisible && !document.getElementById('seccionHistorial').classList.contains('hidden')) {
+              renderizarListaHistorial();
+            }
+          } catch (error) {
+            console.error('Error descargando incidencias de Firebase', error);
+          }
+        }
+
         function showSyncNotification(msg, type = 'success') {
           const div = document.createElement('div');
           div.textContent = msg;
@@ -509,7 +572,10 @@
         // Sincroniza cada 60 segundos si está online (red de seguridad, por si algo
         // quedó pendiente: sin internet al guardar, un error momentáneo, etc.)
         setInterval(() => {
-          if (estoyOnline) sincronizarConFirebase();
+          if (estoyOnline) {
+            sincronizarConFirebase();
+            descargarDeFirebase();
+          }
         }, 60000);
 
         let nivelActual = "Primaria";
@@ -569,9 +635,6 @@
             const permisos = permisosBitacora();
             const tieneOtroAcceso = !permisos || !!(permisos.primaria || permisos.secundaria || permisos.checkin);
             if (tieneOtroAcceso) {
-                // Le decimos a index.html en qué nivel estábamos trabajando aquí, para
-                // que abra directo esa interfaz en vez del selector de nivel.
-                try { localStorage.setItem('sistemaEscolar_volverANivel', nivelActual === 'secundaria' ? 'secundaria' : 'primaria'); } catch (e) {}
                 window.location.href = 'index.html';
                 return;
             }
@@ -607,15 +670,17 @@
         }
 
         function cargarDatosPlantel() {
-            function resolver(nivel, campo) {
+            function resolver(nivel, campo, valorDefault) {
                 if (!edicionManual && datosPuente && datosPuente[nivel] && datosPuente[nivel][campo]) {
                     return String(datosPuente[nivel][campo]).toUpperCase();
                 }
-                return (localStorage.getItem(`${campo}_${nivel}`) || '').toUpperCase();
+                const guardado = localStorage.getItem(`${campo}_${nivel}`);
+                if (guardado) return guardado.toUpperCase();
+                return valorDefault || '';
             }
             return {
-                "Primaria": { escuela: resolver('Primaria','escuela'), cct: resolver('Primaria','cct'), docente: resolver('Primaria','docente'), director: resolver('Primaria','director') },
-                "Secundaria": { escuela: resolver('Secundaria','escuela'), cct: resolver('Secundaria','cct'), docente: resolver('Secundaria','docente'), director: resolver('Secundaria','director') }
+                "Primaria": { escuela: resolver('Primaria','escuela'), cct: resolver('Primaria','cct'), docente: resolver('Primaria','docente'), director: resolver('Primaria','director'), turno: resolver('Primaria','turno','VESPERTINO') },
+                "Secundaria": { escuela: resolver('Secundaria','escuela'), cct: resolver('Secundaria','cct'), docente: resolver('Secundaria','docente'), director: resolver('Secundaria','director'), turno: resolver('Secundaria','turno','MATUTINO') }
             };
         }
 
@@ -643,6 +708,7 @@
             document.getElementById('configCCT').value = plantelPorNivel[nivelActual].cct;
             document.getElementById('configDocente').value = plantelPorNivel[nivelActual].docente;
             document.getElementById('configDirector').value = plantelPorNivel[nivelActual].director;
+            document.getElementById('configTurno').value = plantelPorNivel[nivelActual].turno;
             actualizarAvisoSincronizado();
         }
 
@@ -651,16 +717,19 @@
             let cct = document.getElementById('configCCT').value.toUpperCase();
             let doc = document.getElementById('configDocente').value.toUpperCase();
             let dir = document.getElementById('configDirector').value.toUpperCase();
+            let tur = document.getElementById('configTurno').value.toUpperCase();
             
             plantelPorNivel[nivelActual].escuela = esc;
             plantelPorNivel[nivelActual].cct = cct;
             plantelPorNivel[nivelActual].docente = doc;
             plantelPorNivel[nivelActual].director = dir;
+            plantelPorNivel[nivelActual].turno = tur;
 
             localStorage.setItem(`escuela_${nivelActual}`, esc);
             localStorage.setItem(`cct_${nivelActual}`, cct);
             localStorage.setItem(`docente_${nivelActual}`, doc);
             localStorage.setItem(`director_${nivelActual}`, dir);
+            localStorage.setItem(`turno_${nivelActual}`, tur);
         }
 
         function actualizarCicloActual() {
@@ -676,16 +745,26 @@
         function poblarGradoSelect() {
             const grados = GRADOS_POR_NIVEL[nivelActual];
             const sel = document.getElementById('inputGradoSel');
-            sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('');
+            sel.innerHTML = grados.map(g => `<option value="${g}">${g}</option>`).join('')
+                + (nivelActual === 'Primaria' ? `<option value="MULTIGRADO">Multigrado</option>` : '');
             poblarGrupoSelect();
         }
 
         function poblarGrupoSelect() {
             const grado = document.getElementById('inputGradoSel').value;
+            const sel = document.getElementById('inputGrupoSel');
+            if (grado === 'MULTIGRADO') {
+                // No aplica un grupo específico: se deja un solo valor vacío y el
+                // select de grupo se desactiva, en vez de forzar a elegir uno.
+                sel.innerHTML = `<option value="">—</option>`;
+                sel.disabled = true;
+                actualizarListaAlumnos();
+                return;
+            }
+            sel.disabled = false;
             const alumnos = alumnosDelNivel().filter(a => a.grade === grado);
             let grupos = [...new Set(alumnos.map(a => a.grupo).filter(Boolean))].sort();
             if (!grupos.length) grupos = GRUPOS_DEFAULT;
-            const sel = document.getElementById('inputGrupoSel');
             sel.innerHTML = grupos.map(g => `<option value="${g}">${g}</option>`).join('');
             actualizarListaAlumnos();
         }
@@ -710,19 +789,6 @@
             }
         }
 
-        // El alumno 2 (cuando el asunto involucra a otra familia) puede ser de un
-        // grado/grupo distinto al del alumno 1, así que aquí se busca por nombre en
-        // TODO el nivel, sin limitarse al grado/grupo ya seleccionado arriba.
-        function autocompletarTutor2() {
-            const nombre = document.getElementById('inputAlumno2').value.trim().toUpperCase();
-            if (!nombre) return;
-            const alumno = alumnosDelNivel().find(a => (a.name || '').toUpperCase() === nombre);
-            if (alumno) {
-                const tutor = alumno.madreNombre || alumno.padreNombre || alumno.tutorNombre || '';
-                if (tutor) document.getElementById('inputTutor2').value = tutor.toUpperCase();
-            }
-        }
-
         function cambiarNivel(nivel) {
             guardarPersonalEnMemoria();
             nivelActual = nivel;
@@ -742,6 +808,7 @@
             document.getElementById('configCCT').value = plantelPorNivel[nivel].cct;
             document.getElementById('configDocente').value = plantelPorNivel[nivel].docente;
             document.getElementById('configDirector').value = plantelPorNivel[nivel].director;
+            document.getElementById('configTurno').value = plantelPorNivel[nivel].turno;
 
             actualizarAvisoSincronizado();
             poblarGradoSelect();
@@ -754,8 +821,8 @@
         // - Secundarias técnicas/generales numeradas: usa "ST" + el número
         //   completo en vez de solo iniciales (ej. "Secundaria Técnica 32" -> "ST32"),
         //   para que no se confundan planteles distintos con el mismo folio.
-        function calcularSiglaEscuela(nivel) {
-            const nombreOriginal = (plantelPorNivel[nivel].escuela || '').trim();
+        function calcularSiglaEscuela(nivel, nombreOverride) {
+            const nombreOriginal = (typeof nombreOverride === 'string' ? nombreOverride : (plantelPorNivel[nivel].escuela || '')).trim();
             if (!nombreOriginal) return nivel === "Primaria" ? "PRIM" : "SEC";
 
             const nombreLimpio = nombreOriginal.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -777,11 +844,76 @@
             return sigla.slice(0, 6);
         }
 
-        function generarFolio(ciclo) {
+        // Saca el número consecutivo de un folio ya formado, ej. "MHC-2026-2027/0005" -> 5
+        function extraerNumeroFolio(folioStr) {
+            const m = /\/(\d+)\s*$/.exec(folioStr || '');
+            return m ? parseInt(m[1], 10) : 0;
+        }
+
+        // Calcula el folio más alto ya usado para esta sigla+nivel+ciclo, revisando
+        // TRES fuentes (y quedándose con la mayor, nunca con la más reciente a
+        // secas): el historial guardado en este dispositivo, la última copia
+        // conocida de Firebase (que incluye lo subido desde otros dispositivos),
+        // y el contador local viejo (por compatibilidad con instalaciones previas).
+        // Así, aunque una de las tres esté vacía o desactualizada, el folio nunca
+        // retrocede.
+        function calcularMaxFolioExistente(sigla, nivel, ciclo) {
+            return calcularMaxFolioSinContador(sigla, nivel, ciclo, true);
+        }
+
+        // Igual que calcularMaxFolioExistente, pero permite excluir el contador local
+        // de la cuenta (incluirContador=false). Se usa al eliminar una incidencia,
+        // para saber si el folio borrado era realmente el más alto que quedó
+        // registrado en el historial/Firebase, sin que el contador local (que
+        // todavía no se ha actualizado) distorsione la respuesta.
+        function calcularMaxFolioSinContador(sigla, nivel, ciclo, incluirContador) {
+            let max = 0;
+            const prefijo = `${sigla}-${ciclo}/`;
+
+            try {
+                const hist = JSON.parse(localStorage.getItem(`historial_incidencias_${nivel}`)) || [];
+                hist.forEach(item => {
+                    if (item.folio && item.folio.startsWith(prefijo)) {
+                        max = Math.max(max, extraerNumeroFolio(item.folio));
+                    }
+                });
+            } catch (e) {}
+
+            Object.values(cacheRemotaBitacora || {}).forEach(item => {
+                if (item.nivel === nivel && item.folio && item.folio.startsWith(prefijo)) {
+                    max = Math.max(max, extraerNumeroFolio(item.folio));
+                }
+            });
+
+            if (incluirContador) {
+                const claveContador = `contador_folio_${sigla}_${nivel}_${ciclo}`;
+                const contadorLocal = parseInt(localStorage.getItem(claveContador)) || 0;
+                max = Math.max(max, contadorLocal);
+            }
+
+            return max;
+        }
+
+        // Deduce el ciclo escolar de una incidencia ya guardada. Las nuevas lo
+        // traen explícito (campo "ciclo"); para incidencias guardadas antes de
+        // este cambio, se extrae del propio folio como respaldo.
+        function obtenerCicloDeIncidencia(item) {
+            if (item && item.ciclo) return item.ciclo;
+            const m = /(\d{4}-\d{4})\/\d+\s*$/.exec((item && item.folio) || '');
+            return m ? m[1] : cicloActual;
+        }
+
+        async function generarFolio(ciclo) {
             let sigla = calcularSiglaEscuela(nivelActual);
+            // Si en esta sesión todavía no se ha traído nada de Firebase (ej. se
+            // acaba de abrir la app y aún no corre el sync automático), se hace un
+            // último intento por refrescar la caché ANTES de calcular el folio,
+            // para no arriesgarse a repetir un número ya usado en otro dispositivo.
+            if (!cacheRemotaCargada) {
+                await refrescarCacheRemota();
+            }
             let clave = `contador_folio_${sigla}_${nivelActual}_${ciclo}`;
-            let num = parseInt(localStorage.getItem(clave)) || 0;
-            num++;
+            let num = calcularMaxFolioExistente(sigla, nivelActual, ciclo) + 1;
             localStorage.setItem(clave, num);
             return `${sigla}-${ciclo}/${String(num).padStart(4, '0')}`;
         }
@@ -789,47 +921,51 @@
         function reiniciarFolioActual() {
             let sigla = calcularSiglaEscuela(nivelActual);
             let clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
-            if(confirm(`¿Estás seguro de reiniciar el contador de folios de ${nivelActual} (ciclo ${cicloActual}) para que el próximo comience en 1?`)) {
+            if(confirm(`¿Estás seguro de reiniciar el contador de folios de ${nivelActual} (ciclo ${cicloActual}) para que el próximo comience en 1?\n\nOjo: si ya existen incidencias guardadas con folios más altos (en este dispositivo o en Firebase), el sistema los detectará y NO permitirá que el folio retroceda por debajo de ellos.`)) {
                 localStorage.setItem(clave, 0);
-                alert("¡Folio reiniciado con éxito! El próximo registro comenzará en 0001.");
+                alert("Contador local reiniciado. El próximo folio será el siguiente al más alto que el sistema encuentre guardado (local o en Firebase).");
             }
         }
 
-        // Permite fijar el contador exactamente en el último folio que sigue vigente
-        // (por ejemplo, si borraste el 0009 por error y el último válido es el 0008),
-        // para que el siguiente registro continúe justo donde te quedaste, sin
-        // reiniciar todo a 1 ni tener que adivinar.
-        function ajustarFolioActual() {
+        // Permite corregir a mano cuál fue el último folio realmente usado (por
+        // ejemplo, si un reporte se hizo en papel, o si por algún motivo no quedó
+        // sincronizado). El PRÓXIMO folio generado será éste + 1.
+        function fijarUltimoFolioUsado() {
             let sigla = calcularSiglaEscuela(nivelActual);
-            let clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
-            let actual = parseInt(localStorage.getItem(clave)) || 0;
-            let entrada = prompt(`Escribe el número del ÚLTIMO folio que sigue vigente (el próximo será uno más que ese).\n\nPor ejemplo, si tu último folio válido es ${sigla}-${cicloActual}/0008, escribe: 8`, actual);
-            if (entrada === null) return; // canceló
-            let num = parseInt(entrada, 10);
-            if (isNaN(num) || num < 0) { alert('Escribe solo un número, sin letras ni el prefijo.'); return; }
+            const actual = calcularMaxFolioExistente(sigla, nivelActual, cicloActual);
+            const entrada = prompt(`Escribe el NÚMERO del último folio realmente usado para ${nivelActual} (ciclo ${cicloActual}).\n\nEj. si el último folio fue ${sigla}-${cicloActual}/0005, escribe: 5\n\nEl sistema detectó actualmente: ${actual}`, actual);
+            if (entrada === null) return;
+            const num = parseInt(entrada, 10);
+            if (isNaN(num) || num < 0) { alert('Escribe solo un número, por ejemplo: 5'); return; }
+            const clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
             localStorage.setItem(clave, num);
-            const siguiente = String(num + 1).padStart(4, '0');
-            alert(`Listo. El próximo folio que generes será ${sigla}-${cicloActual}/${siguiente}.`);
+            alert(`Listo. El próximo folio será ${sigla}-${cicloActual}/${String(num + 1).padStart(4, '0')}.`);
         }
 
-        function guardarYMostrarReporte() {
+        async function guardarYMostrarReporte() {
+            const btnGuardar = document.querySelector('#seccionFormulario button[onclick="guardarYMostrarReporte()"]');
+            if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.innerText = '⏳ Guardando...'; }
+
             guardarPersonalEnMemoria();
 
             const selectAsunto = document.getElementById('inputAsunto');
             const textoAsunto = selectAsunto.options[selectAsunto.selectedIndex].text;
 
+            const gradoSel = document.getElementById('inputGradoSel').value;
+            const grupoSel = document.getElementById('inputGrupoSel').value;
+            const esMultigrado = gradoSel === 'MULTIGRADO';
+            const folio = await generarFolio(cicloActual);
             const datos = {
                 id: Date.now(),
                 nivel: nivelActual,
                 escuela: document.getElementById('configEscuela').value.toUpperCase(),
                 cct: document.getElementById('configCCT').value.toUpperCase(),
-                alumno: document.getElementById('inputAlumno').value.toUpperCase() || 'SIN NOMBRE',
-                alumno2: document.getElementById('inputAlumno2').value.toUpperCase() || '',
+                alumno: document.getElementById('inputAlumno').value.toUpperCase() || (esMultigrado ? 'SIN INCIDENCIAS' : 'SIN NOMBRE'),
                 tutor: document.getElementById('inputTutor').value.toUpperCase() || 'NO ESPECIFICADO',
-                tutor2: document.getElementById('inputTutor2').value.toUpperCase() || '',
                 docente: document.getElementById('configDocente').value.toUpperCase(),
                 director: document.getElementById('configDirector').value.toUpperCase(),
-                grado: `${document.getElementById('inputGradoSel').value} GRUPO ${document.getElementById('inputGrupoSel').value}`,
+                turno: document.getElementById('configTurno').value.toUpperCase(),
+                grado: esMultigrado ? 'MULTIGRADO' : `${gradoSel} GRUPO ${grupoSel}`,
                 asunto: textoAsunto.toUpperCase(),
                 fecha: document.getElementById('inputFecha').value,
                 narrativa: document.getElementById('inputNarrativa').value.toUpperCase(),
@@ -838,7 +974,8 @@
                 intervencion: document.getElementById('inputIntervencion').value.toUpperCase(),
                 falta: document.getElementById('inputFalta').value.toUpperCase(),
                 acciones: document.getElementById('inputAcciones').value.toUpperCase(),
-                folio: generarFolio(cicloActual)
+                ciclo: cicloActual,
+                folio: folio
             };
 
             let keyHistorial = `historial_incidencias_${nivelActual}`;
@@ -847,12 +984,14 @@
             localStorage.setItem(keyHistorial, JSON.stringify(historial));
             sincronizarIncidenciaInmediata(nivelActual, datos);
 
+            if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.innerText = '💾 Guardar en Historial y Generar Formato Oficial'; }
             renderizarReporte(datos);
         }
 
         function renderizarReporte(datos) {
             document.getElementById('lblEscuela').innerText = datos.escuela;
             document.getElementById('lblCCT').innerText = datos.cct;
+            document.getElementById('lblTurno').innerText = datos.turno || '---';
             document.getElementById('lblFolio').innerText = "FOLIO: " + datos.folio;
             document.getElementById('viewAlumno').innerText = datos.alumno;
             document.getElementById('viewTutor').innerText = datos.tutor;
@@ -865,38 +1004,11 @@
             document.getElementById('viewIntervencion').innerText = datos.intervencion;
             document.getElementById('viewFalta').innerText = datos.falta;
             document.getElementById('viewAcciones').innerText = datos.acciones;
-
+            
+            document.getElementById('confTutor').innerText = datos.tutor;
             document.getElementById('firmTutor').innerText = datos.tutor;
             document.getElementById('firmDocente').innerText = datos.docente;
             document.getElementById('firmDirector').innerText = datos.director;
-
-            // Un segundo alumno/tutor solo aparece si de verdad se llenaron esos
-            // campos (otra familia citada al mismo acuerdo). Si no, todo el reporte
-            // se ve exactamente igual que antes: un solo alumno, un solo tutor, una
-            // sola firma — nunca un segundo espacio en blanco o "NO ESPECIFICADO".
-            const hayAlumno2 = !!(datos.alumno2 && datos.alumno2.trim());
-            const hayTutor2 = !!(datos.tutor2 && datos.tutor2.trim());
-
-            document.getElementById('viewAlumno2Wrap').classList.toggle('hidden', !hayAlumno2);
-            if (hayAlumno2) document.getElementById('viewAlumno2').innerText = datos.alumno2;
-
-            document.getElementById('viewTutor2Wrap').classList.toggle('hidden', !hayTutor2);
-            if (hayTutor2) document.getElementById('viewTutor2').innerText = datos.tutor2;
-
-            document.getElementById('firmTutor2Box').classList.toggle('hidden', !hayTutor2);
-            if (hayTutor2) document.getElementById('firmTutor2').innerText = datos.tutor2;
-            const firmasGrid = document.getElementById('firmasGrid');
-            firmasGrid.classList.toggle('grid-cols-3', !hayTutor2);
-            firmasGrid.classList.toggle('grid-cols-2', hayTutor2);
-
-            // La manifestación de conformidad se redacta en plural (Nosotros) solo
-            // cuando de verdad hay dos tutores firmando.
-            const parrafo = document.getElementById('parrafoConformidad');
-            if (hayTutor2) {
-                parrafo.innerHTML = `<strong>Manifestación de conformidad:</strong> Nosotros <span class="underline font-semibold">${datos.tutor}</span> y <span class="underline font-semibold">${datos.tutor2}</span>, madres, padres, tutores (as) de los (las) alumnos (as) involucrados, estamos conformes con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se nos ha informado sobre las acciones realizadas para su oportuna atención.`;
-            } else {
-                parrafo.innerHTML = `<strong>Manifestación de conformidad:</strong> Yo <span class="underline font-semibold">${datos.tutor}</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.`;
-            }
 
             document.getElementById('seccionFormulario').classList.add('hidden');
             document.getElementById('seccionHistorial').classList.add('hidden');
@@ -909,6 +1021,11 @@
             document.getElementById('seccionHistorial').classList.add('hidden');
             document.getElementById('seccionFormulario').classList.remove('hidden');
             document.getElementById('seccionConfig').classList.remove('hidden');
+            // Cada vez que se abre el formulario (Nueva Incidencia, o volver desde
+            // el reporte ya guardado) la fecha vuelve a "hoy" por default, para que
+            // no se quede pegada la fecha del último reporte y evitar que se guarde
+            // sin querer una incidencia con la fecha equivocada.
+            document.getElementById('inputFecha').valueAsDate = new Date();
         }
 
         function mostrarHistorial() {
@@ -917,6 +1034,13 @@
             document.getElementById('seccionHistorial').classList.remove('hidden');
             document.getElementById('seccionConfig').classList.add('hidden');
 
+            renderizarListaHistorial();
+            // Al abrir el historial, intenta traer de inmediato lo que se haya
+            // guardado desde otro dispositivo/red (celular, otra compu, etc.).
+            descargarDeFirebase();
+        }
+
+        function renderizarListaHistorial() {
             document.getElementById('lblNivelHistorial').innerText = nivelActual;
             let keyHistorial = `historial_incidencias_${nivelActual}`;
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
@@ -973,6 +1097,28 @@
                 if (eliminado && user) {
                     bitDb.ref(`bitacora/${user.uid}/${eliminado.id}`).remove().catch(()=>{});
                 }
+                // También se quita de la caché en memoria (si estaba ahí), para que
+                // el siguiente cálculo de folio no la siga contando.
+                if (eliminado && cacheRemotaBitacora && cacheRemotaBitacora[eliminado.id]) {
+                    delete cacheRemotaBitacora[eliminado.id];
+                }
+                // Si la incidencia borrada era la de folio MÁS ALTO ya guardado para
+                // su sigla/nivel/ciclo (es decir, nadie más generó un folio mayor
+                // después de ella), se libera automáticamente su número: la próxima
+                // incidencia que guardes reutilizará ese folio en vez de saltarlo.
+                // Si en cambio ya existe algo con un folio igual o mayor guardado en
+                // otro lado, no se toca el contador, para evitar que dos incidencias
+                // terminen con el mismo folio.
+                if (eliminado && eliminado.folio) {
+                    const siglaItem = calcularSiglaEscuela(eliminado.nivel, eliminado.escuela);
+                    const cicloItem = obtenerCicloDeIncidencia(eliminado);
+                    const numItem = extraerNumeroFolio(eliminado.folio);
+                    const maxSinContador = calcularMaxFolioSinContador(siglaItem, eliminado.nivel, cicloItem, false);
+                    if (numItem > maxSinContador) {
+                        const claveContador = `contador_folio_${siglaItem}_${eliminado.nivel}_${cicloItem}`;
+                        localStorage.setItem(claveContador, maxSinContador);
+                    }
+                }
                 mostrarHistorial();
             }
         }
@@ -993,6 +1139,7 @@
                 document.getElementById('configCCT').value = plantelPorNivel["Primaria"].cct;
                 document.getElementById('configDocente').value = plantelPorNivel["Primaria"].docente;
                 document.getElementById('configDirector').value = plantelPorNivel["Primaria"].director;
+                document.getElementById('configTurno').value = plantelPorNivel["Primaria"].turno;
                 actualizarAvisoSincronizado();
                 poblarGradoSelect();
             }
@@ -1054,7 +1201,7 @@ function cargarEjemplo(tipo) {
 
 </body>
 
-<div style="text-align: center; font-weight: bold; margin-top: 20px; transition: transform 0.3s; cursor: pointer;" 
+<div class="no-print" style="text-align: center; font-weight: bold; margin-top: 20px; transition: transform 0.3s; cursor: pointer;" 
      onmouseover="this.style.transform='scale(1.1)'; this.style.color='#007bff';" 
      onmouseout="this.style.transform='scale(1)'; this.style.color='black';">
     CHAVARRÍA PRODUCCIONES
