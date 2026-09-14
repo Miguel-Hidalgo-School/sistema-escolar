@@ -104,6 +104,11 @@ const CK_FIREBASE_CONFIG = {
 };
 firebase.initializeApp(CK_FIREBASE_CONFIG);
 const db = firebase.database();
+// Identifica de qué escuela es este mural a partir del link (?escuela=...).
+// Si el link no trae ese dato (por ejemplo, uno que ya compartiste antes de este
+// cambio), se usa 'Sistema Escolar' como respaldo, para que los links que ya
+// mandaste a los padres de familia sigan funcionando exactamente igual.
+const ESPACIO_MURAL = new URLSearchParams(window.location.search).get('escuela') || 'Sistema Escolar';
 const GRADOS_PRI = ['1°','2°','3°','4°','5°','6°'];
 const GRADOS_SEC = ['1°','2°','3°'];
 const GRUPOS_PRI = ['A','B'];
@@ -199,7 +204,7 @@ function renderAvisos() {
 }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-db.ref('Sistema Escolar/mural').on('value', snap => {
+db.ref(ESPACIO_MURAL + '/mural').on('value', snap => {
   const val = snap.val() || {};
   avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
   avisosCargados = true;
@@ -225,9 +230,9 @@ function actualizarLogoYNombre(){
   }
 }
 Promise.all([
-  db.ref('Sistema Escolar/schoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
-  db.ref('Sistema Escolar/secSchoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
-  db.ref('Sistema Escolar/muralConfig').once('value').then(s=>s.val()||{}).catch(()=>({}))
+  db.ref(ESPACIO_MURAL + '/schoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
+  db.ref(ESPACIO_MURAL + '/secSchoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
+  db.ref(ESPACIO_MURAL + '/muralConfig').once('value').then(s=>s.val()||{}).catch(()=>({}))
 ]).then(([si, ssi, mc])=>{
   logoPri = si.logoURL || ''; nombrePri = si.nombre || '';
   logoSec = ssi.logoURL || ''; nombreSec = ssi.nombre || '';

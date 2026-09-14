@@ -104,7 +104,7 @@
         
         <!-- Controles de Nivel e Historial -->
         <div class="no-print mb-6 bg-indigo-50 p-4 rounded-xl border border-indigo-200 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div>
+            <div id="bloqueSelectorNivel">
                 <h2 class="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-2">Seleccionar Nivel Institucional</h2>
                 <div class="flex gap-4">
                     <button onclick="cambiarNivel('Primaria')" id="btnPrimaria" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow transition">Primaria</button>
@@ -412,7 +412,7 @@
           const user = bitUsuarioActual || bitAuth.currentUser;
           if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
           try {
-            const snap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
+            const snap = await bitDb.ref(`bitacora/${obtenerEspacioId()}`).once('value');
             cacheRemotaBitacora = snap.val() || {};
             cacheRemotaCargada = true;
           } catch (error) {
@@ -442,8 +442,10 @@
         bitAuth.onAuthStateChanged(user => {
           bitUsuarioActual = user;
           if (user) {
-            sincronizarConFirebase();
-            descargarDeFirebase();
+            migrarBitacoraSiHaceFalta().then(() => {
+              sincronizarConFirebase();
+              descargarDeFirebase();
+            });
           }
         });
 
@@ -458,7 +460,7 @@
 
           let huboError = false;
           for (const nivel of NIVELES_SYNC) {
-            const keyHistorial = `historial_incidencias_${nivel}`;
+            const keyHistorial = claveHistorial(nivel);
             let historial;
             try { historial = JSON.parse(localStorage.getItem(keyHistorial)) || []; }
             catch (e) { continue; }
@@ -468,7 +470,7 @@
 
             for (const item of pendientes) {
               try {
-                await bitDb.ref(`bitacora/${user.uid}/${item.id}`).set({
+                await bitDb.ref(`bitacora/${obtenerEspacioId()}/${item.id}`).set({
                   ...item,
                   sincronizadoEn: new Date().toISOString()
                 });
@@ -494,11 +496,11 @@
           const user = bitUsuarioActual || bitAuth.currentUser;
           if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
           try {
-            await bitDb.ref(`bitacora/${user.uid}/${item.id}`).set({
+            await bitDb.ref(`bitacora/${obtenerEspacioId()}/${item.id}`).set({
               ...item,
               sincronizadoEn: new Date().toISOString()
             });
-            const keyHistorial = `historial_incidencias_${nivel}`;
+            const keyHistorial = claveHistorial(nivel);
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
             const idx = historial.findIndex(h => h.id === item.id);
             if (idx !== -1) {
@@ -525,7 +527,7 @@
             let seActualizoNivelVisible = false;
 
             for (const nivel of NIVELES_SYNC) {
-              const keyHistorial = `historial_incidencias_${nivel}`;
+              const keyHistorial = claveHistorial(nivel);
               let historial;
               try { historial = JSON.parse(localStorage.getItem(keyHistorial)) || []; }
               catch (e) { historial = []; }
@@ -604,12 +606,65 @@
         
         // Ejecutar al cargar la página
         window.addEventListener('load', mostrarPromoVideo);
+        window.addEventListener('load', aplicarPermisosNivel);
 
         // --- Datos puente recibidos desde el Sistema Escolar (index.html) ---
         let datosPuente = null;
         try {
             datosPuente = JSON.parse(localStorage.getItem('bitacora_puente_datos') || 'null');
         } catch(e) { datosPuente = null; }
+
+        // Identifica de que escuela/cuenta es cada dato guardado (en Firebase y en la copia
+        // local del dispositivo), para que dos escuelas distintas nunca compartan ni mezclen
+        // su historial de incidencias, aunque usen el mismo telefono o navegador.
+        // Sistema Escolar (index.html) ya calcula esto para sus propios datos (dbBase()) y
+        // lo deja aqui, en el puente, como "espacioId". Si no esta disponible (por ejemplo,
+        // se abrio bitacora.html directo, sin pasar por el Sistema Escolar), se usa el UID
+        // de la cuenta como respaldo, igual que antes de este cambio.
+        function obtenerEspacioId() {
+            if (datosPuente && datosPuente.espacioId) return datosPuente.espacioId;
+            const user = bitUsuarioActual || bitAuth.currentUser;
+            return user ? user.uid : 'sin_cuenta';
+        }
+        function claveHistorial(nivel) {
+            return `historial_incidencias_${obtenerEspacioId()}_${nivel}`;
+        }
+
+        // Antes de este cambio, cada incidencia se guardaba en Firebase bajo
+        // "bitacora/{UID de la cuenta}" -- es decir, por cuenta individual, no por
+        // escuela. Ahora se guarda bajo "bitacora/{espacioId}" (la misma "carpeta"
+        // que usa el resto del Sistema Escolar para esa escuela), para que dos
+        // cuentas de la MISMA escuela vean el mismo historial, y dos escuelas
+        // DISTINTAS nunca vean el historial de la otra.
+        // Esta funcion corre una sola vez por dispositivo: si detecta que la cuenta
+        // actual tenia historial guardado en la ubicacion vieja y la nueva
+        // ubicacion todavia esta vacia, copia los datos automaticamente. Nunca
+        // borra la copia vieja (queda como respaldo).
+        async function migrarBitacoraSiHaceFalta() {
+            if (!estoyOnline) return;
+            const user = bitUsuarioActual || bitAuth.currentUser;
+            if (!user) return;
+            const espacioId = obtenerEspacioId();
+            if (espacioId === user.uid) return; // esta cuenta nunca tuvo una ubicacion distinta que migrar
+            const banderaLocal = `bitacora_migrado_${espacioId}`;
+            if (localStorage.getItem(banderaLocal)) return; // ya se reviso antes en este dispositivo
+            try {
+                const nuevoSnap = await bitDb.ref(`bitacora/${espacioId}`).once('value');
+                if (nuevoSnap.exists()) {
+                    localStorage.setItem(banderaLocal, 'true');
+                    return; // el destino ya tiene datos: no hay nada que migrar ni que sobreescribir
+                }
+                const viejoSnap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
+                const datosViejos = viejoSnap.val();
+                if (datosViejos && Object.keys(datosViejos).length > 0) {
+                    await bitDb.ref(`bitacora/${espacioId}`).set(datosViejos);
+                    showSyncNotification('✅ Tu historial de Bitácora se actualizó a la nueva ubicación, separada por escuela.', 'success');
+                }
+                localStorage.setItem(banderaLocal, 'true');
+            } catch (error) {
+                console.error('Error migrando bitácora a la nueva ubicación', error);
+            }
+        }
 
         // --- Botón "Volver al Sistema Escolar" inteligente ---
         // index.html (o bitacora-home.html) deja guardado en localStorage qué otros
@@ -629,6 +684,32 @@
             try {
                 return JSON.parse(localStorage.getItem('bitacora_permisos') || 'null');
             } catch (e) { return null; }
+        }
+
+        // Oculta el selector de nivel (título y botones) por completo cuando la
+        // cuenta solo tiene acceso a UNO de los dos niveles — así ni siquiera puede
+        // ver que existe "Secundaria" si no le corresponde (o viceversa). Si tiene
+        // ambos (como la cuenta del director), o si no hay datos de permisos
+        // disponibles (acceso directo sin pasar por el Sistema Escolar), se deja
+        // el selector tal como estaba, sin restringir nada.
+        function aplicarPermisosNivel() {
+            const permisos = permisosBitacora();
+            if (!permisos) return; // sin información de permisos: comportamiento de siempre
+            const tienePrimaria = !!permisos.primaria;
+            const tieneSecundaria = !!permisos.secundaria;
+            if (tienePrimaria && tieneSecundaria) return; // acceso a ambos: sin cambios
+
+            const bloque = document.getElementById('bloqueSelectorNivel');
+            if (bloque) bloque.style.display = 'none';
+
+            if (tieneSecundaria && !tienePrimaria) {
+                cambiarNivel('Secundaria');
+            } else if (tienePrimaria && !tieneSecundaria) {
+                cambiarNivel('Primaria');
+            }
+            // Si no tiene ninguno de los dos (caso raro, no debería llegar aquí),
+            // se deja Primaria por default sin ocultar nada, para no dejar la
+            // pantalla sin ninguna forma de navegar.
         }
 
         function volverAlSistema() {
@@ -674,7 +755,7 @@
                 if (!edicionManual && datosPuente && datosPuente[nivel] && datosPuente[nivel][campo]) {
                     return String(datosPuente[nivel][campo]).toUpperCase();
                 }
-                const guardado = localStorage.getItem(`${campo}_${nivel}`);
+                const guardado = localStorage.getItem(`${campo}_${obtenerEspacioId()}_${nivel}`);
                 if (guardado) return guardado.toUpperCase();
                 return valorDefault || '';
             }
@@ -725,11 +806,11 @@
             plantelPorNivel[nivelActual].director = dir;
             plantelPorNivel[nivelActual].turno = tur;
 
-            localStorage.setItem(`escuela_${nivelActual}`, esc);
-            localStorage.setItem(`cct_${nivelActual}`, cct);
-            localStorage.setItem(`docente_${nivelActual}`, doc);
-            localStorage.setItem(`director_${nivelActual}`, dir);
-            localStorage.setItem(`turno_${nivelActual}`, tur);
+            localStorage.setItem(`escuela_${obtenerEspacioId()}_${nivelActual}`, esc);
+            localStorage.setItem(`cct_${obtenerEspacioId()}_${nivelActual}`, cct);
+            localStorage.setItem(`docente_${obtenerEspacioId()}_${nivelActual}`, doc);
+            localStorage.setItem(`director_${obtenerEspacioId()}_${nivelActual}`, dir);
+            localStorage.setItem(`turno_${obtenerEspacioId()}_${nivelActual}`, tur);
         }
 
         function actualizarCicloActual() {
@@ -871,7 +952,7 @@
             const prefijo = `${sigla}-${ciclo}/`;
 
             try {
-                const hist = JSON.parse(localStorage.getItem(`historial_incidencias_${nivel}`)) || [];
+                const hist = JSON.parse(localStorage.getItem(claveHistorial(nivel))) || [];
                 hist.forEach(item => {
                     if (item.folio && item.folio.startsWith(prefijo)) {
                         max = Math.max(max, extraerNumeroFolio(item.folio));
@@ -886,7 +967,7 @@
             });
 
             if (incluirContador) {
-                const claveContador = `contador_folio_${sigla}_${nivel}_${ciclo}`;
+                const claveContador = `contador_folio_${obtenerEspacioId()}_${sigla}_${nivel}_${ciclo}`;
                 const contadorLocal = parseInt(localStorage.getItem(claveContador)) || 0;
                 max = Math.max(max, contadorLocal);
             }
@@ -912,7 +993,7 @@
             if (!cacheRemotaCargada) {
                 await refrescarCacheRemota();
             }
-            let clave = `contador_folio_${sigla}_${nivelActual}_${ciclo}`;
+            let clave = `contador_folio_${obtenerEspacioId()}_${sigla}_${nivelActual}_${ciclo}`;
             let num = calcularMaxFolioExistente(sigla, nivelActual, ciclo) + 1;
             localStorage.setItem(clave, num);
             return `${sigla}-${ciclo}/${String(num).padStart(4, '0')}`;
@@ -920,7 +1001,7 @@
 
         function reiniciarFolioActual() {
             let sigla = calcularSiglaEscuela(nivelActual);
-            let clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
+            let clave = `contador_folio_${obtenerEspacioId()}_${sigla}_${nivelActual}_${cicloActual}`;
             if(confirm(`¿Estás seguro de reiniciar el contador de folios de ${nivelActual} (ciclo ${cicloActual}) para que el próximo comience en 1?\n\nOjo: si ya existen incidencias guardadas con folios más altos (en este dispositivo o en Firebase), el sistema los detectará y NO permitirá que el folio retroceda por debajo de ellos.`)) {
                 localStorage.setItem(clave, 0);
                 alert("Contador local reiniciado. El próximo folio será el siguiente al más alto que el sistema encuentre guardado (local o en Firebase).");
@@ -937,7 +1018,7 @@
             if (entrada === null) return;
             const num = parseInt(entrada, 10);
             if (isNaN(num) || num < 0) { alert('Escribe solo un número, por ejemplo: 5'); return; }
-            const clave = `contador_folio_${sigla}_${nivelActual}_${cicloActual}`;
+            const clave = `contador_folio_${obtenerEspacioId()}_${sigla}_${nivelActual}_${cicloActual}`;
             localStorage.setItem(clave, num);
             alert(`Listo. El próximo folio será ${sigla}-${cicloActual}/${String(num + 1).padStart(4, '0')}.`);
         }
@@ -978,7 +1059,7 @@
                 folio: folio
             };
 
-            let keyHistorial = `historial_incidencias_${nivelActual}`;
+            let keyHistorial = claveHistorial(nivelActual);
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
             historial.unshift(datos);
             localStorage.setItem(keyHistorial, JSON.stringify(historial));
@@ -1042,7 +1123,7 @@
 
         function renderizarListaHistorial() {
             document.getElementById('lblNivelHistorial').innerText = nivelActual;
-            let keyHistorial = `historial_incidencias_${nivelActual}`;
+            let keyHistorial = claveHistorial(nivelActual);
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
             let contenedor = document.getElementById('listaHistorial');
 
@@ -1077,7 +1158,7 @@
         }
 
         function verIncidenciaGuardada(index) {
-            let keyHistorial = `historial_incidencias_${nivelActual}`;
+            let keyHistorial = claveHistorial(nivelActual);
             let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
             if(historial[index]) {
                 renderizarReporte(historial[index]);
@@ -1086,7 +1167,7 @@
 
         function eliminarIncidencia(index) {
             if(confirm("¿Estás seguro de eliminar este registro del historial local?")) {
-                let keyHistorial = `historial_incidencias_${nivelActual}`;
+                let keyHistorial = claveHistorial(nivelActual);
                 let historial = JSON.parse(localStorage.getItem(keyHistorial)) || [];
                 const eliminado = historial[index];
                 historial.splice(index, 1);
@@ -1095,7 +1176,7 @@
                 // internet en este momento), para que no quede huérfano allá.
                 const user = bitUsuarioActual || bitAuth.currentUser;
                 if (eliminado && user) {
-                    bitDb.ref(`bitacora/${user.uid}/${eliminado.id}`).remove().catch(()=>{});
+                    bitDb.ref(`bitacora/${obtenerEspacioId()}/${eliminado.id}`).remove().catch(()=>{});
                 }
                 // También se quita de la caché en memoria (si estaba ahí), para que
                 // el siguiente cálculo de folio no la siga contando.
