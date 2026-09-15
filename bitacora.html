@@ -412,7 +412,7 @@
           const user = bitUsuarioActual || bitAuth.currentUser;
           if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
           try {
-            const snap = await bitDb.ref(`bitacora/${obtenerEspacioId()}`).once('value');
+            const snap = await bitDb.ref(`${obtenerEspacioId()}/bitacora`).once('value');
             cacheRemotaBitacora = snap.val() || {};
             cacheRemotaCargada = true;
           } catch (error) {
@@ -470,7 +470,7 @@
 
             for (const item of pendientes) {
               try {
-                await bitDb.ref(`bitacora/${obtenerEspacioId()}/${item.id}`).set({
+                await bitDb.ref(`${obtenerEspacioId()}/bitacora/${item.id}`).set({
                   ...item,
                   sincronizadoEn: new Date().toISOString()
                 });
@@ -496,7 +496,7 @@
           const user = bitUsuarioActual || bitAuth.currentUser;
           if (!user || !user.email || !user.email.toLowerCase().endsWith('@chavarria.edu.com')) return;
           try {
-            await bitDb.ref(`bitacora/${obtenerEspacioId()}/${item.id}`).set({
+            await bitDb.ref(`${obtenerEspacioId()}/bitacora/${item.id}`).set({
               ...item,
               sincronizadoEn: new Date().toISOString()
             });
@@ -649,7 +649,7 @@
             const banderaLocal = `bitacora_migrado_${espacioId}`;
             if (localStorage.getItem(banderaLocal)) return; // ya se reviso antes en este dispositivo
             try {
-                const nuevoSnap = await bitDb.ref(`bitacora/${espacioId}`).once('value');
+                const nuevoSnap = await bitDb.ref(`${espacioId}/bitacora`).once('value');
                 if (nuevoSnap.exists()) {
                     localStorage.setItem(banderaLocal, 'true');
                     return; // el destino ya tiene datos: no hay nada que migrar ni que sobreescribir
@@ -657,7 +657,7 @@
                 const viejoSnap = await bitDb.ref(`bitacora/${user.uid}`).once('value');
                 const datosViejos = viejoSnap.val();
                 if (datosViejos && Object.keys(datosViejos).length > 0) {
-                    await bitDb.ref(`bitacora/${espacioId}`).set(datosViejos);
+                    await bitDb.ref(`${espacioId}/bitacora`).set(datosViejos);
                     showSyncNotification('✅ Tu historial de Bitácora se actualizó a la nueva ubicación, separada por escuela.', 'success');
                 }
                 localStorage.setItem(banderaLocal, 'true');
@@ -1176,7 +1176,7 @@
                 // internet en este momento), para que no quede huérfano allá.
                 const user = bitUsuarioActual || bitAuth.currentUser;
                 if (eliminado && user) {
-                    bitDb.ref(`bitacora/${obtenerEspacioId()}/${eliminado.id}`).remove().catch(()=>{});
+                    bitDb.ref(`${obtenerEspacioId()}/bitacora/${eliminado.id}`).remove().catch(()=>{});
                 }
                 // También se quita de la caché en memoria (si estaba ahí), para que
                 // el siguiente cálculo de folio no la siga contando.
