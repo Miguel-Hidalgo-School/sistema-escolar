@@ -134,7 +134,7 @@ const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 const IA_WORKER_URL = 'https://sistema-escolar-ia.beltrannpipee.workers.dev'; // sugerencias de texto con IA (Evaluación Formativa)
 const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
-const ADMIN_EMAIL = 'educacion@chavarria.edu.com'; // única cuenta que es administradora de todo el sistema
+const ADMIN_EMAIL = 'jose.chavarria@jaliscoedu.mx'; // única cuenta que es administradora de todo el sistema — correo real para poder recuperar la contraseña si se olvida
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
 const FIREBASE_CONFIG = {
@@ -150,13 +150,18 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
-let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null, muralConfigRef = null;
+let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
 configDone: true,
 fbConfig: FIREBASE_CONFIG,
 user: null,
 authError: '',
+forgotPasswordMsg: '',
+emailForm: { newEmail: '', currentPassword: '' },
+emailError: '',
+emailSaving: false,
+passwordsVisibles: {},
 nivel: null,
 tab: 'inicio',
 secTab: 'inicio',
@@ -212,7 +217,6 @@ bloqueadoPorScreenshot: false,
 checkinAttendance: [],
 diasExcluidos: [],
 mural: [],
-muralConfig: { logoURL: '' },
 muralForm: { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' },
 muralShareUrl: '',
 iaCargando: {},
@@ -335,11 +339,11 @@ sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
-// El mural vive en el espacio de datos de cada escuela (igual que Alumnos,
-// Calificaciones, etc.), para que dos escuelas distintas nunca compartan ni
-// mezclen sus avisos.
-muralRef = db.ref(base + '/mural');
-muralConfigRef = db.ref(base + '/muralConfig');
+// El mural SIEMPRE vive en la raíz compartida (DB_ROOT), sin importar si quien
+// publica es la cuenta admin o una cuenta individual de maestro — así un solo
+// link de mural.html sirve para toda la escuela, en vez de quedar aislado dentro
+// de la carpeta privada de cada cuenta.
+muralRef = db.ref(DB_ROOT + '/mural');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
@@ -386,6 +390,13 @@ state.authError = '';
 state.forcePasswordChange = false;
 state.isAdmin = false;
 state.perfilActual = null;
+// Misma limpieza de seguridad: se hace también aquí (no solo al cerrar
+// sesión) para que ninguna cuenta nueva pueda heredar por accidente la
+// pantalla de "Gestionar usuarios" que dejó abierta la sesión anterior.
+state.showUserAdmin = false;
+state.adminUsersList = null;
+state.userAdminScope = null;
+state.passwordsVisibles = {};
 if (u) {
 currentUid = u.uid;
 // Primero cargamos el perfil (si existe) para saber si la cuenta está
@@ -481,10 +492,6 @@ const val = snap.val() || {};
 state.mural = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
 render();
 }, () => {});
-muralConfigRef.on('value', snap => {
-state.muralConfig = snap.val() || { logoURL: '' };
-render();
-}, () => {});
 }
 if (puedeCheckin) {
 checkinAttendanceRef.on('value', snap => {
@@ -513,7 +520,6 @@ if (sumativaPeriodosRef) sumativaPeriodosRef.off();
 if (checkinAttendanceRef) checkinAttendanceRef.off();
 if (diasExcluidosRef) diasExcluidosRef.off();
 if (muralRef) muralRef.off();
-if (muralConfigRef) muralConfigRef.off();
 state.students = [];
 state.secStudents = [];
 state.formativosPri = {};
@@ -530,6 +536,30 @@ state.sumativaConfigSec = null;
 state.sumativaCalifPri = {};
 state.sumativaCalifSec = {};
 state.sumativaPeriodos = null;
+// Importante para la seguridad entre cuentas: si no se limpia esto al cerrar
+// sesión, cuando otra cuenta inicia sesión justo después en el mismo
+// navegador (sin recargar la página desde cero), por un instante se seguía
+// mostrando la pantalla de "Gestionar usuarios" —con contraseñas y datos de
+// la cuenta anterior— antes de que la nueva sesión terminara de cargar.
+state.showUserAdmin = false;
+state.adminUsersList = null;
+state.userAdminScope = null;
+state.deleteConfirmUid = null;
+state.passwordsVisibles = {};
+}
+async function handleForgotPassword() {
+const email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
+if (!email) { state.authError = 'Escribe tu correo arriba primero.'; state.forgotPasswordMsg = ''; render(); return; }
+try {
+await auth.sendPasswordResetEmail(email);
+state.authError = '';
+state.forgotPasswordMsg = '✅ Si esa cuenta tiene un correo real registrado, te llegará un link para restablecer tu contraseña.';
+render();
+} catch (e) {
+state.forgotPasswordMsg = '';
+state.authError = 'No se pudo enviar el correo de recuperación.';
+render();
+}
 }
 async function handleLoginSubmit() {
 state.authError = '';
@@ -600,6 +630,12 @@ alert('PIN actualizado correctamente.');
 }
 function openMisUsuarios() {
 if (!state.perfilActual || !state.perfilActual.puedeGestionarUsuarios) return;
+const pinIngresado = prompt('Ingresa tu PIN para entrar a Gestionar usuarios:');
+if (pinIngresado === null) return;
+if (pinIngresado.trim() !== getPinGestionUsuarios()) {
+alert('PIN incorrecto.');
+return;
+}
 state.showUserAdmin = true;
 state.userAdminScope = 'own';
 state.adminUsersList = null;
@@ -609,6 +645,7 @@ cargarListaUsuarios();
 function closeUserAdmin() {
 state.showUserAdmin = false;
 state.deleteConfirmUid = null;
+state.passwordsVisibles = {};
 render();
 }
 async function cargarListaUsuarios() {
@@ -643,14 +680,12 @@ const nombre = document.getElementById('newUserNombre').value.trim();
 const telefono = document.getElementById('newUserPhone').value.trim();
 const correoContacto = document.getElementById('newUserCorreoContacto').value.trim();
 if (!emailInput) { showToast('❌ Escribe el usuario del nuevo correo'); return; }
-// El correo de acceso siempre debe ser del dominio de la escuela.
-// Si la persona solo escribió la parte antes de la @, se completa sola.
-const usuario = emailInput.includes('@') ? emailInput.split('@')[0] : emailInput;
-const email = usuario.toLowerCase() + REQUIRED_EMAIL_DOMAIN;
-if (emailInput.includes('@') && emailInput.toLowerCase() !== email) {
-showToast('❌ El correo de acceso debe terminar en ' + REQUIRED_EMAIL_DOMAIN);
-return;
-}
+// El correo de acceso puede ser el alias corto de la escuela (se completa
+// solo con @chavarria.edu.com) O un correo real completo (por ejemplo, uno
+// @jaliscoedu.mx o un Gmail personal) — en ese caso se usa tal cual, para que
+// esa persona pueda recuperar su propia contraseña con el correo real de
+// Firebase si la olvida.
+const email = emailInput.includes('@') ? emailInput.toLowerCase() : (emailInput.toLowerCase() + REQUIRED_EMAIL_DOMAIN);
 const accesoPrimaria = !!document.getElementById('newUserAccesoPrimaria').checked;
 const accesoSecundaria = !!document.getElementById('newUserAccesoSecundaria').checked;
 const accesoCheckin = !!document.getElementById('newUserAccesoCheckin').checked;
@@ -773,16 +808,62 @@ state.deleteConfirmBusy = false;
 render();
 }
 function whatsappLinkParaUsuario(u) {
-const texto = encodeURIComponent(
-`Hola${u.nombre ? ' ' + u.nombre : ''}, aquí están tus datos de acceso al Sistema Escolar:\nCorreo: ${u.email}\nContraseña: ${u.tempPasswordActual}\n(Al entrar, el sistema te pedirá cambiarla).`
-);
+const nombre = u.nombre ? ' ' + u.nombre : '';
+// Si ya cambió su contraseña, ya no existe ninguna clave temporal guardada que
+// mandarle (por seguridad, se borra en cuanto la cambian) — antes esto mandaba
+// literalmente la palabra "undefined" en el mensaje.
+const mensaje = u.tempPasswordActual
+? `Hola${nombre}, aquí están tus datos de acceso al Sistema Escolar:\nCorreo: ${u.email}\nContraseña: ${u.tempPasswordActual}\n(Al entrar, el sistema te pedirá cambiarla).`
+: `Hola${nombre}, tu cuenta del Sistema Escolar ya está activa con el correo ${u.email}. Si olvidaste tu contraseña, avísame para generarte una nueva.`;
+const texto = encodeURIComponent(mensaje);
 const tel = (u.telefono || '').replace(/[^0-9]/g, '');
 return `https://wa.me/${tel}?text=${texto}`;
 }
 function copiarPassword(pass) {
 navigator.clipboard.writeText(pass).then(() => showToast('📋 Contraseña copiada'));
 }
+// Pide el PIN de nuevo antes de mostrar una contraseña específica en la lista
+// (además de que ya se pidió el PIN para entrar a esta pantalla) — así, si
+// alguien deja la pantalla abierta o la ve alguien más, las contraseñas siguen
+// ocultas hasta que alguien confirme el PIN de nuevo.
+function togglePasswordVisible(uid) {
+if (state.passwordsVisibles[uid]) {
+state.passwordsVisibles[uid] = false;
+render();
+return;
+}
+const pinIngresado = prompt('Ingresa tu PIN para ver esta contraseña:');
+if (pinIngresado === null) return;
+if (pinIngresado.trim() !== getPinGestionUsuarios()) {
+alert('PIN incorrecto.');
+return;
+}
+state.passwordsVisibles[uid] = true;
+render();
+}
 function updatePwFieldLocal(field, value) { state.pwForm[field] = value; }
+function updateEmailFieldLocal(field, value) { state.emailForm[field] = value; }
+async function submitCambioEmail() {
+const nuevoEmail = (state.emailForm.newEmail || '').trim().toLowerCase();
+const pass = state.emailForm.currentPassword || '';
+if (!nuevoEmail || !nuevoEmail.includes('@')) { state.emailError = 'Escribe un correo válido.'; render(); return; }
+if (!pass) { state.emailError = 'Escribe tu contraseña actual para confirmar.'; render(); return; }
+state.emailSaving = true; render();
+try {
+const u = auth.currentUser;
+const cred = firebase.auth.EmailAuthProvider.credential(u.email, pass);
+await u.reauthenticateWithCredential(cred);
+await u.updateEmail(nuevoEmail);
+await db.ref('perfiles/' + currentUid).update({ email: nuevoEmail });
+state.emailForm = { newEmail: '', currentPassword: '' };
+state.emailError = '';
+showToast('✅ Correo actualizado. Usa tu correo nuevo la próxima vez que inicies sesión.');
+} catch (e) {
+state.emailError = e.code ? traducirErrorAuth(e.code) : ('No se pudo cambiar el correo: ' + e.message);
+}
+state.emailSaving = false;
+render();
+}
 async function submitCambioPassword(forced) {
 const { current, pass1, pass2 } = state.pwForm;
 state.pwError = '';
@@ -796,8 +877,16 @@ if (!currentKnownPass) throw { code: 'auth/requires-recent-login' };
 const cred = firebase.auth.EmailAuthProvider.credential(u.email, currentKnownPass);
 await u.reauthenticateWithCredential(cred);
 await u.updatePassword(pass1);
-await db.ref('perfiles/' + currentUid).update({ mustChangePassword: false, tempPasswordActual: pass1 });
-state.perfilActual = { ...(state.perfilActual || {}), mustChangePassword: false, tempPasswordActual: pass1 };
+// Las cuentas que usan un correo real (no el dominio inventado
+// @chavarria.edu.com) sí pueden recuperar su acceso solas con el "olvidé mi
+// contraseña" de Firebase, así que para ellas conviene borrar la contraseña
+// guardada. Las que siguen usando el correo inventado no tienen esa opción,
+// así que para esas se sigue guardando — es la única manera práctica de que
+// el administrador las pueda ayudar si la olvidan.
+const tieneCorreoReal = u.email && !u.email.toLowerCase().endsWith(REQUIRED_EMAIL_DOMAIN);
+const nuevaTempPassword = tieneCorreoReal ? null : pass1;
+await db.ref('perfiles/' + currentUid).update({ mustChangePassword: false, tempPasswordActual: nuevaTempPassword });
+state.perfilActual = { ...(state.perfilActual || {}), mustChangePassword: false, tempPasswordActual: nuevaTempPassword };
 state.forcePasswordChange = false;
 state.pwForm = { current: '', pass1: '', pass2: '' };
 showToast('✅ Contraseña actualizada');
@@ -1035,25 +1124,6 @@ secSchoolRef.update({ logoURL2: base64 });
 showToast('✅ Segundo logo actualizado');
 render();
 }, () => showToast('❌ Error al procesar la imagen'));
-}
-function uploadMuralLogo(event) {
-const file = event.target.files && event.target.files[0];
-if (!file) return;
-showToast('Procesando logo...');
-resizeImageToBase64(file, 300, 0.75, (base64) => {
-if (base64.length > 900000) { showToast('❌ La imagen es muy grande, prueba con otra más pequeña'); return; }
-state.muralConfig.logoURL = base64;
-muralConfigRef.update({ logoURL: base64 });
-showToast('✅ Logo del Mural actualizado');
-render();
-}, () => showToast('❌ Error al procesar la imagen'));
-}
-function quitarMuralLogo() {
-if (!confirm('¿Quitar el logo dedicado del Mural? Volverá a mostrar el logo de Primaria o Secundaria según el nivel que elija cada papá/mamá.')) return;
-state.muralConfig.logoURL = '';
-muralConfigRef.update({ logoURL: '' });
-showToast('Logo del Mural quitado');
-render();
 }
 function uploadStudentPhoto(id, event) {
 const file = event.target.files && event.target.files[0];
@@ -1302,9 +1372,12 @@ if (!tieneAccesoBanos()) return;
 window.location.href = 'banos.html';
 }
 function goToBitacora(nivel) {
-// Restricción: solo @chavarria.edu.com pueden entrar a Bitácora
-if (state.currentUser && !state.currentUser.email?.endsWith('@chavarria.edu.com')) {
-  showToast('🚫 Acceso denegado. Solo usuarios @chavarria.edu.com pueden acceder a Bitácora.');
+// El acceso real a Bitácora ya se controla con el permiso accesoBitacora de
+// cada cuenta (ver tieneAccesoBitacora) — el dominio del correo ya no importa,
+// porque ahora las cuentas pueden usar un correo real (@jaliscoedu.mx, Gmail,
+// etc.) para poder recuperar su propia contraseña si la olvidan.
+if (!tieneAccesoBitacora()) {
+  showToast('🚫 Acceso denegado. Tu cuenta no tiene permiso para Bitácora.');
   return;
 }
 try {
@@ -1320,12 +1393,12 @@ tutorNombre: s.tutorNombre || ''
 });
 const puente = {
 generadoEn: Date.now(),
-espacioId: dbBase(),
 Primaria: {
 escuela: si.nombre || '',
 cct: si.cct || '',
 docente: si.encargadoNombre || si.autoridadNombre || '',
 director: si.autoridadNombre || '',
+turno: si.turno || '',
 alumnos: (state.students || []).map(mapAlumno)
 },
 Secundaria: {
@@ -1333,6 +1406,7 @@ escuela: ssi.nombre || '',
 cct: ssi.cct || '',
 docente: ssi.docente || '',
 director: ssi.directorNombre || '',
+turno: ssi.turno || '',
 alumnos: (state.secStudents || []).map(mapAlumno)
 }
 };
@@ -1515,20 +1589,40 @@ async function guardarAceptoTerminos() {
       fechaAceptoTerminos: new Date().toISOString(),
       ipAceptacion: 'navegador-detectado'
     });
-    if (!state.perfilActual) state.perfilActual = {};
-    state.perfilActual.aceptoTerminos = true;
-    state.aceptoTerminos = true;
-    state.mostrarModalTerminos = false;
-    // Antes esto se quedaba aquí y la cuenta "avanzaba" a una pantalla sin datos
-    // conectados (o, en el caso de una cuenta solo-Bitácora, sin la redirección a
-    // bitacora-home.html). Ahora se completa el mismo proceso que ocurre en un
-    // login normal ya con los términos aceptados.
+  } catch (e) {
+    console.error('Error guardando aceptación de términos:', e);
+    showToast('❌ No se pudo guardar tu aceptación: ' + (e && e.message ? e.message : e) + '. Avisa al administrador.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; }
+    return;
+  }
+  // A partir de aquí, la aceptación YA quedó guardada en la base de datos —
+  // pase lo que pase de aquí en adelante (por ejemplo, algo falla al redirigir),
+  // nunca se le debe volver a pedir que "acepte" ni mostrarle un error de
+  // permisos, porque el permiso ya se concedió correctamente.
+  // Importante: si el perfil todavía no había terminado de cargar en este punto,
+  // NUNCA se debe inventar uno vacío en memoria — un perfil vacío hace que el
+  // sistema, por seguridad, dé acceso de más (no de menos), lo que hacía parecer
+  // que la cuenta tenía privilegios de administrador. En su lugar, se vuelve a
+  // pedir el perfil real completo antes de seguir.
+  if (!state.perfilActual) {
+    try {
+      const snap = await db.ref('perfiles/' + currentUid).once('value');
+      state.perfilActual = snap.val() || {};
+    } catch (e) {
+      state.perfilActual = {};
+    }
+  }
+  state.perfilActual.aceptoTerminos = true;
+  state.aceptoTerminos = true;
+  state.mostrarModalTerminos = false;
+  try {
     const yaNavego = await continuarSesionPostTerminos();
     if (!yaNavego) render();
   } catch (e) {
-    console.error('Error guardando aceptación de términos:', e);
-    showToast('❌ No se pudo guardar tu aceptación (permisos de la base de datos). Avisa al administrador.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; }
+    console.error('Se guardó la aceptación, pero algo falló al continuar:', e);
+    // No se trata como error de permisos (ya se guardó bien) — simplemente se
+    // refresca la página para que arranque limpio con los términos ya aceptados.
+    window.location.reload();
   }
 }
 
@@ -1665,6 +1759,8 @@ return `
 <div class="field"><input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')handleLoginSubmit()" /></div>
 <button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
 ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
+${state.forgotPasswordMsg ? `<p style="font-size:0.8em;color:#166534;text-align:center;margin-top:6px;">${state.forgotPasswordMsg}</p>` : ''}
+<p class="change-link" style="text-align:center;font-size:0.82em;color:#2563eb;margin-top:8px;cursor:pointer;text-decoration:underline;" onclick="handleForgotPassword()">¿Olvidaste tu contraseña?</p>
 <p class="hint">Solo cuentas creadas por el administrador pueden entrar. Si no tienes una, pídesela al administrador del sistema.</p>
 </div>
 </div>`;
@@ -1750,6 +1846,17 @@ ${!forced ? `<button class="btn btn-ghost btn-sm" onclick="closeCambiarPassword(
 <button class="btn btn-blue btn-sm" ${state.pwSaving ? 'disabled' : ''} onclick="submitCambioPassword(${forced})">${state.pwSaving ? 'Guardando...' : 'Guardar contraseña'}</button>
 </div>
 </div>
+${!forced ? `
+<div class="card" style="max-width:420px;margin:16px auto 0;">
+<p style="font-weight:700;font-size:1.05em;margin-bottom:6px;">✉️ Cambiar mi correo de acceso</p>
+<p style="font-size:0.82em;color:#6b7280;margin-bottom:14px;">Correo actual: <b>${esc2((state.currentUser && state.currentUser.email) || '')}</b>. Usa un correo real (por ejemplo tu Gmail) para poder recuperar tu contraseña tú mismo si la olvidas.</p>
+<div class="field"><label>Nuevo correo</label><input type="email" value="${esc2(state.emailForm.newEmail)}" oninput="updateEmailFieldLocal('newEmail', this.value)"/></div>
+<div class="field"><label>Tu contraseña actual</label><input type="password" value="${esc2(state.emailForm.currentPassword)}" oninput="updateEmailFieldLocal('currentPassword', this.value)" onkeydown="if(event.key==='Enter')submitCambioEmail()"/></div>
+${state.emailError ? `<p class="errtext">${esc2(state.emailError)}</p>` : ''}
+<div class="modal-actions">
+<button class="btn btn-blue btn-sm" ${state.emailSaving ? 'disabled' : ''} onclick="submitCambioEmail()">${state.emailSaving ? 'Guardando...' : 'Guardar correo nuevo'}</button>
+</div>
+</div>` : ''}
 </main>`;
 }
 function renderAdminUsuarios() {
@@ -1766,7 +1873,7 @@ ${scope === 'all' ? `<button class="btn btn-sm" style="background:#475569;color:
 </div>
 <div class="card">
 <p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
-<div class="field"><label>Usuario de acceso (se completa con ${REQUIRED_EMAIL_DOMAIN})</label><input id="newUserEmail" type="text" placeholder="ej. maestra.lopez"/></div>
+<div class="field"><label>Correo de acceso</label><input id="newUserEmail" type="text" placeholder="ej. maestra.lopez  ó  correo.real@gmail.com"/><p style="font-size:0.72em;color:#6b7280;margin-top:4px;">Escribe solo un nombre (ej. "maestra.lopez") para que se complete con ${REQUIRED_EMAIL_DOMAIN}, o pega un correo real completo (Gmail, @jaliscoedu.mx, etc.) para que esa persona pueda recuperar su contraseña sola si la olvida.</p></div>
 <div class="field"><label>Nombre (opcional)</label><input id="newUserNombre" type="text" placeholder="Nombre para identificarlo"/></div>
 <div class="field"><label>Correo real de contacto (privado, opcional)</label><input id="newUserCorreoContacto" type="email" placeholder="su_correo_real@gmail.com"/></div>
 <div class="field"><label>WhatsApp (opcional, con lada, solo números)</label><input id="newUserPhone" type="text" placeholder="521XXXXXXXXXX"/></div>
@@ -1794,7 +1901,7 @@ return `
 <p style="font-weight:600;">${esc2(u.nombre || u.email)} ${u.deshabilitado ? '<span style="color:#b91c1c;font-size:0.75em;">(deshabilitado)</span>' : ''}</p>
 <p style="font-size:0.82em;color:#6b7280;">${esc2(u.email)}</p>
 ${u.correoContacto ? `<p style="font-size:0.78em;color:#6b7280;">📧 Contacto real: ${esc2(u.correoContacto)}</p>` : ''}
-<p style="font-size:0.82em;margin-top:4px;">Contraseña actual: <b>${esc2(u.tempPasswordActual || '—')}</b> <button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="copiarPassword('${esc2(u.tempPasswordActual || '')}')">Copiar</button></p>
+<p style="font-size:0.82em;margin-top:4px;">Contraseña actual: <b>${u.tempPasswordActual ? (state.passwordsVisibles[u.uid] ? esc2(u.tempPasswordActual) : '••••••••') : '—'}</b> ${u.tempPasswordActual ? `<button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="togglePasswordVisible('${u.uid}')">${state.passwordsVisibles[u.uid] ? '🙈 Ocultar' : '👁️ Ver'}</button> ${state.passwordsVisibles[u.uid] ? `<button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="copiarPassword('${esc2(u.tempPasswordActual)}')">Copiar</button>` : ''}` : ''}</p>
 <p style="font-size:0.78em;color:${u.mustChangePassword ? '#b45309' : '#059669'};margin-top:2px;">${u.mustChangePassword ? '⏳ Pendiente de cambiar su contraseña' : '✅ Ya cambió su contraseña'}</p>
 <a href="${whatsappLinkParaUsuario(u)}" target="_blank" class="btn btn-sage btn-sm" style="margin-top:8px;text-decoration:none;display:inline-block;">📲 Enviar por WhatsApp</a>
 ${puedeEditarPermisos ? `
@@ -1806,7 +1913,8 @@ ${puedeEditarPermisos ? `
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoBitacora === true ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoBitacora',this.checked)"/> Bitácora</label>
 ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.puedeGestionarUsuarios ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','puedeGestionarUsuarios',this.checked)"/> Puede gestionar sus propios usuarios</label>` : ''}
 </div>
-<div style="display:flex;gap:8px;margin-top:10px;">
+<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
 <button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;" onclick='toggleDeshabilitarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>${u.deshabilitado ? '✅ Habilitar' : '🚫 Deshabilitar'}</button>
 <button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;color:#b91c1c;" onclick="pedirEliminarUsuario('${u.uid}')">🗑️ Eliminar</button>
 </div>
@@ -1926,9 +2034,15 @@ ${si.logoURL ? `<img src="${si.logoURL}" style="width:100%;height:100%;object-fi
 <p style="font-weight:600;font-size:0.9em;margin-bottom:10px;">🏫 Información de la institución</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre de la escuela" value="${si.nombre||''}" oninput="updateSchoolFieldLocal('nombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="CCT" value="${si.cct||''}" oninput="updateSchoolFieldLocal('cct',this.value)" />
-<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del docente" value="${si.encargadoNombre||''}" oninput="updateSchoolFieldLocal('encargadoNombre',this.value)" />
+<input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del encargado de la institución" value="${si.encargadoNombre||''}" oninput="updateSchoolFieldLocal('encargadoNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.autoridadNombre||''}" oninput="updateSchoolFieldLocal('autoridadNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Cargo del director (ej. DIRECTOR/A)" value="${si.autoridadCargo||''}" oninput="updateSchoolFieldLocal('autoridadCargo',this.value)" />
+<label style="display:block;font-size:0.72em;font-weight:700;color:#6b7280;margin-bottom:4px;">Turno</label>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;background:#fff;" onchange="updateSchoolFieldLocal('turno',this.value)">
+<option value="" ${!si.turno?'selected':''}>Selecciona...</option>
+<option value="MATUTINO" ${si.turno==='MATUTINO'?'selected':''}>Matutino</option>
+<option value="VESPERTINO" ${si.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
+</select>
 <div class="row-flex">
 <button class="btn btn-green" style="width:auto;flex:1;" onclick="saveSchoolInfo()">💾 Guardar datos</button>
 <button class="btn btn-red" style="width:auto;flex:1;" onclick="clearSchoolInfo()">🧹 Limpiar</button>
@@ -2225,6 +2339,12 @@ ${si.logoURL2 ? `<img src="${si.logoURL2}" style="width:40px;height:40px;object-
 <p style="font-size:0.72em;color:#9ca3af;margin-bottom:8px;">Se usará para compartir evaluaciones cuando no haya teléfono del padre/madre/tutor registrado.</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Nombre del director(a)" value="${si.directorNombre||''}" oninput="updateSecSchoolFieldLocal('directorNombre',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Teléfono del director(a) (WhatsApp)" value="${si.directorTelefono||''}" oninput="updateSecSchoolFieldLocal('directorTelefono',this.value)" />
+<label style="display:block;font-size:0.72em;font-weight:700;color:#6b7280;margin-bottom:4px;">Turno</label>
+<select style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;background:#fff;" onchange="updateSecSchoolFieldLocal('turno',this.value)">
+<option value="" ${!si.turno?'selected':''}>Selecciona...</option>
+<option value="MATUTINO" ${si.turno==='MATUTINO'?'selected':''}>Matutino</option>
+<option value="VESPERTINO" ${si.turno==='VESPERTINO'?'selected':''}>Vespertino</option>
+</select>
 <p style="font-weight:600;font-size:0.85em;margin:6px 0 8px;color:#6b7280;">📋 Datos para reportes de indisciplina</p>
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:8px;" placeholder="Ubicación (ej. SAN MARCOS, TONILA, JALISCO.)" value="${si.direccionReporte||''}" oninput="updateSecSchoolFieldLocal('direccionReporte',this.value)" />
 <input style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;" placeholder="Nombre de orientador(a) (L.T.S.)" value="${si.orientadorNombre||''}" oninput="updateSecSchoolFieldLocal('orientadorNombre',this.value)" />
@@ -3977,18 +4097,22 @@ window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_bla
 }
 // ============ MURAL DE AVISOS ============
 function updateMuralFormLocal(field, value) { state.muralForm[field] = value; }
-function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo') { state.muralForm.grupo = ''; } render(); }
+function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo' && alcance !== 'grupoMulti') { state.muralForm.grupo = ''; } render(); }
 function publicarAviso(nivel) {
 const f = state.muralForm;
 if (!f.titulo.trim() || !f.mensaje.trim()) { showToast('Ponle título y mensaje al aviso'); return; }
 if (f.alcance === 'grado' && !f.grade) { showToast('Elige el grado'); return; }
 if (f.alcance === 'grupo' && (!f.grade || !f.grupo)) { showToast('Elige grado y grupo'); return; }
+if (f.alcance === 'grupoMulti' && !f.grupo) { showToast('Elige el grupo'); return; }
 const aviso = {
 titulo: f.titulo.trim(),
 mensaje: f.mensaje.trim(),
 nivel: f.alcance === 'todos' ? 'todos' : nivel,
+// En "grupoMulti" (grupo multigrado) NO se guarda grado — así el aviso le
+// llega a las familias sin importar cuál de los varios grados combinados
+// tiene su hijo/a, mientras el grupo coincida.
 grade: f.alcance === 'grado' || f.alcance === 'grupo' ? f.grade : null,
-grupo: f.alcance === 'grupo' ? f.grupo : null,
+grupo: (f.alcance === 'grupo' || f.alcance === 'grupoMulti') ? f.grupo : null,
 autor: (state.perfilActual && state.perfilActual.nombre) || '',
 createdAt: Date.now()
 };
@@ -4002,18 +4126,18 @@ function eliminarAviso(id) {
 if (!confirm('¿Eliminar este aviso del mural?')) return;
 muralRef.child(id).remove().then(() => showToast('Aviso eliminado')).catch(() => showToast('No se pudo eliminar'));
 }
-function linkMural() {
+function linkMural(nivel) {
 const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
-return base + 'mural.html?escuela=' + encodeURIComponent(dbBase());
+return base + (nivel === 'secundaria' ? 'mural-secundaria.html' : 'mural-primaria.html');
 }
-function copiarLinkMural() {
-navigator.clipboard.writeText(linkMural()).then(() => showToast('Link del mural copiado ✅'));
+function copiarLinkMural(nivel) {
+navigator.clipboard.writeText(linkMural(nivel)).then(() => showToast('Link del mural copiado ✅'));
 }
 // Abre WhatsApp SIN un número de teléfono fijo: así WhatsApp deja que el maestro
 // elija a quién mandárselo (por ejemplo el grupo de padres de familia), en vez de
 // mandarlo a una sola persona.
-function compartirMuralWhatsapp() {
-const msg = `📢 Nuevo aviso de la escuela. Consúltalo aquí: ${linkMural()}`;
+function compartirMuralWhatsapp(nivel) {
+const msg = `📢 Nuevo aviso de la escuela. Consúltalo aquí: ${linkMural(nivel)}`;
 window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 function renderMural(nivel) {
@@ -4028,6 +4152,7 @@ let html = `<div class="card">
 <button class="btn btn-sm ${f.alcance==='nivel'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('nivel')">Todo ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'}</button>
 <button class="btn btn-sm ${f.alcance==='grado'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grado')">Un grado</button>
 <button class="btn btn-sm ${f.alcance==='grupo'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupo')">Un grupo</button>
+${nivel === 'primaria' ? `<button class="btn btn-sm ${f.alcance==='grupoMulti'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupoMulti')">Grupo multigrado (varios grados)</button>` : ''}
 <button class="btn btn-sm ${f.alcance==='todos'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('todos')">Toda la escuela</button>
 </div>`;
 if (f.alcance === 'grado' || f.alcance === 'grupo') {
@@ -4035,29 +4160,21 @@ const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
 html += `<div class="grade-pills">` + gradeOptions.map(g => `<button class="${g===f.grade?'active':''}" onclick="setMuralGrade('${g}')">${g}</button>`).join('') + `</div>`;
 }
 if (f.alcance === 'grupo' && f.grade) {
-const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B'];
+const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D'];
 html += `<div class="grade-pills" style="margin-top:6px;">` + grupos.map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
+}
+if (f.alcance === 'grupoMulti') {
+html += `<p style="font-size:0.72em;color:#6b7280;margin-bottom:4px;">Le llegará a todas las familias de este grupo, sin importar cuál de los grados combinados tenga su hijo/a.</p>`;
+html += `<div class="grade-pills">` + ['A','B','C','D'].map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
 }
 html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="publicarAviso('${nivel}')">📢 Publicar aviso</button>
 </div>
 <div class="card">
 <p style="font-weight:700;margin-bottom:4px;">🔗 Compartir el mural</p>
-<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Un solo link para todos los papás — al abrirlo eligen el grado/grupo de su hijo y ven los avisos que les corresponden. Compártelo una vez (por ejemplo en tu grupo de WhatsApp de padres) y ya no hace falta volver a mandarlo cada vez que publiques un aviso nuevo.</p>
+<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Este link es solo para familias de ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'} — al abrirlo eligen el grado/grupo de su hijo y ven los avisos que les corresponden. Compártelo una vez (por ejemplo en tu grupo de WhatsApp de padres) y ya no hace falta volver a mandarlo cada vez que publiques un aviso nuevo.</p>
 <div class="row-flex" style="gap:8px;">
-<button class="btn btn-gray" style="flex:1;" onclick="copiarLinkMural()">📋 Copiar link</button>
-<button class="btn" style="flex:1;background:#dcfce7;color:#166534;" onclick="compartirMuralWhatsapp()">📲 Enviar por WhatsApp</button>
-</div>
-</div>
-<div class="card">
-<p style="font-weight:700;margin-bottom:4px;">🖼️ Logo que ven los papás en el Mural</p>
-<p style="font-size:0.75em;color:#6b7280;margin-bottom:10px;">Por defecto, el Mural muestra el logo de Primaria o de Secundaria según el nivel que elija cada papá/mamá (los mismos que subiste en Datos). Si prefieres un logo fijo, el mismo para todos sin importar el nivel, súbelo aquí y ese será el que se use.</p>
-${state.muralConfig.logoURL ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-<img src="${state.muralConfig.logoURL}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:1px solid #e5e7eb;" />
-<span style="font-size:0.8em;color:#166534;font-weight:600;">Logo fijo activo</span>
-</div>` : ''}
-<div class="row-flex" style="gap:8px;">
-<label class="btn btn-gray" style="flex:1;text-align:center;cursor:pointer;">📤 ${state.muralConfig.logoURL ? 'Cambiar' : 'Subir'} logo del Mural<input type="file" accept="image/*" style="display:none;" onchange="uploadMuralLogo(event)"></label>
-${state.muralConfig.logoURL ? `<button class="btn btn-gray" style="flex:1;color:#b91c1c;" onclick="quitarMuralLogo()">🗑️ Quitar</button>` : ''}
+<button class="btn btn-gray" style="flex:1;" onclick="copiarLinkMural('${nivel}')">📋 Copiar link</button>
+<button class="btn" style="flex:1;background:#dcfce7;color:#166534;" onclick="compartirMuralWhatsapp('${nivel}')">📲 Enviar por WhatsApp</button>
 </div>
 </div>
 <div class="card">
