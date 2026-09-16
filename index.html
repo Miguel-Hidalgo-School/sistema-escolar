@@ -158,9 +158,6 @@ fbConfig: FIREBASE_CONFIG,
 user: null,
 authError: '',
 forgotPasswordMsg: '',
-emailForm: { newEmail: '', currentPassword: '' },
-emailError: '',
-emailSaving: false,
 passwordsVisibles: {},
 nivel: null,
 tab: 'inicio',
@@ -687,7 +684,8 @@ if (!emailInput) { showToast('❌ Escribe el usuario del nuevo correo'); return;
 // @jaliscoedu.mx o un Gmail personal) — en ese caso se usa tal cual, para que
 // esa persona pueda recuperar su propia contraseña con el correo real de
 // Firebase si la olvida.
-const email = emailInput.includes('@') ? emailInput.toLowerCase() : (emailInput.toLowerCase() + REQUIRED_EMAIL_DOMAIN);
+const usuario = emailInput.includes('@') ? emailInput.split('@')[0] : emailInput;
+const email = usuario.toLowerCase() + REQUIRED_EMAIL_DOMAIN;
 const accesoPrimaria = !!document.getElementById('newUserAccesoPrimaria').checked;
 const accesoSecundaria = !!document.getElementById('newUserAccesoSecundaria').checked;
 const accesoCheckin = !!document.getElementById('newUserAccesoCheckin').checked;
@@ -844,28 +842,6 @@ state.passwordsVisibles[uid] = true;
 render();
 }
 function updatePwFieldLocal(field, value) { state.pwForm[field] = value; }
-function updateEmailFieldLocal(field, value) { state.emailForm[field] = value; }
-async function submitCambioEmail() {
-const nuevoEmail = (state.emailForm.newEmail || '').trim().toLowerCase();
-const pass = state.emailForm.currentPassword || '';
-if (!nuevoEmail || !nuevoEmail.includes('@')) { state.emailError = 'Escribe un correo válido.'; render(); return; }
-if (!pass) { state.emailError = 'Escribe tu contraseña actual para confirmar.'; render(); return; }
-state.emailSaving = true; render();
-try {
-const u = auth.currentUser;
-const cred = firebase.auth.EmailAuthProvider.credential(u.email, pass);
-await u.reauthenticateWithCredential(cred);
-await u.updateEmail(nuevoEmail);
-await db.ref('perfiles/' + currentUid).update({ email: nuevoEmail });
-state.emailForm = { newEmail: '', currentPassword: '' };
-state.emailError = '';
-showToast('✅ Correo actualizado. Usa tu correo nuevo la próxima vez que inicies sesión.');
-} catch (e) {
-state.emailError = e.code ? traducirErrorAuth(e.code) : ('No se pudo cambiar el correo: ' + e.message);
-}
-state.emailSaving = false;
-render();
-}
 async function submitCambioPassword(forced) {
 const { current, pass1, pass2 } = state.pwForm;
 state.pwError = '';
@@ -1848,17 +1824,6 @@ ${!forced ? `<button class="btn btn-ghost btn-sm" onclick="closeCambiarPassword(
 <button class="btn btn-blue btn-sm" ${state.pwSaving ? 'disabled' : ''} onclick="submitCambioPassword(${forced})">${state.pwSaving ? 'Guardando...' : 'Guardar contraseña'}</button>
 </div>
 </div>
-${!forced ? `
-<div class="card" style="max-width:420px;margin:16px auto 0;">
-<p style="font-weight:700;font-size:1.05em;margin-bottom:6px;">✉️ Cambiar mi correo de acceso</p>
-<p style="font-size:0.82em;color:#6b7280;margin-bottom:14px;">Correo actual: <b>${esc2((state.currentUser && state.currentUser.email) || '')}</b>. Usa un correo real (por ejemplo tu Gmail) para poder recuperar tu contraseña tú mismo si la olvidas.</p>
-<div class="field"><label>Nuevo correo</label><input type="email" value="${esc2(state.emailForm.newEmail)}" oninput="updateEmailFieldLocal('newEmail', this.value)"/></div>
-<div class="field"><label>Tu contraseña actual</label><input type="password" value="${esc2(state.emailForm.currentPassword)}" oninput="updateEmailFieldLocal('currentPassword', this.value)" onkeydown="if(event.key==='Enter')submitCambioEmail()"/></div>
-${state.emailError ? `<p class="errtext">${esc2(state.emailError)}</p>` : ''}
-<div class="modal-actions">
-<button class="btn btn-blue btn-sm" ${state.emailSaving ? 'disabled' : ''} onclick="submitCambioEmail()">${state.emailSaving ? 'Guardando...' : 'Guardar correo nuevo'}</button>
-</div>
-</div>` : ''}
 </main>`;
 }
 function renderAdminUsuarios() {
@@ -1875,7 +1840,7 @@ ${scope === 'all' ? `<button class="btn btn-sm" style="background:#475569;color:
 </div>
 <div class="card">
 <p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
-<div class="field"><label>Correo de acceso</label><input id="newUserEmail" type="text" placeholder="ej. maestra.lopez  ó  correo.real@gmail.com"/><p style="font-size:0.72em;color:#6b7280;margin-top:4px;">Escribe solo un nombre (ej. "maestra.lopez") para que se complete con ${REQUIRED_EMAIL_DOMAIN}, o pega un correo real completo (Gmail, @jaliscoedu.mx, etc.) para que esa persona pueda recuperar su contraseña sola si la olvida.</p></div>
+<div class="field"><label>Usuario de acceso (se completa con ${REQUIRED_EMAIL_DOMAIN})</label><input id="newUserEmail" type="text" placeholder="ej. maestra.lopez"/></div>
 <div class="field"><label>Nombre (opcional)</label><input id="newUserNombre" type="text" placeholder="Nombre para identificarlo"/></div>
 <div class="field"><label>Correo real de contacto (privado, opcional)</label><input id="newUserCorreoContacto" type="email" placeholder="su_correo_real@gmail.com"/></div>
 <div class="field"><label>WhatsApp (opcional, con lada, solo números)</label><input id="newUserPhone" type="text" placeholder="521XXXXXXXXXX"/></div>
@@ -1887,7 +1852,7 @@ ${scope === 'all' ? `<button class="btn btn-sm" style="background:#475569;color:
 ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserPuedeGestionar" type="checkbox"/> Puede gestionar sus propios usuarios (tendrá su propio botón "Gestionar usuarios")</label>` : ''}
 <p style="font-size:0.75em;color:#6b7280;margin-top:4px;">Si le das <b>solo</b> Bitácora (sin Primaria, Secundaria ni CheckIn Kids), esa cuenta entrará directo a la Bitácora al iniciar sesión y nunca verá el resto del sistema.</p>
 <button id="crearUsuarioBtn" class="btn btn-blue btn-sm" style="margin-top:8px;" onclick="crearUsuarioNuevo()">➕ Crear usuario</button>
-<p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} (ese dominio no recibe ni envía correos reales) — por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla.${scope === 'own' ? ' Los usuarios que crees aquí trabajarán dentro de tu propio espacio de datos, sin tocar el del administrador ni el de nadie más.' : ' Cada usuario ve y agrega solo los datos de su propio espacio.'}</p>
+<p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} — sirve para iniciar sesión, pero no para consultar ni recibir correos ahí. Por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla.${scope === 'own' ? ' Los usuarios que crees aquí trabajarán dentro de tu propio espacio de datos, sin tocar el del administrador ni el de nadie más.' : ' Cada usuario ve y agrega solo los datos de su propio espacio.'}</p>
 </div>
 <p style="font-weight:600;margin:18px 0 8px;">Usuarios creados</p>`;
 if (state.adminUsersLoading) {
