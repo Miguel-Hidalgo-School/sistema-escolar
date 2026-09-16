@@ -339,11 +339,13 @@ sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
-// El mural SIEMPRE vive en la raíz compartida (DB_ROOT), sin importar si quien
-// publica es la cuenta admin o una cuenta individual de maestro — así un solo
-// link de mural.html sirve para toda la escuela, en vez de quedar aislado dentro
-// de la carpeta privada de cada cuenta.
-muralRef = db.ref(DB_ROOT + '/mural');
+// El mural respeta el mismo aislamiento que el resto de los datos: cada
+// cuenta (admin o individual/de prueba) usa su propio "cajón" de datos
+// (`base`). La cuenta administradora real ya usa DB_ROOT de por sí (por eso
+// mural-primaria.html / mural-secundaria.html, que leen directo de DB_ROOT,
+// siguen mostrando exactamente lo que ella publique) — pero una cuenta de
+// prueba o delegada ya no comparte ni ve el mural real de la escuela.
+muralRef = db.ref(base + '/mural');
 }
 function initFirebase() {
 firebase.initializeApp(state.fbConfig);
