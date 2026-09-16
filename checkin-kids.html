@@ -191,7 +191,9 @@
     <div class="stats">
       <div class="stat-chip" style="min-width:100px;"><b id="clockDisplay">--:--:--</b><span>Hora del sistema</span></div>
       <div class="stat-chip" id="statInChip" style="cursor:pointer;" onclick="openEnPlantelModal()" title="Ver quiénes siguen en el plantel"><b id="statIn">0</b><span>En plantel</span></div>
-      <div class="stat-chip"><b id="statToday">0</b><span>Hoy</span><span id="statTodayGenero" style="display:block;font-size:9.5px;color:var(--slate);margin-top:2px;"></span></div>
+      <div class="stat-chip"><b id="statToday">0</b><span>Hoy</span></div>
+      <div class="stat-chip" title="Niños que asistieron hoy, del total de niños inscritos"><b id="statNinosHoy">👦 —</b><span id="statNinosSub">Sin datos</span></div>
+      <div class="stat-chip" title="Niñas que asistieron hoy, del total de niñas inscritas"><b id="statNinasHoy">👧 —</b><span id="statNinasSub">Sin datos</span></div>
       <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
     </div>
   </header>
@@ -199,7 +201,6 @@
   <nav class="tabs">
     <button class="active" data-tab="escaner">Escáner QR</button>
     <button data-tab="entradas">Entradas</button>
-    <button data-tab="ausentes">Ausentes</button>
     <button data-tab="alumnos">Alumnos</button>
     <button data-tab="registrar">Registro nuevo</button>
     <button data-tab="historial">Historial</button>
@@ -242,9 +243,9 @@
           <div class="field">
             <label>Sexo</label>
             <select id="inSexo">
-              <option value="">— Selecciona —</option>
-              <option value="M">Niño</option>
-              <option value="F">Niña</option>
+              <option value="">Selecciona...</option>
+              <option value="niño">Niño</option>
+              <option value="niña">Niña</option>
             </select>
           </div>
           <div class="field">
@@ -349,31 +350,6 @@
     </div>
   </section>
 
-  <!-- AUSENTES -->
-  <section class="panel" id="panel-ausentes">
-    <div class="class-selector" id="ausentesClassSelector"></div>
-    <div id="ausentesHorarioBox" class="card" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleHorarioSecBox()">
-        <p class="section-title" style="margin:0;">⚙️ Horario de clases de Secundaria</p>
-        <button type="button" class="btn btn-ghost btn-sm" id="horarioSecToggleBtn" style="width:auto;padding:6px 12px;" onclick="event.stopPropagation();toggleHorarioSecBox()">▾ Ver</button>
-      </div>
-      <div id="horarioSecBody" style="display:none;margin-top:10px;">
-      <p class="note" style="font-size:12px;color:var(--slate);margin-bottom:10px;">
-        La ausencia de un grado/grupo de Secundaria solo se calcula si hoy le toca clase según este horario, y ya pasó su hora de inicio — nunca de todos los grupos a la vez.
-      </p>
-      <div id="ausentesHorarioRows"></div>
-      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" onclick="agregarHorarioSec()">+ Agregar clase</button>
-        <button class="btn btn-primary btn-sm" onclick="guardarHorarioSec()">💾 Guardar horario</button>
-      </div>
-      </div>
-    </div>
-    <div id="ausentesResultado"></div>
-  </section>
-
-  <!-- ENTRADAS (fin) -->
-  <!-- (marcador solo para claridad visual del diff, no altera nada) -->
-
   <!-- ALUMNOS -->
   <section class="panel" id="panel-alumnos">
     <div class="class-selector" id="alumnosClassSelector"></div>
@@ -405,25 +381,12 @@
             <label>Mes a exportar</label>
             <input type="month" id="monthPicker">
           </div>
-          <div class="mini-field">
-            <label>Nivel educativo</label>
-            <select id="monthlyNivelFilter" onchange="fillMonthlyGradoOptions()">
-              <option value="">Todos</option>
-              <option value="primaria">Primaria</option>
-              <option value="secundaria">Secundaria</option>
-            </select>
-          </div>
-          <div class="mini-field">
-            <label>Grado</label>
-            <select id="monthlyGradoFilter"><option value="">Todos</option></select>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="exportMonthlyList(true)">Descargar con datos de padres</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportMonthlyList(false)">Descargar solo datos del alumno</button>
+          <button class="btn btn-primary btn-sm" onclick="exportMonthlyList()">Descargar lista mensual</button>
         </div>
         <button class="btn btn-danger btn-sm" onclick="clearAllHistory()">Vaciar historial completo</button>
       </div>
       <p class="note" style="color:var(--slate);font-size:12px;margin:-8px 0 16px;">
-        La lista mensual agrupa los días hábiles (lunes a viernes) en semanas de 5 días a partir de la fecha de inicio de ciclo (semana 1 = esa fecha en adelante), y la numeración de semanas continúa de un mes al siguiente sin reiniciarse. Incluye columna de Total de asistencias del periodo. Filtra por nivel y grado, y elige si la descarga lleva datos de padres o solo del alumno.
+        La lista mensual agrupa los días hábiles (lunes a viernes) en semanas de 5 días a partir de la fecha de inicio de ciclo. Cada semana se asigna al mes donde caen más de sus 5 días. El Excel se descarga con celdas y bordes bien definidos.
       </p>
       <table>
         <thead><tr><th>Fecha</th><th>Alumno</th><th>Grado/Grupo</th><th>Entrada</th><th>Salida</th><th>Estado</th><th></th></tr></thead>
@@ -527,14 +490,6 @@
       </div>
       <div class="field"><label>Grado</label><select id="editGrade"></select></div>
       <div class="field"><label>Grupo</label><select id="editGroup"></select></div>
-      <div class="field">
-        <label>Sexo</label>
-        <select id="editSexo">
-          <option value="">— Selecciona —</option>
-          <option value="M">Niño</option>
-          <option value="F">Niña</option>
-        </select>
-      </div>
       <div class="field"><label>Matrícula <span class="req">*</span></label><input id="editEnroll"></div>
     </div>
     <div class="grid3">
@@ -13142,8 +13097,7 @@ const ckFilters = {
   scan:      { nivel: 'primaria', grado: null, grupo: null },
   alumnos:   { nivel: 'primaria', grado: null, grupo: null },
   entradas:  { nivel: 'primaria' },
-  enPlantel: { nivel: 'primaria' },
-  ausentes:  { nivel: 'primaria' }
+  enPlantel: { nivel: 'primaria' }
 };
 
 // Niveles a los que esta cuenta tiene acceso (se llenan al iniciar sesión, según
@@ -13253,11 +13207,10 @@ function ckRenderClassSelector(scope){
     : scope === 'alumnos' ? 'alumnosClassSelector'
     : scope === 'entradas' ? 'entradasClassSelector'
     : scope === 'enPlantel' ? 'enPlantelClassSelector'
-    : scope === 'ausentes' ? 'ausentesClassSelector'
     : null;
   const el = containerId && document.getElementById(containerId);
   if(!el) return;
-  el.innerHTML = (scope === 'entradas' || scope === 'enPlantel' || scope === 'ausentes') ? ckNivelToggleHtml(scope) : ckClassSelectorHtml(scope);
+  el.innerHTML = (scope === 'entradas' || scope === 'enPlantel') ? ckNivelToggleHtml(scope) : ckClassSelectorHtml(scope);
 }
 
 function ckSetNivel(scope, nivel){
@@ -13282,138 +13235,6 @@ function ckOnFilterChanged(scope){
   if(scope === 'alumnos') renderAlumnos();
   if(scope === 'entradas') renderEntradas();
   if(scope === 'enPlantel') renderEnPlantelList();
-  if(scope === 'ausentes') renderAusentes();
-}
-
-/* ---------- Ausentes (misma lógica visual que "En plantel", pero al revés:
-   quién NO ha registrado entrada hoy). En primaria es de lunes a viernes y
-   multigrado (no se separa por grado/grupo). En secundaria solo se revisa el
-   grado/grupo que, según el horario configurado abajo, tiene clase hoy y ya
-   pasó su hora de inicio — nunca se junta con los demás grupos. ---------- */
-const DIAS_SEMANA_CK = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-function ausenciaAplicaHoyPrimaria(){
-  const d = new Date().getDay(); // 0=domingo ... 6=sábado
-  return d >= 1 && d <= 5; // lunes a viernes
-}
-function renderAusentes(){
-  ckRenderClassSelector('ausentes');
-  const nivel = ckFilters.ausentes.nivel;
-  const box = document.getElementById('ausentesHorarioBox');
-  const resultado = document.getElementById('ausentesResultado');
-  if(!resultado) return;
-  if(box) box.style.display = nivel === 'secundaria' ? 'block' : 'none';
-  if(nivel === 'secundaria') { renderHorarioSecRows(); aplicarEstadoHorarioSecBox(); }
-
-  const today = todayStr();
-  const idsConEntradaHoy = new Set(attendance.filter(a => a.date === today).map(a => a.studentId));
-
-  if(nivel === 'primaria'){
-    if(!ausenciaAplicaHoyPrimaria()){
-      resultado.innerHTML = `<div class="card"><div class="empty" style="display:block;"><b>Hoy no aplica (fin de semana)</b>La asistencia de Primaria se revisa de lunes a viernes.</div></div>`;
-      return;
-    }
-    // Primaria no tiene horario por grado/grupo como Secundaria (es un solo grupo
-    // por grado, "multigrado" en el sentido de que se atiende junto), pero el
-    // grado sí existe y se muestra por separado para que sea más fácil de leer.
-    let html = '';
-    CK_GRADOS_POR_NIVEL.primaria.forEach(grado => {
-      const delGrado = students.filter(s => (s.nivel||'primaria') === 'primaria' && s.grade === grado);
-      if(!delGrado.length) return; // no hay alumnos registrados en ese grado
-      const ausentes = delGrado.filter(s => !idsConEntradaHoy.has(s.id));
-      html += ausentesTablaHtml(ausentes, `${grado} de Primaria`);
-    });
-    resultado.innerHTML = html || `<div class="card"><div class="empty" style="display:block;"><b>Sin alumnos de Primaria registrados</b></div></div>`;
-    return;
-  }
-
-  // Secundaria: por cada grado/grupo con clase programada hoy
-  const dia = new Date().getDay();
-  const ahora = new Date();
-  const minutosAhora = ahora.getHours()*60 + ahora.getMinutes();
-  const clasesHoy = (horarioSecundaria||[]).filter(h => Number(h.dia) === dia);
-  if(!clasesHoy.length){
-    resultado.innerHTML = `<div class="card"><div class="empty" style="display:block;"><b>Sin clases de Secundaria hoy</b>Según el horario de abajo, hoy (${DIAS_SEMANA_CK[dia]}) no tienes ningún grupo programado.</div></div>`;
-    return;
-  }
-  let html = '';
-  clasesHoy.forEach(h => {
-    const [hh, mm] = (h.horaInicio||'00:00').split(':').map(Number);
-    const minutosInicio = (hh||0)*60 + (mm||0);
-    const grupoTitulo = `${h.grado} ${h.grupo} (clase ${h.horaInicio||'?'}–${h.horaFin||'?'})`;
-    if(minutosAhora < minutosInicio){
-      html += `<div class="card"><p class="section-title">${escapeHtml(grupoTitulo)}</p><p class="note" style="font-size:12.5px;color:var(--slate);">Su clase empieza a las ${h.horaInicio} — todavía no aplica revisar ausencias.</p></div>`;
-      return;
-    }
-    const grupoStudents = students.filter(s => (s.nivel||'primaria') === 'secundaria' && s.grade === h.grado && s.group === h.grupo);
-    const ausentes = grupoStudents.filter(s => !idsConEntradaHoy.has(s.id));
-    html += ausentesTablaHtml(ausentes, grupoTitulo);
-  });
-  resultado.innerHTML = html;
-}
-function ausentesTablaHtml(ausentes, tituloGrupo){
-  let niños = 0, niñas = 0;
-  ausentes.forEach(s => { if(s.sexo === 'M') niños++; else if(s.sexo === 'F') niñas++; });
-  const resumenGenero = (niños || niñas) ? ` · 👦 ${niños} · 👧 ${niñas}` : '';
-  if(!ausentes.length){
-    return `<div class="card"><p class="section-title">${escapeHtml(tituloGrupo)}</p><div class="empty" style="display:block;"><b>Nadie ausente 🎉</b>Todos ya registraron su entrada.</div></div>`;
-  }
-  return `<div class="card">
-    <p class="section-title">${escapeHtml(tituloGrupo)} — ${ausentes.length} ausente${ausentes.length!==1?'s':''}${resumenGenero}</p>
-    <table>
-      <thead><tr><th>Alumno</th><th>Grado/Grupo</th><th>Sexo</th></tr></thead>
-      <tbody>${ausentes.map(s => `<tr><td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td><td>${ckNivelLabel(s.nivel,true)} ${s.grade} ${s.group}</td><td>${s.sexo==='M'?'👦 Niño':s.sexo==='F'?'👧 Niña':'—'}</td></tr>`).join('')}</tbody>
-    </table>
-  </div>`;
-}
-
-/* ---------- Editor del horario de clases de Secundaria (para saber cuándo
-   revisar ausencias de cada grado/grupo) ---------- */
-function renderHorarioSecRows(){
-  const el = document.getElementById('ausentesHorarioRows');
-  if(!el) return;
-  if(!horarioSecundaria.length){
-    el.innerHTML = `<p class="note" style="font-size:12px;color:var(--slate);margin:0 0 8px;">Sin clases configuradas todavía — agrega al menos una.</p>`;
-    return;
-  }
-  el.innerHTML = horarioSecundaria.map((h, idx) => `
-    <div class="pickup-row">
-      <select onchange="updateHorarioSecField(${idx},'grado',this.value)">
-        ${CK_GRADOS_POR_NIVEL.secundaria.map(g=>`<option value="${g}" ${h.grado===g?'selected':''}>${g}</option>`).join('')}
-      </select>
-      <select onchange="updateHorarioSecField(${idx},'grupo',this.value)">
-        ${CK_GRUPOS_POR_NIVEL.secundaria.map(g=>`<option value="${g}" ${h.grupo===g?'selected':''}>Grupo ${g}</option>`).join('')}
-      </select>
-      <select onchange="updateHorarioSecField(${idx},'dia',this.value)">
-        ${DIAS_SEMANA_CK.map((d,i)=>`<option value="${i}" ${Number(h.dia)===i?'selected':''}>${d}</option>`).join('')}
-      </select>
-      <input type="time" value="${h.horaInicio||''}" onchange="updateHorarioSecField(${idx},'horaInicio',this.value)">
-      <input type="time" value="${h.horaFin||''}" onchange="updateHorarioSecField(${idx},'horaFin',this.value)">
-      <button type="button" class="btn btn-danger btn-sm" onclick="quitarHorarioSec(${idx})">Quitar</button>
-    </div>
-  `).join('');
-}
-function aplicarEstadoHorarioSecBox(){
-  const body = document.getElementById('horarioSecBody');
-  const btn = document.getElementById('horarioSecToggleBtn');
-  if(!body || !btn) return;
-  const abierto = localStorage.getItem('ckHorarioSecAbierto') === '1';
-  body.style.display = abierto ? 'block' : 'none';
-  btn.textContent = abierto ? '▴ Ocultar' : '▾ Ver';
-}
-function toggleHorarioSecBox(){
-  const abierto = localStorage.getItem('ckHorarioSecAbierto') === '1';
-  localStorage.setItem('ckHorarioSecAbierto', abierto ? '0' : '1');
-  aplicarEstadoHorarioSecBox();
-}
-function agregarHorarioSec(){
-  horarioSecundaria.push({ grado: CK_GRADOS_POR_NIVEL.secundaria[0], grupo: CK_GRUPOS_POR_NIVEL.secundaria[0], dia: 3, horaInicio: '07:00', horaFin: '08:00' });
-  renderHorarioSecRows();
-}
-function quitarHorarioSec(idx){ horarioSecundaria.splice(idx,1); renderHorarioSecRows(); }
-function updateHorarioSecField(idx, field, value){ horarioSecundaria[idx][field] = field === 'dia' ? Number(value) : value; }
-function guardarHorarioSec(){
-  if(!ckHorarioSecRef){ showToast('No se pudo guardar (sin conexión)', 'err'); return; }
-  ckHorarioSecRef.set(horarioSecundaria).then(()=>{ showToast('💾 Horario guardado', 'ok'); renderAusentes(); }).catch(()=> showToast('No se pudo guardar', 'err'));
 }
 
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
@@ -13437,10 +13258,6 @@ const ckAuth = firebase.auth();
 const ckDb = firebase.database();
 let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
 let ckCheckinStudentsRef = null; // lista propia, solo para cuentas SOLO CheckIn Kids
-let ckSecSchoolRef = null;
-let ckHorarioSecRef = null;
-let horarioSecundaria = []; // [{grado, grupo, dia (0=domingo..6=sábado), horaInicio:'HH:MM', horaFin:'HH:MM'}]
-let ckDirectorTelefono = '';
 let ckSyncReady = false;
 function ckDbBase(uid, isAdmin) {
   return isAdmin ? CK_DB_ROOT_ADMIN : ('usuarios/' + uid);
@@ -13452,7 +13269,6 @@ function ckBindRefs(base) {
     ckStudentsRef = null;
     ckSecStudentsRef = null;
     ckCheckinStudentsRef = ckDb.ref(base + '/checkinStudents');
-    ckSecSchoolRef = null;
   } else {
     // Con las reglas nuevas de Firebase, leer 'students' sin accesoPrimaria (o
     // 'secStudents' sin accesoSecundaria) da error de permisos. Por eso solo se
@@ -13460,24 +13276,14 @@ function ckBindRefs(base) {
     ckStudentsRef = ckAccesoPrimaria ? ckDb.ref(base + '/students') : null;
     ckSecStudentsRef = ckAccesoSecundaria ? ckDb.ref(base + '/secStudents') : null;
     ckCheckinStudentsRef = null;
-    // El teléfono del director(a) de secundaria sirve de contacto de respaldo
-    // cuando el alumno no tiene teléfono de madre, padre ni tutor capturado.
-    ckSecSchoolRef = ckAccesoSecundaria ? ckDb.ref(base + '/secSchoolInfo') : null;
-    if (ckSecSchoolRef) {
-      ckSecSchoolRef.on('value', snap => { ckDirectorTelefono = (snap.val() || {}).directorTelefono || ''; });
-    } else {
-      ckDirectorTelefono = '';
-    }
   }
   ckAttendanceRef = ckDb.ref(base + '/checkinAttendance');
-  ckHorarioSecRef = ckDb.ref(base + '/horarioSecundaria');
-  ckHorarioSecRef.on('value', snap => { horarioSecundaria = snap.val() || []; renderAll(); }, () => {});
 }
 
 // Convierte un alumno de CheckIn Kids al formato compartido con Sistema Escolar
 function ckToFirebaseStudent(s){
   return {
-    name: s.name || '', grade: s.grade || '1°', grupo: s.group || '', sexo: s.sexo || '',
+    name: s.name || '', grade: s.grade || '1°', grupo: s.group || '',
     curp: s.curp || '', matricula: s.enroll || '', fechaNacimiento: s.birthDate || '',
     address: s.address || '', foto: s.photo || '',
     madreNombre: s.motherName || '', madreCurp: s.motherCurp || '', madreTelefono: s.motherPhone || '',
@@ -13491,23 +13297,18 @@ function ckToFirebaseStudent(s){
   };
 }
 // Convierte un alumno del formato compartido (o creado en Sistema Escolar) al formato de CheckIn Kids
-function ckToArraySafe(v){
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === 'object') return Object.keys(v).sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
-  return [];
-}
 function ckFromFirebaseStudent(id, v, nivel){
   v = v || {};
-  const pickupRaw = v.pickupAuthorized || (v.tutorNombre ? [{ name: v.tutorNombre, phone: v.tutorTelefono || '' }] : []);
   return {
     id, nivel: nivel || 'primaria',
-    name: v.name || '', grade: v.grade || '1°', group: v.grupo || '', sexo: v.sexo || '',
+    name: v.name || '', grade: v.grade || '1°', group: v.grupo || '',
     curp: v.curp || '', enroll: v.matricula || '', birthDate: v.fechaNacimiento || '',
     address: v.address || '', photo: v.foto || '',
     motherName: v.madreNombre || '', motherCurp: v.madreCurp || '', motherPhone: v.madreTelefono || '',
     fatherName: v.padreNombre || '', fatherCurp: v.padreCurp || '', fatherPhone: v.padreTelefono || '',
-    pickupAuthorized: ckToArraySafe(pickupRaw).filter(p => p && typeof p === 'object'),
+    pickupAuthorized: v.pickupAuthorized || (v.tutorNombre ? [{ name: v.tutorNombre, phone: v.tutorTelefono || '' }] : []),
     allergy: v.allergy || '', folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || [],
+    sexo: v.sexo || '',
     createdAt: v.createdAt || new Date().toISOString()
   };
 }
@@ -13832,7 +13633,6 @@ function registerStudent(){
   const curp = document.getElementById('inCurp').value.trim();
   const grade = document.getElementById('inGrade').value;
   const group = document.getElementById('inGroup').value;
-  const sexo = document.getElementById('inSexo').value;
   const birthDate = document.getElementById('inBirth').value;
   const address = document.getElementById('inAddress').value.trim();
 
@@ -13845,26 +13645,28 @@ function registerStudent(){
 
   const enroll = document.getElementById('inEnroll').value.trim();
   const allergy = document.getElementById('inAllergy').value.trim();
+  const sexo = document.getElementById('inSexo').value;
 
   const missing = [];
   if(!name) missing.push('nombre del alumno');
-  if(!sexo) missing.push('sexo del alumno');
+  if(!curp) missing.push('CURP del alumno');
+  if(!enroll) missing.push('matrícula del alumno');
+  if(!motherName && !fatherName) missing.push('nombre de la madre o del padre');
   if(missing.length){ showToast('Falta: ' + missing.join(', '), 'err'); return; }
-  if(enroll && students.some(s => s.enroll && s.enroll === enroll)){
+  if(students.some(s => s.enroll && s.enroll === enroll)){
     showToast('Ya existe un alumno registrado con esa matrícula (' + enroll + ')', 'err');
     return;
   }
 
-  const claveInterna = enroll || uid(); // Si no hay matrícula, se usa una clave interna solo para generar folio/QR únicos
-  const folio = enroll || ('SC-' + claveInterna.slice(-6).toUpperCase()); // SC = "sin clave", para no confundirlo con una matrícula real
-  const token = `${QR_PREFIX}|${claveInterna}|${randomSuffix()}`;
+  const folio = enroll; // La matrícula es el identificador oficial (evita folios duplicados)
+  const token = `${QR_PREFIX}|${enroll}|${randomSuffix()}`;
   const student = {
     id: uid(), folio, token, altCodes: [],
-    nivel, name, grade, group, sexo, curp, birthDate, address,
+    nivel, name, grade, group, curp, birthDate, address,
     motherName, motherCurp, motherPhone,
     fatherName, fatherCurp, fatherPhone,
-    pickupAuthorized: regPickupList.filter(p=>p && (p.name||'').trim()!==''),
-    enroll, allergy,
+    pickupAuthorized: regPickupList.filter(p=>p.name.trim()!==''),
+    enroll, allergy, sexo,
     photo: regPhotoData || null,
     createdAt: new Date().toISOString()
   };
@@ -13872,7 +13674,7 @@ function registerStudent(){
   saveJSON(STUDENTS_KEY, students);
 
   ['inName','inCurp','inBirth','inAddress','inMotherName','inMotherCurp','inMotherPhone',
-   'inFatherName','inFatherCurp','inFatherPhone','inEnroll','inAllergy'].forEach(id=>{
+   'inFatherName','inFatherCurp','inFatherPhone','inEnroll','inAllergy','inSexo'].forEach(id=>{
     document.getElementById(id).value='';
   });
   document.getElementById('inNivel').value = 'primaria';
@@ -13893,45 +13695,30 @@ function registerStudent(){
 function openEditModal(studentId){
   const s = students.find(x=>x.id===studentId);
   if(!s) return;
-  const problemas = [];
-  try{
-    document.getElementById('editStudentId').value = s.id;
-    document.getElementById('editName').value = s.name || '';
-  }catch(e){ problemas.push('datos básicos: '+e.message); }
-  try{
-    document.getElementById('editNivel').value = s.nivel || 'primaria';
-    ckPopulateNivelSelect('editNivel', s.nivel || 'primaria');
-    updateNivelOptions('edit');
-    document.getElementById('editGrade').value = s.grade || '';
-    document.getElementById('editGroup').value = s.group || '';
-  }catch(e){ problemas.push('nivel/grado/grupo: '+e.message); }
-  try{
-    document.getElementById('editSexo').value = s.sexo || '';
-    document.getElementById('editCurp').value = s.curp || '';
-    document.getElementById('editBirth').value = s.birthDate || '';
-    document.getElementById('editAddress').value = s.address || '';
-    document.getElementById('editMotherName').value = s.motherName || '';
-    document.getElementById('editMotherCurp').value = s.motherCurp || '';
-    document.getElementById('editMotherPhone').value = s.motherPhone || '';
-    document.getElementById('editFatherName').value = s.fatherName || '';
-    document.getElementById('editFatherCurp').value = s.fatherCurp || '';
-    document.getElementById('editFatherPhone').value = s.fatherPhone || '';
-    document.getElementById('editEnroll').value = s.enroll || '';
-    document.getElementById('editAllergy').value = s.allergy || '';
-  }catch(e){ problemas.push('datos personales: '+e.message); }
-  try{
-    editPickupList = ckToArraySafe(JSON.parse(JSON.stringify(s.pickupAuthorized || []))).filter(p=>p && typeof p==='object');
-    renderPickupEditor('edit');
-  }catch(e){ problemas.push('personas autorizadas: '+e.message); editPickupList = []; try{ renderPickupEditor('edit'); }catch(e2){} }
-  try{
-    editPhotoData = s.photo || '';
-    const img = document.getElementById('editPhotoPreview');
-    if(s.photo){ img.src = s.photo; img.classList.add('has-img'); } else { img.src=''; img.classList.remove('has-img'); }
-  }catch(e){ problemas.push('foto: '+e.message); }
+  document.getElementById('editStudentId').value = s.id;
+  document.getElementById('editName').value = s.name;
+  document.getElementById('editNivel').value = s.nivel || 'primaria';
+  ckPopulateNivelSelect('editNivel', s.nivel || 'primaria');
+  updateNivelOptions('edit');
+  document.getElementById('editGrade').value = s.grade;
+  document.getElementById('editGroup').value = s.group;
+  document.getElementById('editCurp').value = s.curp || '';
+  document.getElementById('editBirth').value = s.birthDate || '';
+  document.getElementById('editAddress').value = s.address || '';
+  document.getElementById('editMotherName').value = s.motherName || '';
+  document.getElementById('editMotherCurp').value = s.motherCurp || '';
+  document.getElementById('editMotherPhone').value = s.motherPhone || '';
+  document.getElementById('editFatherName').value = s.fatherName || '';
+  document.getElementById('editFatherCurp').value = s.fatherCurp || '';
+  document.getElementById('editFatherPhone').value = s.fatherPhone || '';
+  document.getElementById('editEnroll').value = s.enroll || '';
+  document.getElementById('editAllergy').value = s.allergy || '';
+  editPickupList = JSON.parse(JSON.stringify(s.pickupAuthorized || []));
+  renderPickupEditor('edit');
+  editPhotoData = s.photo || '';
+  const img = document.getElementById('editPhotoPreview');
+  if(s.photo){ img.src = s.photo; img.classList.add('has-img'); } else { img.src=''; img.classList.remove('has-img'); }
   document.getElementById('editModal').classList.add('show');
-  if(problemas.length){
-    showToast('⚠️ Se abrió, pero hubo un problema con: '+problemas.join(' · ')+'. Toma captura y compártela.', 'err');
-  }
 }
 function saveEditStudent(){
   const id = document.getElementById('editStudentId').value;
@@ -13939,15 +13726,16 @@ function saveEditStudent(){
   if(!s) return;
   const name = document.getElementById('editName').value.trim();
   const curp = document.getElementById('editCurp').value.trim();
-  const sexo = document.getElementById('editSexo').value;
   const motherName = document.getElementById('editMotherName').value.trim();
   const fatherName = document.getElementById('editFatherName').value.trim();
   const enroll = document.getElementById('editEnroll').value.trim();
   const missing = [];
   if(!name) missing.push('nombre del alumno');
-  if(!sexo) missing.push('sexo del alumno');
+  if(!curp) missing.push('CURP del alumno');
+  if(!enroll) missing.push('matrícula del alumno');
+  if(!motherName && !fatherName) missing.push('nombre de la madre o del padre');
   if(missing.length){ showToast('Falta: ' + missing.join(', '), 'err'); return; }
-  if(enroll && students.some(x => x.id !== id && x.enroll && x.enroll === enroll)){
+  if(students.some(x => x.id !== id && x.enroll && x.enroll === enroll)){
     showToast('Ya existe otro alumno registrado con esa matrícula (' + enroll + ')', 'err');
     return;
   }
@@ -13957,7 +13745,6 @@ function saveEditStudent(){
   s.nivel = document.getElementById('editNivel').value;
   s.grade = document.getElementById('editGrade').value;
   s.group = document.getElementById('editGroup').value;
-  s.sexo = document.getElementById('editSexo').value;
   s.birthDate = document.getElementById('editBirth').value;
   s.address = document.getElementById('editAddress').value.trim();
   s.motherName = motherName;
@@ -13966,9 +13753,9 @@ function saveEditStudent(){
   s.fatherName = fatherName;
   s.fatherCurp = document.getElementById('editFatherCurp').value.trim();
   s.fatherPhone = document.getElementById('editFatherPhone').value.trim();
-  s.pickupAuthorized = editPickupList.filter(p=>p && (p.name||'').trim()!=='');
+  s.pickupAuthorized = editPickupList.filter(p=>p.name.trim()!=='');
   s.enroll = enroll;
-  s.folio = enroll || s.folio; // sin matrícula, se conserva el folio/QR que ya tenía
+  s.folio = enroll; // La matrícula es el identificador oficial (evita folios duplicados)
   s.allergy = document.getElementById('editAllergy').value.trim();
   s.photo = editPhotoData || null;
   saveJSON(STUDENTS_KEY, students);
@@ -14081,54 +13868,22 @@ function cleanPhoneForWhatsapp(phone){
   if(digits.length === 10) digits = '52' + digits; // asume México si son 10 dígitos sin lada de país
   return digits;
 }
-function saludoPorHora(){
-  const h = new Date().getHours();
-  if(h < 12) return 'Buenos días';
-  if(h < 19) return 'Buenas tardes';
-  return 'Buenas noches';
-}
-function tratamientoFormal(recipient){
-  const nombre = (recipient.nombre || '').trim();
-  if(recipient.tipo === 'madre') return nombre ? `Estimada ${nombre}` : 'Estimada mamá';
-  if(recipient.tipo === 'padre') return nombre ? `Estimado ${nombre}` : 'Estimado papá';
-  if(recipient.tipo === 'director') return 'Estimado(a) Director(a)';
-  return nombre ? `Estimado(a) ${nombre}` : 'Estimado(a) familiar';
-}
-function construirMensajeSalida(recipient, student, timeStr){
-  return `${tratamientoFormal(recipient)}, ${saludoPorHora().toLowerCase()}. Le informamos que ${student.name} ya salió de la escuela, a las ${timeStr}. Que tenga muy buen día.`;
-}
-let ckNotifyRecipients = [];
-let ckNotifyContext = null;
-function actualizarMensajeSalidaPorDestinatario(){
-  if(!ckNotifyContext) return;
-  const select = document.getElementById('notifyRecipientSelect');
-  const opt = select.selectedOptions[0];
-  const idx = opt ? parseInt(opt.dataset.idx, 10) : 0;
-  const recipient = ckNotifyRecipients[idx] || {};
-  document.getElementById('notifyMessage').value = construirMensajeSalida(recipient, ckNotifyContext.student, ckNotifyContext.timeStr);
-}
 function maybeOfferNotify(res){
   if(!(res.ok && res.action === 'out')) return;
   const student = res.student;
   const recipients = [];
-  if(student.motherPhone) recipients.push({ label:`Madre — ${student.motherName || 'sin nombre'} (${student.motherPhone})`, phone: student.motherPhone, nombre: student.motherName || '', tipo:'madre' });
-  if(student.fatherPhone) recipients.push({ label:`Padre — ${student.fatherName || 'sin nombre'} (${student.fatherPhone})`, phone: student.fatherPhone, nombre: student.fatherName || '', tipo:'padre' });
+  if(student.motherPhone) recipients.push({ label:`Madre — ${student.motherName || 'sin nombre'} (${student.motherPhone})`, phone: student.motherPhone });
+  if(student.fatherPhone) recipients.push({ label:`Padre — ${student.fatherName || 'sin nombre'} (${student.fatherPhone})`, phone: student.fatherPhone });
   (student.pickupAuthorized || []).forEach(p=>{
-    if(p.phone) recipients.push({ label:`${p.name || 'Persona autorizada'} (${p.phone})${p.relation ? ' · '+p.relation : ''}`, phone: p.phone, nombre: p.name || '', tipo:'autorizado' });
+    if(p.phone) recipients.push({ label:`${p.name || 'Persona autorizada'} (${p.phone})${p.relation ? ' · '+p.relation : ''}`, phone: p.phone });
   });
-  if(recipients.length === 0 && student.nivel === 'secundaria' && ckDirectorTelefono){
-    recipients.push({ label:`Director(a) — sin contacto de familia registrado (${ckDirectorTelefono})`, phone: ckDirectorTelefono, nombre:'', tipo:'director' });
-  }
-  if(recipients.length === 0){ showToast(`${student.name} no tiene teléfono de madre, padre ni tutor capturado — agrégalo en su registro para poder avisar por WhatsApp/SMS.`, 'err'); return; }
+  if(recipients.length === 0) return; // no hay ningún teléfono registrado, no se puede avisar
 
   const timeStr = new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', hour12:true});
-  ckNotifyRecipients = recipients;
-  ckNotifyContext = { student, timeStr };
   const select = document.getElementById('notifyRecipientSelect');
-  select.innerHTML = recipients.map((r,i)=>`<option value="${escapeHtml(r.phone)}" data-idx="${i}">${escapeHtml(r.label)}</option>`).join('');
-  select.onchange = actualizarMensajeSalidaPorDestinatario;
+  select.innerHTML = recipients.map(r=>`<option value="${escapeHtml(r.phone)}">${escapeHtml(r.label)}</option>`).join('');
   document.getElementById('notifyIntro').textContent = `${student.name} registró salida a las ${timeStr}. Elige a quién avisar (por ejemplo, si quien recogió fue una abuela o tía autorizada, puedes avisarle a la madre o al padre):`;
-  actualizarMensajeSalidaPorDestinatario();
+  document.getElementById('notifyMessage').value = `${student.name} ha salido de la escuela a las ${timeStr}.`;
   document.getElementById('notifyModal').classList.add('show');
 }
 function sendNotifyWhatsApp(){
@@ -14240,28 +13995,6 @@ function stopScanner(){
   const btn = document.getElementById('scanToggleBtn'); if(btn) btn.textContent = 'Activar cámara';
 }
 
-// La cámara suele quedar "congelada" cuando la app pasa a segundo plano —por ejemplo
-// al abrir WhatsApp desde el aviso de salida— y el navegador detiene el video aunque
-// el stream técnicamente siga activo. En vez de obligar a apagar y prender la cámara
-// a mano, al volver a esta pestaña se reinicia sola si el escáner estaba encendido.
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible' && scannerActive) reiniciarStreamScanner();
-});
-async function reiniciarStreamScanner(){
-  const video = document.getElementById('scanVideo');
-  if(!video) return; // no estamos en la pantalla del escáner ahora mismo
-  try{
-    if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); }
-    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = scannerStream;
-    await video.play();
-  }catch(e){
-    // Si el reinicio automático falla (por ejemplo la cámara sigue ocupada un
-    // instante), se deja tal cual: el botón "Apagar/Activar cámara" manual sigue
-    // funcionando como respaldo.
-  }
-}
-
 const scanCanvas = document.createElement('canvas');
 const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -14363,18 +14096,27 @@ function renderStats(){
   document.getElementById('statIn').textContent = inNow.length;
   document.getElementById('statToday').textContent = todayEntries.length;
   document.getElementById('statTotal').textContent = students.length;
-  // Desglose por sexo de quienes ya registraron entrada hoy (una sola vez por
-  // alumno, aunque tenga varias entradas ese día).
-  const idsHoy = new Set(todayEntries.map(a => a.studentId));
-  let niños = 0, niñas = 0;
-  idsHoy.forEach(id => {
-    const s = students.find(x => x.id === id);
-    if (!s) return;
-    if (s.sexo === 'M') niños++;
-    else if (s.sexo === 'F') niñas++;
-  });
-  const generoEl = document.getElementById('statTodayGenero');
-  if (generoEl) generoEl.textContent = (niños || niñas) ? `👦 ${niños} · 👧 ${niñas}` : '';
+
+  // Niños/Niñas hoy: total inscritos de ese sexo + porcentaje de asistencia
+  // de hoy — se compara contra el total de alumnos de ese sexo que SÍ tienen
+  // el campo "Sexo" llenado (los que no lo tienen no cuentan como ninguno).
+  const idsAsistieronHoy = new Set(todayEntries.map(a => a.studentId));
+  const actualizarChipSexo = (sexo, icono, elId, subId, palabraInscritos) => {
+    const totalSexo = students.filter(s => s.sexo === sexo);
+    const elB = document.getElementById(elId);
+    const elSub = document.getElementById(subId);
+    if (!totalSexo.length) {
+      elB.textContent = `${icono} —`;
+      elSub.textContent = 'Sin datos';
+      return;
+    }
+    const asistieron = totalSexo.filter(s => idsAsistieronHoy.has(s.id)).length;
+    const pct = Math.round((asistieron / totalSexo.length) * 100);
+    elB.textContent = `${icono} ${totalSexo.length} ${palabraInscritos}`;
+    elSub.textContent = `${pct}% hoy`;
+  };
+  actualizarChipSexo('niño', '👦', 'statNinosHoy', 'statNinosSub', 'inscritos');
+  actualizarChipSexo('niña', '👧', 'statNinasHoy', 'statNinasSub', 'inscritas');
 }
 
 function studentMatchesQuery(s, q){
@@ -14550,7 +14292,6 @@ function renderAll(){
   renderStats();
   renderEntradas();
   renderAlumnos();
-  renderAusentes();
   renderHistory();
   ckRenderClassSelector('scan');
 }
@@ -14623,12 +14364,6 @@ function mondayOf(date){
   d.setHours(0,0,0,0);
   return d;
 }
-function fillMonthlyGradoOptions(){
-  const nivel = document.getElementById('monthlyNivelFilter').value;
-  const sel = document.getElementById('monthlyGradoFilter');
-  const grados = nivel ? CK_GRADOS_POR_NIVEL[nivel] : ['1°','2°','3°','4°','5°','6°'];
-  sel.innerHTML = '<option value="">Todos</option>' + grados.map(g=>`<option value="${g}">${g}</option>`).join('');
-}
 function generateWeeksAssignedToMonth(cycleStartStr, targetYear, targetMonthIndex){
   let weekStart = mondayOf(new Date(cycleStartStr+'T00:00:00'));
   const weeks = [];
@@ -14642,9 +14377,7 @@ function generateWeeksAssignedToMonth(cycleStartStr, targetYear, targetMonthInde
     days.forEach(dt=>{ const key = dt.getFullYear()+'-'+dt.getMonth(); counts[key]=(counts[key]||0)+1; });
     let majorKey = Object.keys(counts).reduce((a,b)=> counts[a]>=counts[b] ? a : b);
     const [my, mm] = majorKey.split('-').map(Number);
-    // weekNum es continuo desde el inicio de ciclo (semana 1, 2, 3...),
-    // NO se reinicia en cada mes exportado.
-    if(my===targetYear && mm===targetMonthIndex) weeks.push({ days, weekNum: i+1 });
+    if(my===targetYear && mm===targetMonthIndex) weeks.push(days);
     if(my > targetYear || (my===targetYear && mm > targetMonthIndex)) break;
     weekStart = new Date(weekStart); weekStart.setDate(weekStart.getDate()+7);
   }
@@ -14653,45 +14386,40 @@ function generateWeeksAssignedToMonth(cycleStartStr, targetYear, targetMonthInde
 const MONTH_NAMES_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 const WEEKDAY_ABBR = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
 
-async function exportMonthlyList(incluirPadres){
+async function exportMonthlyList(){
   if(students.length===0){ showToast('No hay alumnos registrados todavía', 'err'); return; }
   const monthVal = document.getElementById('monthPicker').value;
   const cycleStart = document.getElementById('cycleStartInput').value || '2026-08-01';
-  const nivelFiltro = document.getElementById('monthlyNivelFilter').value;
-  const gradoFiltro = document.getElementById('monthlyGradoFilter').value;
   if(!monthVal){ showToast('Selecciona un mes', 'err'); return; }
   const [yearStr, monStr] = monthVal.split('-');
   const year = parseInt(yearStr,10);
   const monthIdx = parseInt(monStr,10)-1;
 
-  const weeksInfo = generateWeeksAssignedToMonth(cycleStart, year, monthIdx);
-  if(weeksInfo.length===0){ showToast('No se encontraron semanas hábiles para ese mes con el ciclo indicado', 'err'); return; }
-  const weeks = weeksInfo.map(w=>w.days);
+  const weeks = generateWeeksAssignedToMonth(cycleStart, year, monthIdx);
+  if(weeks.length===0){ showToast('No se encontraron semanas hábiles para ese mes con el ciclo indicado', 'err'); return; }
   const allDays = weeks.flat();
   const todayIso = todayStr();
-  const fixedHeaders = incluirPadres ? ['MATRÍCULA','ALUMNO','MADRE/PADRE','GRADO/GRUPO'] : ['MATRÍCULA','ALUMNO','GRADO/GRUPO'];
-  const totalCols = fixedHeaders.length + allDays.length + 1; // +1 columna Total
+  const fixedHeaders = ['MATRÍCULA','ALUMNO','MADRE/PADRE','GRADO/GRUPO'];
+  const totalCols = fixedHeaders.length + allDays.length;
   const schoolName = (loadJSON(SCHOOL_KEY,'') || '').toUpperCase();
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(MONTH_NAMES_ES[monthIdx].slice(0,28));
 
   // Fila título
-  const nivelTxt = nivelFiltro ? ' — ' + ckNivelLabel(nivelFiltro) : '';
-  const gradoTxt = gradoFiltro ? ' ' + gradoFiltro : '';
-  const titleRow = ws.addRow([`${schoolName ? schoolName+' — ' : ''}LISTA DE ASISTENCIA MENSUAL — ${MONTH_NAMES_ES[monthIdx]} ${year}${nivelTxt}${gradoTxt}`]);
+  const titleRow = ws.addRow([`${schoolName ? schoolName+' — ' : ''}LISTA DE ASISTENCIA MENSUAL — ${MONTH_NAMES_ES[monthIdx]} ${year}`]);
   ws.mergeCells(1,1,1,totalCols);
   titleRow.getCell(1).font = {bold:true, size:13};
   titleRow.getCell(1).alignment = {horizontal:'center', vertical:'middle'};
   titleRow.height = 24;
 
-  // Fila de semanas (numeración continua desde el inicio de ciclo)
+  // Fila de semanas
   const weekRowValues = new Array(totalCols).fill('');
   let cursor = fixedHeaders.length;
-  weeksInfo.forEach(w=>{ weekRowValues[cursor] = `SEMANA ${w.weekNum}`; cursor += 5; });
+  weeks.forEach((w,wi)=>{ weekRowValues[cursor] = `SEMANA ${wi+1}`; cursor += 5; });
   const weekRow = ws.addRow(weekRowValues);
   cursor = fixedHeaders.length;
-  weeksInfo.forEach(()=>{ ws.mergeCells(2, cursor+1, 2, cursor+5); cursor += 5; });
+  weeks.forEach(()=>{ ws.mergeCells(2, cursor+1, 2, cursor+5); cursor += 5; });
   weekRow.eachCell({includeEmpty:true}, c=>{
     c.font = {bold:true, color:{argb:'FF1E2A38'}};
     c.alignment = {horizontal:'center', vertical:'middle'};
@@ -14700,54 +14428,43 @@ async function exportMonthlyList(incluirPadres){
   weekRow.height = 18;
 
   // Fila de encabezados de fecha
-  const headerValues = [...fixedHeaders, ...allDays.map(d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${WEEKDAY_ABBR[d.getDay()]}`), 'TOTAL'];
+  const headerValues = [...fixedHeaders, ...allDays.map(d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)} ${WEEKDAY_ABBR[d.getDay()]}`)];
   const headerRow = ws.addRow(headerValues);
   styleHeaderRow(headerRow);
   headerRow.height = 26;
 
-  // Filas de alumnos (filtradas por nivel/grado)
-  const sortedStudents = [...students]
-    .filter(s => !nivelFiltro || s.nivel === nivelFiltro)
-    .filter(s => !gradoFiltro || s.grade === gradoFiltro)
-    .sort((a,b)=> (a.grade+a.group).localeCompare(b.grade+b.group) || a.name.localeCompare(b.name));
-
-  if(sortedStudents.length===0){ showToast('No hay alumnos con ese nivel/grado', 'err'); return; }
+  // Filas de alumnos
+  const sortedStudents = [...students].sort((a,b)=>
+    (a.grade+a.group).localeCompare(b.grade+b.group) || a.name.localeCompare(b.name));
 
   sortedStudents.forEach(s=>{
-    const rowVals = incluirPadres ? [s.folio, s.name, primaryContactName(s), `${s.grade} ${s.group}`] : [s.folio, s.name, `${s.grade} ${s.group}`];
-    let totalAsistencias = 0;
+    const rowVals = [s.folio, s.name, primaryContactName(s), `${s.grade} ${s.group}`];
     allDays.forEach(d=>{
       const dStr = dateToStr(d);
       if(dStr > todayIso){ rowVals.push(''); return; }
       const entry = attendance.find(a => a.studentId===s.id && a.date===dStr && a.checkin);
-      if(entry) totalAsistencias++;
       rowVals.push(entry ? 'A' : 'F');
     });
-    rowVals.push(totalAsistencias);
     const row = ws.addRow(rowVals);
     row.eachCell({includeEmpty:true}, (cell, colNum)=>{
       cell.alignment = {vertical:'middle', horizontal: colNum>fixedHeaders.length ? 'center' : 'left'};
-      if(colNum>fixedHeaders.length && colNum<=fixedHeaders.length+allDays.length){
+      if(colNum>fixedHeaders.length){
         if(cell.value==='F') cell.font = {color:{argb:'FFC94734'}, bold:true};
         else if(cell.value==='A') cell.font = {color:{argb:'FF447A5C'}, bold:true};
       }
-      if(colNum===totalCols) cell.font = {bold:true};
     });
   });
 
   applyAllBorders(ws, ws.rowCount, totalCols);
 
-  let col = 1;
-  ws.getColumn(col++).width = 8;
-  ws.getColumn(col++).width = 24;
-  if(incluirPadres) ws.getColumn(col++).width = 22;
-  ws.getColumn(col++).width = 12;
+  ws.getColumn(1).width = 8;
+  ws.getColumn(2).width = 24;
+  ws.getColumn(3).width = 22;
+  ws.getColumn(4).width = 12;
   for(let i=0;i<allDays.length;i++) ws.getColumn(fixedHeaders.length+1+i).width = 8;
-  ws.getColumn(totalCols).width = 10;
-  ws.views = [{state:'frozen', xSplit:fixedHeaders.length, ySplit:3}];
+  ws.views = [{state:'frozen', xSplit:4, ySplit:3}];
 
-  const sufijo = incluirPadres ? 'con_padres' : 'solo_alumno';
-  await downloadWorkbook(wb, `lista_asistencia_${MONTH_NAMES_ES[monthIdx].toLowerCase()}_${year}_${sufijo}_${schoolSlug()}.xlsx`);
+  await downloadWorkbook(wb, `lista_asistencia_${MONTH_NAMES_ES[monthIdx].toLowerCase()}_${year}_${schoolSlug()}.xlsx`);
   showToast(`Lista de ${MONTH_NAMES_ES[monthIdx]} descargada (${weeks.length} semanas)`, 'ok');
 }
 

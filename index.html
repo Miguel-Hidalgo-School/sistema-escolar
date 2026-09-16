@@ -255,7 +255,7 @@ deleteConfirmBusy: false,
 };
 function emptyExtra() {
 return {
-foto:'', curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'',
+foto:'', curp:'', matricula:'', turno:'', grupo:'', lenguaIndigena:'', asistencias:'', folio:'', fechaNacimiento:'', sexo:'',
 madreNombre:'', madreCurp:'', madreTelefono:'', madreDireccion:'',
 padreNombre:'', padreCurp:'', padreTelefono:'', padreDireccion:'',
 tutorNombre:'', tutorCurp:'', tutorTelefono:'', tutorDireccion:''
@@ -1457,7 +1457,7 @@ const snapshot = {
 nivel: 'primaria',
 name: s.name || '', grade: s.grade || '', grupo: s.grupo || '', curp: s.curp || '',
 matricula: s.matricula || '', turno: s.turno || '', folio: s.folio || '',
-asistencias: s.asistencias || '', lenguaIndigena: s.lenguaIndigena || '',
+asistencias: s.asistencias || '', lenguaIndigena: s.lenguaIndigena || '', sexo: s.sexo || '',
 fechaNacimiento: s.fechaNacimiento || '',
 grades: s.grades || {}, observaciones: s.observaciones || {},
 schoolInfo: state.schoolInfo,
@@ -2072,6 +2072,11 @@ ${GRADOS.map(g => `<option value="${g}" ${s.grade===g?'selected':''}>${g}</optio
 <input type="date" value="${s.fechaNacimiento||''}" oninput="updateStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
 </div>
 <input placeholder="Lengua indígena" value="${s.lenguaIndigena||''}" oninput="updateStudentFieldLocal('${s.id}','lenguaIndigena',this.value)" />
+<select onchange="updateStudentFieldLocal('${s.id}','sexo',this.value)" style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;background:#fff;">
+<option value="" ${!s.sexo?'selected':''}>Sexo...</option>
+<option value="niño" ${s.sexo==='niño'?'selected':''}>Niño</option>
+<option value="niña" ${s.sexo==='niña'?'selected':''}>Niña</option>
+</select>
 <input placeholder="Asistencias" value="${s.asistencias||''}" oninput="updateStudentFieldLocal('${s.id}','asistencias',this.value)" />
 <input placeholder="Folio" value="${s.folio||''}" oninput="updateStudentFieldLocal('${s.id}','folio',this.value)" class="full" />
 <p class="section-title">👩 Datos de la madre</p>
@@ -2422,6 +2427,11 @@ Subir foto del alumno
 <input class="full" placeholder="Nombre del alumno" value="${s.name}" oninput="updateSecStudentFieldLocal('${s.id}','name',this.value)" />
 <input placeholder="CURP" value="${s.curp||''}" oninput="updateSecStudentFieldLocal('${s.id}','curp',this.value)" />
 <input placeholder="Matrícula" value="${s.matricula||''}" oninput="updateSecStudentFieldLocal('${s.id}','matricula',this.value)" />
+<select onchange="updateSecStudentFieldLocal('${s.id}','sexo',this.value)" style="width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;font-size:0.85em;margin-bottom:12px;background:#fff;">
+<option value="" ${!s.sexo?'selected':''}>Sexo...</option>
+<option value="niño" ${s.sexo==='niño'?'selected':''}>Niño</option>
+<option value="niña" ${s.sexo==='niña'?'selected':''}>Niña</option>
+</select>
 <div class="full">
 <label style="font-size:9px;color:#9ca3af;">Fecha de nacimiento (opcional)</label>
 <input type="date" value="${s.fechaNacimiento||''}" oninput="updateSecStudentFieldLocal('${s.id}','fechaNacimiento',this.value)" style="width:100%;" />
