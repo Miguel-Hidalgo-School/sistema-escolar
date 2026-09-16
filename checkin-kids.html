@@ -490,6 +490,14 @@
       </div>
       <div class="field"><label>Grado</label><select id="editGrade"></select></div>
       <div class="field"><label>Grupo</label><select id="editGroup"></select></div>
+      <div class="field">
+        <label>Sexo</label>
+        <select id="editSexo">
+          <option value="">Selecciona...</option>
+          <option value="niño">Niño</option>
+          <option value="niña">Niña</option>
+        </select>
+      </div>
       <div class="field"><label>Matrícula <span class="req">*</span></label><input id="editEnroll"></div>
     </div>
     <div class="grid3">
@@ -13292,6 +13300,7 @@ function ckToFirebaseStudent(s){
     tutorTelefono: (s.pickupAuthorized && s.pickupAuthorized[0] && s.pickupAuthorized[0].phone) || '',
     pickupAuthorized: s.pickupAuthorized || [],
     allergy: s.allergy || '', folio: s.folio || '', token: s.token || '', altCodes: s.altCodes || [],
+    sexo: s.sexo || '',
     createdAt: s.createdAt || new Date().toISOString(),
     grades: s.grades || {}, observaciones: s.observaciones || {}
   };
@@ -13702,6 +13711,7 @@ function openEditModal(studentId){
   updateNivelOptions('edit');
   document.getElementById('editGrade').value = s.grade;
   document.getElementById('editGroup').value = s.group;
+  document.getElementById('editSexo').value = s.sexo || '';
   document.getElementById('editCurp').value = s.curp || '';
   document.getElementById('editBirth').value = s.birthDate || '';
   document.getElementById('editAddress').value = s.address || '';
@@ -13745,6 +13755,7 @@ function saveEditStudent(){
   s.nivel = document.getElementById('editNivel').value;
   s.grade = document.getElementById('editGrade').value;
   s.group = document.getElementById('editGroup').value;
+  s.sexo = document.getElementById('editSexo').value;
   s.birthDate = document.getElementById('editBirth').value;
   s.address = document.getElementById('editAddress').value.trim();
   s.motherName = motherName;
