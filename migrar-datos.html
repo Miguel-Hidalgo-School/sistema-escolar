@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Migración segura: Sistema Escolar → usuarios/tu-uid</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 16px; background:#f6f7f9; color:#1a1a1a; }
+  h1 { font-size: 20px; }
+  .card { background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .warn { background:#fff8e1; border:1px solid #f0c040; padding:12px; border-radius:8px; margin-bottom:16px; font-size:14px;}
+  input { width:100%; padding:10px; margin:6px 0; border:1px solid #ccc; border-radius:8px; box-sizing:border-box; }
+  button { padding:10px 16px; border:none; border-radius:8px; background:#2563eb; color:#fff; font-weight:600; cursor:pointer; margin:4px 4px 4px 0; }
+  button:disabled { background:#aaa; }
+  button.danger { background:#059669; }
+  table { width:100%; border-collapse: collapse; font-size:14px; }
+  td, th { padding:6px 4px; border-bottom:1px solid #eee; text-align:left; }
+  .ok { color:#059669; font-weight:600; }
+  .pending { color:#b45309; font-weight:600; }
+  .empty { color:#999; }
+  #log { font-family: monospace; font-size:12px; background:#0f172a; color:#d1fae5; padding:10px; border-radius:8px; max-height:240px; overflow-y:auto; white-space:pre-wrap; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+
+<h1>🔧 Migración segura de datos</h1>
+<div class="warn">
+  Esta herramienta <b>solo copia</b> datos de <code>Sistema Escolar</code> hacia <code>usuarios/tu-uid</code>.
+  <br>• Nunca borra nada del origen.<br>• Nunca sobrescribe un destino que ya tenga datos.<br>
+  Puedes revisar todo antes de copiar.
+</div>
+
+<div class="card" id="loginCard">
+  <h3>1. Inicia sesión como administrador</h3>
+  <input type="email" id="email" placeholder="Correo (ej. educacion@chavarria.edu.com)">
+  <input type="password" id="password" placeholder="Contraseña">
+  <button onclick="login()">Entrar</button>
+  <div id="loginMsg" style="color:#dc2626; font-size:13px;"></div>
+</div>
+
+<div class="card hidden" id="scanCard">
+  <h3>2. Escanear datos</h3>
+  <p>Sesión: <b id="userEmail"></b><br>Tu UID: <code id="userUid"></code><br>Destino calculado: <code id="destinoPath"></code></p>
+  <button onclick="scan()">🔍 Escanear Sistema Escolar</button>
+  <table id="resultTable" class="hidden">
+    <thead><tr><th>Carpeta</th><th>Origen (Sistema Escolar)</th><th>Destino (usuarios/tu-uid)</th></tr></thead>
+    <tbody id="resultBody"></tbody>
+  </table>
+</div>
+
+<div class="card hidden" id="copyCard">
+  <h3>3. Copiar lo pendiente</h3>
+  <p>Se copiará solo lo que tiene datos en el origen y está vacío en el destino. Nada existente se sobrescribe.</p>
+  <button class="danger" id="copyBtn" onclick="copyAll()">✅ Copiar todo lo pendiente</button>
+</div>
+
+<div class="card">
+  <h3>Registro</h3>
+  <div id="log">Esperando inicio de sesión…</div>
+</div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db = firebase.database();
+
+const KEYS = [
+  'students', 'schoolInfo', 'secStudents', 'secSchoolInfo',
+  'formativos', 'tareas', 'disciplina',
+  'sumativaConfig', 'sumativaCalif', 'sumativaPeriodos',
+  'checkinAttendance', 'checkinStudents', 'diasAsistenciaExcluidos',
+  'mural', 'muralConfig', 'banoLog', 'contextoGrupoIA',
+  'horarioSecundaria', 'bitacora'
+];
+
+let destinoBase = null;
+let scanResults = {};
+
+function log(msg) {
+  const el = document.getElementById('log');
+  const time = new Date().toLocaleTimeString();
+  el.textContent += `\n[${time}] ${msg}`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function login() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  document.getElementById('loginMsg').textContent = '';
+  try {
+    const cred = await auth.signInWithEmailAndPassword(email, password);
+    const user = cred.user;
+    document.getElementById('userEmail').textContent = user.email;
+    document.getElementById('userUid').textContent = user.uid;
+
+    // Igual que dbBase() en tu app: usa perfiles/{uid}/espacioUid si existe, si no, tu propio uid
+    let espacio = user.uid;
+    try {
+      const perfilSnap = await db.ref('perfiles/' + user.uid + '/espacioUid').once('value');
+      if (perfilSnap.exists() && perfilSnap.val()) espacio = perfilSnap.val();
+    } catch (e) { /* sin perfil registrado, se usa el uid propio */ }
+
+    destinoBase = 'usuarios/' + espacio;
+    document.getElementById('destinoPath').textContent = destinoBase;
+    document.getElementById('loginCard').classList.add('hidden');
+    document.getElementById('scanCard').classList.remove('hidden');
+    log(`Sesión iniciada como ${user.email}. Destino: ${destinoBase}`);
+  } catch (e) {
+    document.getElementById('loginMsg').textContent = 'Error: ' + e.message;
+    log('Error de inicio de sesión: ' + e.message);
+  }
+}
+
+async function scan() {
+  log('Escaneando "Sistema Escolar" y comparando contra el destino…');
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = '';
+  scanResults = {};
+
+  for (const key of KEYS) {
+    const [origSnap, destSnap] = await Promise.all([
+      db.ref('Sistema Escolar/' + key).once('value'),
+      db.ref(destinoBase + '/' + key).once('value')
+    ]);
+    const origExists = origSnap.exists();
+    const destExists = destSnap.exists();
+    scanResults[key] = { origExists, destExists, data: origSnap.val() };
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${key}</td>
+      <td class="${origExists ? 'ok' : 'empty'}">${origExists ? '✅ tiene datos' : '— vacío'}</td>
+      <td class="${destExists ? 'ok' : (origExists ? 'pending' : 'empty')}">${destExists ? '✅ ya existe (no se toca)' : (origExists ? '⏳ pendiente de copiar' : '— vacío')}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  document.getElementById('resultTable').classList.remove('hidden');
+  document.getElementById('copyCard').classList.remove('hidden');
+  log('Escaneo completo. Revisa la tabla antes de copiar.');
+}
+
+async function copyAll() {
+  const btn = document.getElementById('copyBtn');
+  btn.disabled = true;
+  let copiados = 0, saltados = 0;
+
+  for (const key of KEYS) {
+    const r = scanResults[key];
+    if (!r || !r.origExists) { continue; }
+    if (r.destExists) { log(`Saltado "${key}": el destino ya tiene datos, no se toca.`); saltados++; continue; }
+    try {
+      await db.ref(destinoBase + '/' + key).set(r.data);
+      log(`✅ Copiado "${key}" → ${destinoBase}/${key}`);
+      copiados++;
+    } catch (e) {
+      log(`❌ Error copiando "${key}": ${e.message}`);
+    }
+  }
+  log(`Listo. Copiados: ${copiados}. Saltados (ya existían): ${saltados}.`);
+  log('Nada se borró del origen "Sistema Escolar" — sigue ahí como respaldo.');
+  btn.disabled = false;
+  btn.textContent = '✅ Copiar todo lo pendiente (de nuevo)';
+}
+</script>
+</body>
+</html>
