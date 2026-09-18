@@ -622,7 +622,8 @@
         // se abrio bitacora.html directo, sin pasar por el Sistema Escolar), se usa el UID
         // de la cuenta como respaldo, igual que antes de este cambio.
         function obtenerEspacioId() {
-            if (datosPuente && datosPuente.espacioId) return datosPuente.espacioId;
+            // Cada usuario accede SOLO a su propia bitácora privada (su UID)
+            // No usar DB_ROOT compartido por seguridad en modelo SaaS
             const user = bitUsuarioActual || bitAuth.currentUser;
             return user ? user.uid : 'sin_cuenta';
         }
