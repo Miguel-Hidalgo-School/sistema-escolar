@@ -10382,7 +10382,7 @@ const PB_FIREBASE_CONFIG = {
   messagingSenderId: "234198294318",
   appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
-const PB_DB_ROOT_ADMIN = 'Sistema Escolar';
+const PB_DB_ROOT_ADMIN = 'usuarios'; // SaaS: cada usuario su carpeta privada
 const OUT_ALERT_MINUTES = 12; // a partir de aquí se marca como "tardó" en la UI
 
 firebase.initializeApp(PB_FIREBASE_CONFIG);
@@ -10433,7 +10433,7 @@ pbAuth.onAuthStateChanged(async user => {
   scanFilter.nivel = pbAccesoSecundaria ? 'secundaria' : 'primaria';
   histFilter.nivel = scanFilter.nivel;
 
-  const base = isAdmin ? PB_DB_ROOT_ADMIN : ('usuarios/' + user.uid);
+  const base = 'usuarios/' + user.uid; // SaaS: Todos usan su propio UID, incluyendo admin
   priStudentsRef = pbAccesoPrimaria ? pbDb.ref(base + '/students') : null;
   secStudentsRef = pbAccesoSecundaria ? pbDb.ref(base + '/secStudents') : null;
   banoLogRef = pbDb.ref(base + '/banoLog');

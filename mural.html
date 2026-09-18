@@ -108,7 +108,7 @@ const db = firebase.database();
 // Si el link no trae ese dato (por ejemplo, uno que ya compartiste antes de este
 // cambio), se usa 'Sistema Escolar' como respaldo, para que los links que ya
 // mandaste a los padres de familia sigan funcionando exactamente igual.
-const ESPACIO_MURAL = new URLSearchParams(window.location.search).get('escuela') || 'Sistema Escolar';
+const ESPACIO_MURAL = new URLSearchParams(window.location.search).get('escuela') || currentUid; // SaaS: usa UID del usuario
 const GRADOS_PRI = ['1°','2°','3°','4°','5°','6°'];
 const GRADOS_SEC = ['1°','2°','3°'];
 const GRUPOS_PRI = ['A','B'];
