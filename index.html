@@ -313,10 +313,9 @@ setTimeout(()=>{ box.innerHTML=''; }, 2600);
 //  - Cada cuenta nueva creada desde "Usuarios" usa su propia carpeta
 //    "usuarios/<uid>/...", que solo esa persona (y el administrador) pueden ver.
 function dbBase() {
-    // Modelo SaaS: cada usuario (incluyendo admin) tiene su propio espacio privado
-    // No hay carpeta compartida DB_ROOT — garantiza privacidad total
-    const espacio = (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
-    return 'usuarios/' + espacio;
+if (state.isAdmin) return DB_ROOT;
+const espacio = (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
+return 'usuarios/' + espacio;
 }
 function bindRefs() {
 const base = dbBase();
@@ -1372,7 +1371,7 @@ tutorNombre: s.tutorNombre || ''
 });
 const puente = {
 generadoEn: Date.now(),
-espacioId: currentUid,
+espacioId: DB_ROOT,
 Primaria: {
 escuela: si.nombre || '',
 cct: si.cct || '',
