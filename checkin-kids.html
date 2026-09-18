@@ -13260,7 +13260,7 @@ const CK_FIREBASE_CONFIG = {
   messagingSenderId: "234198294318",
   appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
-const CK_DB_ROOT_ADMIN = 'usuarios'; // SaaS: cada usuario su carpeta privada
+const CK_DB_ROOT_ADMIN = 'Sistema Escolar';
 firebase.initializeApp(CK_FIREBASE_CONFIG);
 const ckAuth = firebase.auth();
 const ckDb = firebase.database();
@@ -13268,7 +13268,7 @@ let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
 let ckCheckinStudentsRef = null; // lista propia, solo para cuentas SOLO CheckIn Kids
 let ckSyncReady = false;
 function ckDbBase(uid, isAdmin) {
-  return 'usuarios/' + uid; // SaaS: Todos usan su propio UID
+  return isAdmin ? CK_DB_ROOT_ADMIN : ('usuarios/' + uid);
 }
 function ckBindRefs(base) {
   if (ckModoSoloCheckin) {
