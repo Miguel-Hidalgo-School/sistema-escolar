@@ -204,6 +204,17 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del alumno (a) 2 (opcional): <span class="font-normal normal-case text-slate-400">deja en blanco si solo hay un alumno involucrado</span></label>
+                    <input type="text" id="inputAlumno2" list="listaAlumnosDatalist" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" oninput="convertirMayusculas(this); autocompletarTutor2()" onchange="autocompletarTutor2()">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nombre del padre, madre de familia o tutor 2:</label>
+                    <input type="text" id="inputTutor2" class="w-full p-2 border border-slate-300 rounded text-sm bg-white" placeholder="EJ. JUAN PÉREZ GÓMEZ (se autocompleta, puedes cambiarlo)" oninput="convertirMayusculas(this)">
+                </div>
+            </div>
+
             <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">Asunto / Protocolo de Violencia:</label>
                 <select id="inputAsunto" class="w-full p-2 border border-slate-300 rounded text-sm bg-white font-medium text-slate-800">
@@ -295,9 +306,15 @@
                     <td class="border border-black p-1.5 w-3/5"><strong>Nombre del alumno (a):</strong> <span id="viewAlumno"></span></td>
                     <td class="border border-black p-1.5 w-2/5"><strong>Grado y grupo:</strong> <span id="viewGrado"></span></td>
                 </tr>
+                <tr id="rowAlumno2" class="hidden">
+                    <td colspan="2" class="border border-black p-1.5"><strong>Nombre del alumno (a) 2:</strong> <span id="viewAlumno2"></span></td>
+                </tr>
                 <tr>
                     <td class="border border-black p-1.5"><strong>Nombre del padre, madre de familia o tutor:</strong> <span id="viewTutor"></span></td>
                     <td class="border border-black p-1.5"><strong>Fecha:</strong> <span id="viewFecha"></span></td>
+                </tr>
+                <tr id="rowTutor2" class="hidden">
+                    <td colspan="2" class="border border-black p-1.5"><strong>Nombre del padre, madre de familia o tutor 2:</strong> <span id="viewTutor2"></span></td>
                 </tr>
                 <tr>
                     <td colspan="2" class="border border-black p-1.5 bg-slate-50"><strong>Asunto / Protocolo aplicado:</strong> <span id="viewAsunto" class="font-bold text-slate-900"></span></td>
@@ -337,13 +354,17 @@
             </div>
 
             <div class="border border-black p-2 leading-snug">
-                <p><strong>Manifestación de conformidad:</strong> Yo <span id="confTutor" class="underline font-semibold">[NOMBRE DEL TUTOR]</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.</p>
+                <p id="parrafoConformidad"><strong>Manifestación de conformidad:</strong> Yo <span id="confTutor" class="underline font-semibold">[NOMBRE DEL TUTOR]</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.</p>
             </div>
 
-            <div class="grid grid-cols-3 gap-6 pt-10 text-center text-[10px]">
+            <div class="grid grid-cols-3 gap-6 pt-10 text-center text-[10px]" id="gridFirmas">
                 <div class="border-t border-black pt-1 px-2">
                     <span id="firmTutor" class="font-bold block uppercase text-slate-900">[NOMBRE DEL TUTOR]</span>
                     <span class="text-slate-600">Nombre y firma del padre, madre o tutor</span>
+                </div>
+                <div class="border-t border-black pt-1 px-2 hidden" id="bloqueFirmaTutor2">
+                    <span id="firmTutor2" class="font-bold block uppercase text-slate-900"></span>
+                    <span class="text-slate-600">Nombre y firma del padre, madre o tutor (2)</span>
                 </div>
                 <div class="border-t border-black pt-1 px-2">
                     <span id="firmDocente" class="font-bold block uppercase text-slate-900">LIC. AARÓN CHAVARRÍA</span>
@@ -871,6 +892,19 @@
             }
         }
 
+        function autocompletarTutor2() {
+            const nombre = document.getElementById('inputAlumno2').value.trim().toUpperCase();
+            if (!nombre) return;
+            // El segundo alumno puede ser de un grado/grupo distinto al principal
+            // (ej. dos alumnos de diferente grupo involucrados en el mismo incidente),
+            // así que se busca en todo el nivel, no solo en el grado/grupo seleccionado.
+            const alumno = alumnosDelNivel().find(a => (a.name || '').toUpperCase() === nombre);
+            if (alumno) {
+                const tutor = alumno.madreNombre || alumno.padreNombre || alumno.tutorNombre || '';
+                if (tutor) document.getElementById('inputTutor2').value = tutor.toUpperCase();
+            }
+        }
+
         function cambiarNivel(nivel) {
             guardarPersonalEnMemoria();
             nivelActual = nivel;
@@ -1037,6 +1071,7 @@
             const grupoSel = document.getElementById('inputGrupoSel').value;
             const esMultigrado = gradoSel === 'MULTIGRADO';
             const folio = await generarFolio(cicloActual);
+            const alumno2Val = document.getElementById('inputAlumno2').value.toUpperCase().trim();
             const datos = {
                 id: Date.now(),
                 nivel: nivelActual,
@@ -1044,6 +1079,8 @@
                 cct: document.getElementById('configCCT').value.toUpperCase(),
                 alumno: document.getElementById('inputAlumno').value.toUpperCase() || (esMultigrado ? 'SIN INCIDENCIAS' : 'SIN NOMBRE'),
                 tutor: document.getElementById('inputTutor').value.toUpperCase() || 'NO ESPECIFICADO',
+                alumno2: alumno2Val || '',
+                tutor2: document.getElementById('inputTutor2').value.toUpperCase().trim(),
                 docente: document.getElementById('configDocente').value.toUpperCase(),
                 director: document.getElementById('configDirector').value.toUpperCase(),
                 turno: document.getElementById('configTurno').value.toUpperCase(),
@@ -1086,11 +1123,33 @@
             document.getElementById('viewIntervencion').innerText = datos.intervencion;
             document.getElementById('viewFalta').innerText = datos.falta;
             document.getElementById('viewAcciones').innerText = datos.acciones;
-            
-            document.getElementById('confTutor').innerText = datos.tutor;
+
+            const hayAlumno2 = !!datos.tutor2;
+
+            document.getElementById('rowAlumno2').classList.toggle('hidden', !hayAlumno2);
+            document.getElementById('rowTutor2').classList.toggle('hidden', !hayAlumno2);
+            if (hayAlumno2) {
+                document.getElementById('viewAlumno2').innerText = datos.alumno2;
+                document.getElementById('viewTutor2').innerText = datos.tutor2;
+            }
+
             document.getElementById('firmTutor').innerText = datos.tutor;
             document.getElementById('firmDocente').innerText = datos.docente;
             document.getElementById('firmDirector').innerText = datos.director;
+
+            const gridFirmas = document.getElementById('gridFirmas');
+            const bloqueFirmaTutor2 = document.getElementById('bloqueFirmaTutor2');
+            const parrafoConformidad = document.getElementById('parrafoConformidad');
+            if (hayAlumno2) {
+                document.getElementById('firmTutor2').innerText = datos.tutor2;
+                bloqueFirmaTutor2.classList.remove('hidden');
+                gridFirmas.className = 'grid grid-cols-4 gap-3 pt-10 text-center text-[10px]';
+                parrafoConformidad.innerHTML = '<strong>Manifestación de conformidad:</strong> Nosotros <span id="confTutor" class="underline font-semibold">' + datos.tutor + '</span> y <span id="confTutor2" class="underline font-semibold">' + datos.tutor2 + '</span>, madres, padres, tutores (as) de los (las) alumnos (as), estamos conformes con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se nos ha informado sobre las acciones realizadas para su oportuna atención.';
+            } else {
+                bloqueFirmaTutor2.classList.add('hidden');
+                gridFirmas.className = 'grid grid-cols-3 gap-6 pt-10 text-center text-[10px]';
+                parrafoConformidad.innerHTML = '<strong>Manifestación de conformidad:</strong> Yo <span id="confTutor" class="underline font-semibold">' + datos.tutor + '</span>, madre, padre, tutor (a) del (la) alumno (a), estoy conforme con la atención brindada por parte de la autoridad escolar en atención a los hechos presentados, toda vez que se me ha informado sobre las acciones realizadas para su oportuna atención.';
+            }
 
             document.getElementById('seccionFormulario').classList.add('hidden');
             document.getElementById('seccionHistorial').classList.add('hidden');
