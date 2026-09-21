@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arreglar bitácora</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 500px; margin: 0 auto; padding: 16px; background:#f6f7f9; color:#1a1a1a; }
+  h1 { font-size: 20px; }
+  .card { background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  input { width:100%; padding:12px; margin:6px 0; border:1px solid #ccc; border-radius:8px; box-sizing:border-box; font-size:16px; }
+  button { width:100%; padding:14px; border:none; border-radius:8px; background:#059669; color:#fff; font-weight:600; cursor:pointer; margin:8px 0; font-size:16px; }
+  button:disabled { background:#aaa; }
+  #log { font-family: monospace; font-size:13px; background:#0f172a; color:#d1fae5; padding:12px; border-radius:8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+
+<h1>🩹 Arreglar mi bitácora</h1>
+<div class="card">
+  <p>Esto copia tu bitácora de <code>Sistema Escolar</code> al único lugar donde <code>bitacora.html</code> la busca. No borra nada, no toca nada más.</p>
+  <input type="email" id="email" placeholder="Correo (educacion@chavarria.edu.com)">
+  <input type="password" id="password" placeholder="Contraseña">
+  <button onclick="arreglar()">✅ Arreglar mi bitácora</button>
+</div>
+
+<div class="card">
+  <div id="log">Esperando…</div>
+</div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db = firebase.database();
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent += '\n[' + new Date().toLocaleTimeString() + '] ' + msg;
+}
+
+async function arreglar() {
+  const btn = document.querySelector('button');
+  btn.disabled = true;
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    log('Iniciando sesión…');
+    const cred = await auth.signInWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+    log('Sesión iniciada como ' + cred.user.email);
+    log('Tu UID: ' + uid);
+
+    log('Buscando bitácora en "Sistema Escolar"…');
+    const origSnap = await db.ref('Sistema Escolar/bitacora').once('value');
+    if (!origSnap.exists()) {
+      log('❌ No se encontró bitácora en "Sistema Escolar". Nada que copiar.');
+      btn.disabled = false;
+      return;
+    }
+    log('✅ Encontrada, tiene datos.');
+
+    log('Revisando si ya existe algo en el destino (' + uid + '/bitacora)…');
+    const destSnap = await db.ref(uid + '/bitacora').once('value');
+    if (destSnap.exists()) {
+      log('⚠️ Ya hay datos en ese destino — no se sobrescribe nada, por seguridad.');
+      log('Si de verdad quieres reemplazarlos, avísale a Claude para un paso extra.');
+      btn.disabled = false;
+      return;
+    }
+
+    log('Copiando…');
+    await db.ref(uid + '/bitacora').set(origSnap.val());
+    log('✅ ¡Listo! Bitácora copiada a ' + uid + '/bitacora.');
+    log('Nada se borró de "Sistema Escolar" — sigue ahí como respaldo.');
+    log('Ya puedes abrir tu app normal y revisar la bitácora.');
+  } catch (e) {
+    log('❌ Error: ' + e.message);
+  }
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>
