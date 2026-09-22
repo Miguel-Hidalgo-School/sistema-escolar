@@ -196,6 +196,7 @@
       <div class="stat-chip" title="Niñas que asistieron hoy, del total de niñas inscritas"><b id="statNinasHoy">👧 —</b><span id="statNinasSub">Sin datos</span></div>
       <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
     </div>
+    <div id="secAusentesBox" style="display:none; width:100%; margin-top:8px; padding:10px; background:#fff8e1; border:1px solid #f0c040; border-radius:8px; font-size:14px;"></div>
   </header>
 
   <nav class="tabs">
@@ -13243,6 +13244,7 @@ function ckOnFilterChanged(scope){
   if(scope === 'alumnos') renderAlumnos();
   if(scope === 'entradas') renderEntradas();
   if(scope === 'enPlantel') renderEnPlantelList();
+  if(scope === 'scan') renderStats();
 }
 
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
@@ -14108,12 +14110,13 @@ function renderStats(){
   document.getElementById('statToday').textContent = todayEntries.length;
   document.getElementById('statTotal').textContent = students.length;
 
-  // Niños/Niñas hoy: total inscritos de ese sexo + porcentaje de asistencia
-  // de hoy — se compara contra el total de alumnos de ese sexo que SÍ tienen
-  // el campo "Sexo" llenado (los que no lo tienen no cuentan como ninguno).
+  // Los chips de niños/niñas muestran solo el nivel activo en el filtro del
+  // escáner (Primaria o Secundaria) — no el total combinado de la escuela.
+  const nivelActivo = (ckFilters.scan && ckFilters.scan.nivel) || 'primaria';
+  const studentsNivel = students.filter(s => (s.nivel || 'primaria') === nivelActivo);
   const idsAsistieronHoy = new Set(todayEntries.map(a => a.studentId));
-  const actualizarChipSexo = (sexo, icono, elId, subId, palabraInscritos) => {
-    const totalSexo = students.filter(s => s.sexo === sexo);
+  const actualizarChipSexo = (sexo, icono, elId, subId, palabraChecaron) => {
+    const totalSexo = studentsNivel.filter(s => s.sexo === sexo);
     const elB = document.getElementById(elId);
     const elSub = document.getElementById(subId);
     if (!totalSexo.length) {
@@ -14123,11 +14126,46 @@ function renderStats(){
     }
     const asistieron = totalSexo.filter(s => idsAsistieronHoy.has(s.id)).length;
     const pct = Math.round((asistieron / totalSexo.length) * 100);
-    elB.textContent = `${icono} ${totalSexo.length} ${palabraInscritos}`;
-    elSub.textContent = `${pct}% hoy`;
+    elB.textContent = `${icono} ${asistieron} ${palabraChecaron}`;
+    elSub.textContent = `${pct}% de ${totalSexo.length} inscritos`;
   };
-  actualizarChipSexo('niño', '👦', 'statNinosHoy', 'statNinosSub', 'inscritos');
-  actualizarChipSexo('niña', '👧', 'statNinasHoy', 'statNinasSub', 'inscritas');
+  actualizarChipSexo('niño', '👦', 'statNinosHoy', 'statNinosSub', 'checaron');
+  actualizarChipSexo('niña', '👧', 'statNinasHoy', 'statNinasSub', 'checaron');
+
+  renderAusentesSecundaria(nivelActivo, studentsNivel, idsAsistieronHoy);
+}
+
+// Secundaria solo pasa lista los miércoles. Desde el primer checkin del día,
+// el conteo va subiendo durante toda la jornada. Aquí mostramos, por grado,
+// quiénes de ese grado todavía no han checado entrada hoy.
+function renderAusentesSecundaria(nivelActivo, studentsNivel, idsAsistieronHoy){
+  const box = document.getElementById('secAusentesBox');
+  if (!box) return;
+  if (nivelActivo !== 'secundaria') { box.style.display = 'none'; return; }
+
+  const esMiercoles = new Date().getDay() === 3; // 0=domingo … 3=miércoles
+  if (!esMiercoles) {
+    box.style.display = '';
+    box.innerHTML = '<div class="stat-chip" style="width:100%;">Hoy no es miércoles — no aplica pase de lista de Secundaria.</div>';
+    return;
+  }
+
+  const porGrado = {};
+  studentsNivel.forEach(s => {
+    const g = s.grade || 'Sin grado';
+    if (!porGrado[g]) porGrado[g] = [];
+    if (!idsAsistieronHoy.has(s.id)) porGrado[g].push(s.name || 'Sin nombre');
+  });
+
+  const grados = Object.keys(porGrado).sort();
+  let html = '<b style="display:block;margin-bottom:6px;">Ausentes de Secundaria (miércoles):</b>';
+  grados.forEach(g => {
+    const ausentes = porGrado[g];
+    html += `<div style="margin-bottom:4px;"><b>${g}°</b>: ` +
+      (ausentes.length ? ausentes.join(', ') : '✅ todos presentes') + '</div>';
+  });
+  box.innerHTML = html || 'Sin alumnos de Secundaria registrados.';
+  box.style.display = '';
 }
 
 function studentMatchesQuery(s, q){
