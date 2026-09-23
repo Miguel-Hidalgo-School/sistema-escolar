@@ -191,9 +191,11 @@
     <div class="stats">
       <div class="stat-chip" style="min-width:100px;"><b id="clockDisplay">--:--:--</b><span>Hora del sistema</span></div>
       <div class="stat-chip" id="statInChip" style="cursor:pointer;" onclick="openEnPlantelModal()" title="Ver quiénes siguen en el plantel"><b id="statIn">0</b><span>En plantel</span></div>
+      <div class="stat-chip" id="statAusentesChip" style="cursor:pointer;" onclick="openAusentesModal()" title="Ver quiénes no han checado entrada hoy"><b id="statAusentes">0</b><span>Ausentes</span></div>
       <div class="stat-chip"><b id="statToday">0</b><span>Hoy</span></div>
       <div class="stat-chip" title="Niños que asistieron hoy, del total de niños inscritos"><b id="statNinosHoy">👦 —</b><span id="statNinosSub">Sin datos</span></div>
       <div class="stat-chip" title="Niñas que asistieron hoy, del total de niñas inscritas"><b id="statNinasHoy">👧 —</b><span id="statNinasSub">Sin datos</span></div>
+      <div class="stat-chip" title="Porcentaje total de asistencia del nivel, sobre toda la matrícula de todos los grados"><b id="statPctNivel">📊 —</b><span id="statPctNivelSub">Sin datos</span></div>
       <div class="stat-chip"><b id="statTotal">0</b><span>Alumnos</span></div>
     </div>
     <div id="secAusentesBox" style="display:none; width:100%; margin-top:8px; padding:10px; background:#fff8e1; border:1px solid #f0c040; border-radius:8px; font-size:14px;"></div>
@@ -556,6 +558,29 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary btn-sm" onclick="closeModal('enPlantelModal')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alumnos que aún no marcan entrada hoy -->
+<div class="modal-bg" id="ausentesModal">
+  <div class="modal wide">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">Ausentes hoy</b>
+    <p class="note">Alumnos que todavía no han checado su entrada con QR el día de hoy.</p>
+    <div class="class-selector" id="ausentesClassSelector"></div>
+    <input id="ausentesSearch" placeholder="Buscar por nombre, grado o folio..." style="margin:12px 0;" oninput="renderAusentesList()">
+    <div style="max-height:55vh;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Alumno</th><th>Grado/Grupo</th><th>Contacto</th></tr></thead>
+        <tbody id="ausentesBody"></tbody>
+      </table>
+      <div class="empty" id="ausentesEmpty" style="display:none;">
+        <b>Nadie pendiente 🎉</b>
+        Todos ya marcaron entrada hoy.
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary btn-sm" onclick="closeModal('ausentesModal')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -13106,7 +13131,8 @@ const ckFilters = {
   scan:      { nivel: 'primaria', grado: null, grupo: null },
   alumnos:   { nivel: 'primaria', grado: null, grupo: null },
   entradas:  { nivel: 'primaria' },
-  enPlantel: { nivel: 'primaria' }
+  enPlantel: { nivel: 'primaria' },
+  ausentes:  { nivel: 'primaria' }
 };
 
 // Niveles a los que esta cuenta tiene acceso (se llenan al iniciar sesión, según
@@ -13245,6 +13271,7 @@ function ckOnFilterChanged(scope){
   if(scope === 'entradas') renderEntradas();
   if(scope === 'enPlantel') renderEnPlantelList();
   if(scope === 'scan') renderStats();
+  if(scope === 'ausentes') renderAusentesList();
 }
 
 /* ---------- Firebase (compartido con Sistema Escolar) ---------- */
@@ -14109,13 +14136,19 @@ function renderStats(){
   document.getElementById('statIn').textContent = inNow.length;
   document.getElementById('statToday').textContent = todayEntries.length;
   document.getElementById('statTotal').textContent = students.length;
+  {
+    const idsHoyGlobal = new Set(todayEntries.map(a => a.studentId));
+    const nivelParaAusentes = (ckFilters.scan && ckFilters.scan.nivel) || 'primaria';
+    const ausentesCount = students.filter(s => (s.nivel||'primaria') === nivelParaAusentes && !idsHoyGlobal.has(s.id)).length;
+    document.getElementById('statAusentes').textContent = ausentesCount;
+  }
 
   // Los chips de niños/niñas muestran solo el nivel activo en el filtro del
   // escáner (Primaria o Secundaria) — no el total combinado de la escuela.
   const nivelActivo = (ckFilters.scan && ckFilters.scan.nivel) || 'primaria';
   const studentsNivel = students.filter(s => (s.nivel || 'primaria') === nivelActivo);
   const idsAsistieronHoy = new Set(todayEntries.map(a => a.studentId));
-  const actualizarChipSexo = (sexo, icono, elId, subId, palabraChecaron) => {
+  const actualizarChipSexo = (sexo, icono, elId, subId, palabraGenero) => {
     const totalSexo = studentsNivel.filter(s => s.sexo === sexo);
     const elB = document.getElementById(elId);
     const elSub = document.getElementById(subId);
@@ -14126,11 +14159,26 @@ function renderStats(){
     }
     const asistieron = totalSexo.filter(s => idsAsistieronHoy.has(s.id)).length;
     const pct = Math.round((asistieron / totalSexo.length) * 100);
-    elB.textContent = `${icono} ${asistieron} ${palabraChecaron}`;
-    elSub.textContent = `${pct}% de ${totalSexo.length} inscritos`;
+    elB.textContent = `${icono} ${asistieron} ${palabraGenero}`;
+    elSub.textContent = `${pct}%`;
   };
-  actualizarChipSexo('niño', '👦', 'statNinosHoy', 'statNinosSub', 'checaron');
-  actualizarChipSexo('niña', '👧', 'statNinasHoy', 'statNinasSub', 'checaron');
+  actualizarChipSexo('niño', '👦', 'statNinosHoy', 'statNinosSub', 'niños');
+  actualizarChipSexo('niña', '👧', 'statNinasHoy', 'statNinasSub', 'niñas');
+
+  // Porcentaje total del nivel: todos los que checaron hoy (niños + niñas +
+  // sin sexo capturado) sobre la matrícula completa de ese nivel, sin
+  // importar el grado/grupo que esté filtrado en el escáner.
+  const elPct = document.getElementById('statPctNivel');
+  const elPctSub = document.getElementById('statPctNivelSub');
+  if (!studentsNivel.length) {
+    elPct.textContent = '📊 —';
+    elPctSub.textContent = 'Sin datos';
+  } else {
+    const asistieronNivel = studentsNivel.filter(s => idsAsistieronHoy.has(s.id)).length;
+    const pctNivel = Math.round((asistieronNivel / studentsNivel.length) * 100);
+    elPct.textContent = `📊 ${pctNivel}%`;
+    elPctSub.textContent = `${asistieronNivel} de ${studentsNivel.length} total`;
+  }
 
   renderAusentesSecundaria(nivelActivo, studentsNivel, idsAsistieronHoy);
 }
@@ -14252,6 +14300,44 @@ function renderEnPlantelList(){
       <td><button class="btn btn-sage btn-sm" onclick="manualCheckout('${a.id}'); renderEnPlantelList();">Salida</button></td>
     </tr>
   `).join('');
+}
+
+function openAusentesModal(){
+  document.getElementById('ausentesSearch').value = '';
+  renderAusentesList();
+  document.getElementById('ausentesModal').classList.add('show');
+}
+function renderAusentesList(){
+  ckRenderClassSelector('ausentes');
+  const q = (document.getElementById('ausentesSearch').value || '').toLowerCase();
+  const today = todayStr();
+  const nivel = ckFilters.ausentes.nivel;
+  const idsAsistieronHoy = new Set(
+    attendance.filter(a => a.date === today).map(a => a.studentId)
+  );
+  const ausentes = students
+    .filter(s => (s.nivel||'primaria') === nivel && !idsAsistieronHoy.has(s.id) && studentMatchesQuery(s, q))
+    .sort((a,b) =>
+      (a.grade||'').localeCompare(b.grade||'', 'es', {numeric:true}) ||
+      (a.group||'').localeCompare(b.group||'', 'es') ||
+      (a.name||'').localeCompare(b.name||'', 'es')
+    );
+
+  const body = document.getElementById('ausentesBody');
+  const empty = document.getElementById('ausentesEmpty');
+  if(ausentes.length===0){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+
+  body.innerHTML = ausentes.map(s => {
+    const contacto = s.motherPhone || s.fatherPhone || (s.pickupAuthorized && s.pickupAuthorized[0] && s.pickupAuthorized[0].phone) || '—';
+    return `
+    <tr>
+      <td><div class="name-cell">${avatarHtml(s)}<span><b>${escapeHtml(s.name)}</b>${s.allergy?` <span style="color:var(--coral);font-size:11px;">⚠</span>`:''}</span></div></td>
+      <td>${ckNivelLabel(s.nivel, true)} ${s.grade} ${s.group}</td>
+      <td>${escapeHtml(contacto)}</td>
+    </tr>
+  `;
+  }).join('');
 }
 
 function ckStudentRowHtml(s){
