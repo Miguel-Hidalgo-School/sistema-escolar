@@ -1350,6 +1350,12 @@ function goToBanos() {
 if (!tieneAccesoBanos()) return;
 window.location.href = 'banos.html';
 }
+// Servicio Social: independiente de los datos de alumnos (prestadores propios,
+// no vinculados a Primaria/Secundaria/CheckIn Kids), disponible para cualquier
+// cuenta con sesión iniciada en el sistema.
+function goToServicioSocial() {
+window.location.href = 'servicio-social.html';
+}
 function goToBitacora(nivel) {
 // El acceso real a Bitácora ya se controla con el permiso accesoBitacora de
 // cada cuenta (ver tieneAccesoBitacora) — el dominio del correo ya no importa,
@@ -1793,6 +1799,11 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 <p style="font-weight:700;font-size:1.2em;">PASE DE BAÑO</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Registra salidas y regresos del baño</p>
 </div>` : ''}
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#2D8C8C,#1F6B6B);color:#fff;text-align:center;padding:28px;" onclick="goToServicioSocial()">
+<p style="font-size:2.2em;margin-bottom:6px;">🧑‍🎓</p>
+<p style="font-weight:700;font-size:1.2em;">SERVICIO SOCIAL</p>
+<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Checador independiente por QR, con horas requeridas</p>
+</div>
 </div>
 <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
 <button class="btn btn-ghost btn-sm" onclick="openCambiarPasswordVoluntario()">🔑 Cambiar mi contraseña</button>

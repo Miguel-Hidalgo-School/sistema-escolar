@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Servicio Social · Sistema Escolar</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1E2A38; --ink-soft:#2E3F52; --paper:#FAF7F2; --paper-dim:#F1ECE3;
+    --teal:#2D8C8C; --teal-deep:#1F6B6B; --coral:#F0664F; --sage:#5E9A78;
+    --slate:#68788A; --line:#E4DDCF; --white:#FFFFFF; --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .app{max-width:1000px;margin:0 auto;padding:24px 18px 50px;}
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{width:48px;height:48px;border-radius:13px;background:var(--ink);display:flex;align-items:center;justify-content:center;font-family:'Baloo 2',sans-serif;font-weight:800;color:var(--teal);font-size:20px;transform:rotate(-4deg);box-shadow:0 5px 0 var(--teal-deep);}
+  .brand h1{font-family:'Baloo 2',sans-serif;font-size:22px;font-weight:800;margin:0;}
+  .brand span{font-size:12.5px;color:var(--slate);font-weight:600;}
+  .btn{font-family:'Baloo 2',sans-serif;font-weight:700;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px;transition:.15s;}
+  .btn-back{background:var(--ink);color:var(--paper);}
+  .btn-back:hover{opacity:.85;}
+  nav.tabs{display:flex;gap:6px;background:var(--paper-dim);padding:5px;border-radius:14px;margin-bottom:22px;width:fit-content;flex-wrap:wrap;}
+  nav.tabs button{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13.5px;border:none;background:transparent;color:var(--slate);padding:9px 16px;border-radius:10px;cursor:pointer;}
+  nav.tabs button.active{background:var(--ink);color:var(--paper);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:16px;}
+  label{display:block;font-size:12px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px;}
+  input,select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-family:'Inter',sans-serif;background:var(--white);color:var(--ink);}
+  input:focus,select:focus{outline:none;border-color:var(--teal);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr;}}
+  .btn-primary{background:var(--teal);color:#fff;}
+  .btn-primary:hover{background:var(--teal-deep);}
+  .btn-ghost{background:var(--paper-dim);color:var(--ink);}
+  .btn-danger{background:#fff;color:var(--coral);border:1.5px solid var(--coral)!important;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;color:var(--slate);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px 6px;border-bottom:2px solid var(--line);}
+  td{padding:10px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .prog-wrap{background:var(--paper-dim);border-radius:8px;height:10px;overflow:hidden;width:100%;min-width:90px;}
+  .prog-bar{background:var(--sage);height:100%;border-radius:8px;}
+  .prog-bar.full{background:var(--teal);}
+  .chip{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;}
+  .chip-in{background:#DFF3E8;color:var(--sage);}
+  .chip-out{background:var(--paper-dim);color:var(--slate);}
+  #scanResultBox{margin-top:12px;padding:14px;border-radius:10px;font-weight:700;text-align:center;font-size:15px;}
+  .ok{background:#DFF3E8;color:#2B6B4B;}
+  .err{background:#FBE1DC;color:#B83B28;}
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:16px;}
+  .modal-bg.show{display:flex;}
+  .modal{background:#fff;border-radius:16px;padding:22px;max-width:380px;width:100%;text-align:center;}
+  .qr-box img{max-width:220px;margin:10px auto;display:block;}
+  #readerBox{max-width:360px;margin:0 auto;}
+  .empty{color:var(--slate);text-align:center;padding:30px 10px;font-size:14px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark">SS</div>
+      <div>
+        <h1>Servicio Social</h1>
+        <span>Checador independiente de prestadores</span>
+      </div>
+    </div>
+    <button class="btn btn-back" onclick="window.location.href='index.html'">← Sistema Escolar</button>
+  </header>
+
+  <div id="loginGate" class="card" style="display:none;text-align:center;">
+    <p style="font-weight:700;">Necesitas iniciar sesión en Sistema Escolar primero.</p>
+    <button class="btn btn-primary" onclick="window.location.href='index.html'">Ir a iniciar sesión</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <nav class="tabs">
+      <button id="tabBtn-scan" class="active" onclick="showTab('scan')">📷 Escáner</button>
+      <button id="tabBtn-prestadores" onclick="showTab('prestadores')">🧑‍🎓 Prestadores</button>
+      <button id="tabBtn-totales" onclick="showTab('totales')">📊 Totales</button>
+      <button id="tabBtn-historial" onclick="showTab('historial')">🗂 Historial</button>
+    </nav>
+
+    <!-- ESCÁNER -->
+    <div id="panel-scan" class="panel active">
+      <div class="card">
+        <p style="font-weight:700;margin-bottom:10px;">Escanear código QR del prestador</p>
+        <div id="readerBox"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn btn-primary" id="btnStartScan" onclick="startScanner()" style="flex:1;">▶ Activar cámara</button>
+          <button class="btn btn-ghost" id="btnStopScan" onclick="stopScanner()" style="flex:1;display:none;">⏹ Detener</button>
+        </div>
+        <div style="margin-top:14px;">
+          <label>O escribe/pega el código manualmente</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="manualCode" placeholder="CÓDIGO DEL PRESTADOR">
+            <button class="btn btn-primary" onclick="processManualCode()">Registrar</button>
+          </div>
+        </div>
+        <div id="scanResultBox" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- PRESTADORES -->
+    <div id="panel-prestadores" class="panel">
+      <div class="card">
+        <p style="font-weight:700;margin-bottom:12px;">Nuevo prestador</p>
+        <div class="grid2">
+          <div>
+            <label>Nombre completo</label>
+            <input type="text" id="inputNombre" oninput="convertirMayusculas(this)" placeholder="NOMBRE DEL PRESTADOR">
+          </div>
+          <div>
+            <label>Horas requeridas</label>
+            <input type="number" id="inputHoras" value="80" min="1">
+          </div>
+        </div>
+        <div class="grid2" style="margin-top:10px;">
+          <div>
+            <label>Institución / Carrera (opcional)</label>
+            <input type="text" id="inputInstitucion" oninput="convertirMayusculas(this)" placeholder="EJ. UNIVERSIDAD X">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn btn-primary" style="width:100%;" onclick="agregarPrestador()">+ Agregar prestador</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <p style="font-weight:700;margin-bottom:10px;">Prestadores registrados</p>
+        <div id="listaPrestadores"></div>
+      </div>
+    </div>
+
+    <!-- TOTALES -->
+    <div id="panel-totales" class="panel">
+      <div class="card">
+        <p style="font-weight:700;margin-bottom:10px;">Horas cumplidas por prestador</p>
+        <div id="listaTotales"></div>
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div id="panel-historial" class="panel">
+      <div class="card">
+        <p style="font-weight:700;margin-bottom:10px;">Historial de entradas y salidas</p>
+        <div id="listaHistorial"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal QR -->
+<div class="modal-bg" id="qrModal">
+  <div class="modal">
+    <p style="font-weight:700;" id="qrModalNombre"></p>
+    <div class="qr-box"><img id="qrModalImg" alt="QR"></div>
+    <p style="font-size:12px;color:var(--slate);" id="qrModalCodigo"></p>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="document.getElementById('qrModal').classList.remove('show')">Cerrar</button>
+      <a class="btn btn-primary" style="flex:1;text-decoration:none;display:flex;align-items:center;justify-content:center;" id="qrDownloadLink" download="qr_prestador.png">Descargar</a>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Firebase (comparte sesión con Sistema Escolar) ---------- */
+const SS_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+firebase.initializeApp(SS_FIREBASE_CONFIG);
+const ssAuth = firebase.auth();
+const ssDb = firebase.database();
+let ssUid = null;
+let ssPrestadoresRef = null, ssRegistrosRef = null;
+let prestadores = [];
+let registros = [];
+
+function ssBase(uid){ return 'usuarios/' + uid; }
+
+ssAuth.onAuthStateChanged(user => {
+  if (!user) {
+    document.getElementById('loginGate').style.display = 'block';
+    document.getElementById('mainArea').style.display = 'none';
+    return;
+  }
+  ssUid = user.uid;
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('mainArea').style.display = 'block';
+  ssPrestadoresRef = ssDb.ref(ssBase(ssUid) + '/servicioSocialPrestadores');
+  ssRegistrosRef = ssDb.ref(ssBase(ssUid) + '/servicioSocialRegistros');
+  ssPrestadoresRef.on('value', snap => {
+    const val = snap.val() || {};
+    prestadores = Object.keys(val).map(id => ({ id, ...val[id] }));
+    renderPrestadores();
+    renderTotales();
+  });
+  ssRegistrosRef.on('value', snap => {
+    const val = snap.val() || {};
+    registros = Object.keys(val).map(id => ({ id, ...val[id] }));
+    renderTotales();
+    renderHistorial();
+  });
+});
+
+function convertirMayusculas(el){ el.value = el.value.toUpperCase(); }
+
+/* ---------- Tabs ---------- */
+function showTab(name){
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.getElementById('tabBtn-' + name).classList.add('active');
+  if (name !== 'scan') stopScanner();
+}
+
+/* ---------- Prestadores ---------- */
+function randomToken(){
+  return 'SS-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2,7).toUpperCase();
+}
+
+function agregarPrestador(){
+  const nombre = document.getElementById('inputNombre').value.trim().toUpperCase();
+  const horas = parseFloat(document.getElementById('inputHoras').value) || 80;
+  const institucion = document.getElementById('inputInstitucion').value.trim().toUpperCase();
+  if (!nombre){ alert('Escribe el nombre del prestador.'); return; }
+  const id = ssPrestadoresRef.push().key;
+  const token = randomToken();
+  ssPrestadoresRef.child(id).set({ nombre, horasRequeridas: horas, institucion, token, createdAt: Date.now() });
+  document.getElementById('inputNombre').value = '';
+  document.getElementById('inputInstitucion').value = '';
+  document.getElementById('inputHoras').value = 80;
+}
+
+function eliminarPrestador(id){
+  const p = prestadores.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm('¿Eliminar a ' + p.nombre + '? También se perderá su historial de horas.')) return;
+  ssPrestadoresRef.child(id).remove();
+  // Limpia también sus registros de asistencia
+  registros.filter(r => r.prestadorId === id).forEach(r => ssRegistrosRef.child(r.id).remove());
+}
+
+function horasCumplidas(prestadorId){
+  let totalMs = 0;
+  registros.forEach(r => {
+    if (r.prestadorId === prestadorId && r.checkout) {
+      totalMs += (new Date(r.checkout) - new Date(r.checkin));
+    }
+  });
+  return totalMs / 3600000;
+}
+
+function renderPrestadores(){
+  const cont = document.getElementById('listaPrestadores');
+  if (prestadores.length === 0) {
+    cont.innerHTML = '<p class="empty">Aún no hay prestadores registrados.</p>';
+    return;
+  }
+  cont.innerHTML = `<table><thead><tr><th>Nombre</th><th>Institución</th><th>Horas req.</th><th>Código</th><th></th></tr></thead><tbody>` +
+    prestadores.map(p => `
+      <tr>
+        <td><strong>${escHtml(p.nombre)}</strong></td>
+        <td>${escHtml(p.institucion || '—')}</td>
+        <td>${p.horasRequeridas}</td>
+        <td style="font-family:monospace;font-size:11.5px;">${escHtml(p.token)}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="mostrarQR('${p.id}')">Ver QR</button>
+          <button class="btn btn-danger" style="padding:6px 10px;font-size:12px;" onclick="eliminarPrestador('${p.id}')">Eliminar</button>
+        </td>
+      </tr>`).join('') + `</tbody></table>`;
+}
+
+async function mostrarQR(id){
+  const p = prestadores.find(x => x.id === id);
+  if (!p) return;
+  const dataUrl = await QRCode.toDataURL(p.token, { width: 260, margin: 2 });
+  document.getElementById('qrModalNombre').innerText = p.nombre;
+  document.getElementById('qrModalImg').src = dataUrl;
+  document.getElementById('qrModalCodigo').innerText = p.token;
+  const link = document.getElementById('qrDownloadLink');
+  link.href = dataUrl;
+  link.download = 'QR_' + p.nombre.replace(/\s+/g,'_') + '.png';
+  document.getElementById('qrModal').classList.add('show');
+}
+
+/* ---------- Totales ---------- */
+function renderTotales(){
+  const cont = document.getElementById('listaTotales');
+  if (prestadores.length === 0) {
+    cont.innerHTML = '<p class="empty">Aún no hay prestadores registrados.</p>';
+    return;
+  }
+  cont.innerHTML = `<table><thead><tr><th>Nombre</th><th>Cumplidas</th><th>Faltan</th><th>Avance</th></tr></thead><tbody>` +
+    prestadores.map(p => {
+      const cumplidas = horasCumplidas(p.id);
+      const requeridas = p.horasRequeridas || 80;
+      const faltan = Math.max(0, requeridas - cumplidas);
+      const pct = Math.min(100, (cumplidas / requeridas) * 100);
+      return `<tr>
+        <td><strong>${escHtml(p.nombre)}</strong></td>
+        <td>${cumplidas.toFixed(1)} h</td>
+        <td>${faltan.toFixed(1)} h</td>
+        <td>
+          <div class="prog-wrap"><div class="prog-bar ${pct>=100?'full':''}" style="width:${pct}%;"></div></div>
+        </td>
+      </tr>`;
+    }).join('') + `</tbody></table>`;
+}
+
+/* ---------- Historial ---------- */
+function renderHistorial(){
+  const cont = document.getElementById('listaHistorial');
+  if (registros.length === 0) {
+    cont.innerHTML = '<p class="empty">Todavía no hay entradas registradas.</p>';
+    return;
+  }
+  const ordenados = [...registros].sort((a,b) => new Date(b.checkin) - new Date(a.checkin));
+  cont.innerHTML = `<table><thead><tr><th>Prestador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Duración</th></tr></thead><tbody>` +
+    ordenados.map(r => {
+      const p = prestadores.find(x => x.id === r.prestadorId);
+      const nombre = p ? p.nombre : '(prestador eliminado)';
+      const entrada = new Date(r.checkin);
+      const fecha = entrada.toLocaleDateString('es-MX');
+      const horaIn = entrada.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'});
+      const horaOut = r.checkout ? new Date(r.checkout).toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'}) : '—';
+      const dur = r.checkout ? (((new Date(r.checkout) - entrada) / 3600000).toFixed(2) + ' h') : '<span class="chip chip-in">EN CURSO</span>';
+      return `<tr><td>${escHtml(nombre)}</td><td>${fecha}</td><td>${horaIn}</td><td>${horaOut}</td><td>${dur}</td></tr>`;
+    }).join('') + `</tbody></table>`;
+}
+
+/* ---------- Escáner (cámara) ---------- */
+let html5QrInstance = null;
+
+function startScanner(){
+  document.getElementById('btnStartScan').style.display = 'none';
+  document.getElementById('btnStopScan').style.display = 'block';
+  html5QrInstance = new Html5Qrcode('readerBox');
+  html5QrInstance.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: 230 },
+    (decodedText) => { procesarCodigo(decodedText); },
+    () => {}
+  ).catch(err => {
+    reportScan('No se pudo abrir la cámara: ' + err, false);
+    document.getElementById('btnStartScan').style.display = 'block';
+    document.getElementById('btnStopScan').style.display = 'none';
+  });
+}
+
+function stopScanner(){
+  if (html5QrInstance) {
+    html5QrInstance.stop().then(() => html5QrInstance.clear()).catch(() => {});
+    html5QrInstance = null;
+  }
+  document.getElementById('btnStartScan').style.display = 'block';
+  document.getElementById('btnStopScan').style.display = 'none';
+}
+
+function processManualCode(){
+  const input = document.getElementById('manualCode');
+  procesarCodigo(input.value.trim());
+  input.value = '';
+}
+
+function procesarCodigo(codigo){
+  if (!codigo) return;
+  const p = prestadores.find(x => x.token === codigo);
+  if (!p) {
+    reportScan('Código no reconocido: ' + codigo, false);
+    return;
+  }
+  const abierto = registros.find(r => r.prestadorId === p.id && !r.checkout);
+  if (abierto) {
+    ssRegistrosRef.child(abierto.id).update({ checkout: new Date().toISOString() });
+    reportScan(p.nombre + ' — salida registrada', true);
+  } else {
+    const id = ssRegistrosRef.push().key;
+    ssRegistrosRef.child(id).set({ prestadorId: p.id, checkin: new Date().toISOString(), checkout: null });
+    reportScan(p.nombre + ' — entrada registrada', true);
+  }
+}
+
+function reportScan(msg, ok){
+  const box = document.getElementById('scanResultBox');
+  box.style.display = 'block';
+  box.className = ok ? 'ok' : 'err';
+  box.innerText = msg;
+  setTimeout(() => { box.style.display = 'none'; }, 4000);
+}
+
+function escHtml(s){
+  return (s || '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>
