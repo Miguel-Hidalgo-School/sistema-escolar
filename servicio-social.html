@@ -7,8 +7,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';document.head.appendChild(s);"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';document.head.appendChild(s);"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -286,17 +286,31 @@ function renderPrestadores(){
       </tr>`).join('') + `</tbody></table>`;
 }
 
-async function mostrarQR(id){
+async function mostrarQR(id, reintento){
   const p = prestadores.find(x => x.id === id);
-  if (!p) return;
-  const dataUrl = await QRCode.toDataURL(p.token, { width: 260, margin: 2 });
-  document.getElementById('qrModalNombre').innerText = p.nombre;
-  document.getElementById('qrModalImg').src = dataUrl;
-  document.getElementById('qrModalCodigo').innerText = p.token;
-  const link = document.getElementById('qrDownloadLink');
-  link.href = dataUrl;
-  link.download = 'QR_' + p.nombre.replace(/\s+/g,'_') + '.png';
-  document.getElementById('qrModal').classList.add('show');
+  if (!p) { alert('No se encontró ese prestador — recarga la página e inténtalo de nuevo.'); return; }
+  // Si la librería de QR todavía no termina de cargar (por ejemplo, conexión
+  // lenta justo al abrir la página), esperamos un momento y reintentamos un
+  // par de veces antes de avisar que algo salió mal, en vez de fallar en
+  // silencio como pasaba antes.
+  if (typeof QRCode === 'undefined' || !QRCode || typeof QRCode.toDataURL !== 'function') {
+    const intento = reintento || 0;
+    if (intento < 5) { setTimeout(() => mostrarQR(id, intento + 1), 400); return; }
+    alert('No se pudo cargar la librería para generar el código QR. Revisa tu conexión a internet y vuelve a intentar (si persiste, puede estar bloqueada por tu red/antivirus).');
+    return;
+  }
+  try {
+    const dataUrl = await QRCode.toDataURL(p.token, { width: 260, margin: 2 });
+    document.getElementById('qrModalNombre').innerText = p.nombre;
+    document.getElementById('qrModalImg').src = dataUrl;
+    document.getElementById('qrModalCodigo').innerText = p.token;
+    const link = document.getElementById('qrDownloadLink');
+    link.href = dataUrl;
+    link.download = 'QR_' + p.nombre.replace(/\s+/g,'_') + '.png';
+    document.getElementById('qrModal').classList.add('show');
+  } catch (err) {
+    alert('No se pudo generar el código QR: ' + (err && err.message ? err.message : err));
+  }
 }
 
 /* ---------- Totales ---------- */
