@@ -2152,6 +2152,7 @@ function miniQRToDataURL(texto, opts) {
       <div>
         <h1>Servicio Social</h1>
         <span>Checador independiente de prestadores</span>
+        <div id="ssCuentaActiva" style="font-size:11px;color:var(--slate);margin-top:2px;"></div>
       </div>
     </div>
     <button class="btn btn-back" onclick="window.location.href='index.html'">← Sistema Escolar</button>
@@ -2197,7 +2198,7 @@ function miniQRToDataURL(texto, opts) {
         <div class="grid2">
           <div>
             <label>Nombre completo</label>
-            <input type="text" id="inputNombre" oninput="convertirMayusculas(this)" placeholder="NOMBRE DEL PRESTADOR">
+            <input type="text" id="inputNombre" autocomplete="off" oninput="convertirMayusculas(this)" placeholder="NOMBRE DEL PRESTADOR">
           </div>
           <div>
             <label>Horas requeridas</label>
@@ -2207,7 +2208,7 @@ function miniQRToDataURL(texto, opts) {
         <div class="grid2" style="margin-top:10px;">
           <div>
             <label>Institución / Carrera (opcional)</label>
-            <input type="text" id="inputInstitucion" oninput="convertirMayusculas(this)" placeholder="EJ. UNIVERSIDAD X">
+            <input type="text" id="inputInstitucion" autocomplete="off" oninput="convertirMayusculas(this)" placeholder="EJ. UNIVERSIDAD X">
           </div>
         </div>
         <div class="grid2" style="margin-top:10px;align-items:flex-end;">
@@ -2252,7 +2253,7 @@ function miniQRToDataURL(texto, opts) {
     <input type="hidden" id="editId">
     <div style="margin-bottom:10px;">
       <label>Nombre completo</label>
-      <input type="text" id="editNombre" oninput="convertirMayusculas(this)">
+      <input type="text" id="editNombre" autocomplete="off" oninput="convertirMayusculas(this)">
     </div>
     <div class="grid2">
       <div>
@@ -2261,7 +2262,7 @@ function miniQRToDataURL(texto, opts) {
       </div>
       <div>
         <label>Institución / Carrera</label>
-        <input type="text" id="editInstitucion" oninput="convertirMayusculas(this)">
+        <input type="text" id="editInstitucion" autocomplete="off" oninput="convertirMayusculas(this)">
       </div>
     </div>
     <div style="margin-top:10px;margin-bottom:14px;">
@@ -2322,6 +2323,10 @@ ssAuth.onAuthStateChanged(user => {
   ssUid = user.uid;
   document.getElementById('loginGate').style.display = 'none';
   document.getElementById('mainArea').style.display = 'block';
+  // Visible para poder comparar rápido entre dispositivos si los datos no
+  // coinciden: si en dos equipos aparece un correo distinto aquí, es porque
+  // son dos cuentas separadas, cada una con su propia lista de prestadores.
+  document.getElementById('ssCuentaActiva').textContent = 'Cuenta: ' + (user.email || user.uid);
   ssPrestadoresRef = ssDb.ref(ssBase(ssUid) + '/servicioSocialPrestadores');
   ssRegistrosRef = ssDb.ref(ssBase(ssUid) + '/servicioSocialRegistros');
   ssPrestadoresRef.on('value', snap => {
