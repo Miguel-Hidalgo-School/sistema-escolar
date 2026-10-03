@@ -2588,6 +2588,8 @@ function renderHistorial(){
 let html5QrInstance = null;
 
 function startScanner(){
+  ultimoCodigoEscaneado = null;
+  ultimoEscaneoTs = 0;
   document.getElementById('btnStartScan').style.display = 'none';
   document.getElementById('btnStopScan').style.display = 'block';
   html5QrInstance = new Html5Qrcode('readerBox');
@@ -2618,8 +2620,25 @@ function processManualCode(){
   input.value = '';
 }
 
+// La cámara intenta leer el QR varias veces por segundo (fps:10 más abajo),
+// así que mientras la credencial está frente a la cámara, el mismo código se
+// detecta decenas de veces en pocos segundos. Sin este control, cada una de
+// esas detecciones registraba una entrada/salida nueva, generando muchísimos
+// registros duplicados de golpe. Ahora, una vez procesado un código, se
+// ignora ese mismo código durante unos segundos (tiempo de sobra para retirar
+// la credencial de la cámara) antes de volver a aceptarlo.
+let ultimoCodigoEscaneado = null;
+let ultimoEscaneoTs = 0;
+const COOLDOWN_ESCANEO_MS = 4000;
+
 function procesarCodigo(codigo){
   if (!codigo) return;
+  const ahora = Date.now();
+  if (codigo === ultimoCodigoEscaneado && (ahora - ultimoEscaneoTs) < COOLDOWN_ESCANEO_MS) {
+    return; // detección repetida del mismo código mientras se retira la credencial — se ignora
+  }
+  ultimoCodigoEscaneado = codigo;
+  ultimoEscaneoTs = ahora;
   const p = prestadores.find(x => x.token === codigo);
   if (!p) {
     reportScan('Código no reconocido: ' + codigo, false);
