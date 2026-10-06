@@ -10293,6 +10293,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           Usa la misma credencial QR generada en CheckIn Kids / Sistema Escolar. Primer escaneo del alumno = registra salida; segundo escaneo = registra regreso.
         </p>
       </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:4px;" onclick="openFaceFallback()">😕 Olvidé mi credencial</button>
     </div>
   </section>
 
@@ -10363,6 +10364,26 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   </div>
 </div>
 
+<!-- Respaldo: "Olvidé mi credencial" -->
+<div class="modal-bg" id="faceFallbackModal">
+  <div class="modal">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">😕 Olvidé mi credencial</b>
+    <p class="note" style="font-size:12px;margin-top:4px;">Párate frente a la cámara. Siempre se confirma antes de registrar — esto no sustituye al QR como verificación.</p>
+    <video id="faceFallbackVideo" playsinline muted style="width:100%;border-radius:12px;background:#000;margin-top:10px;"></video>
+    <p id="faceFallbackStatus" style="font-size:13px;font-weight:600;margin-top:8px;">Cargando reconocimiento facial…</p>
+    <div id="faceFallbackConfirm" style="display:none;margin-top:6px;">
+      <p style="font-weight:700;font-size:15px;" id="faceFallbackNombre"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" onclick="rechazarCoincidenciaFacial()">No soy yo</button>
+        <button class="btn btn-primary btn-sm" onclick="confirmarCoincidenciaFacial()">Sí, soy yo</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeFaceFallback()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -10404,6 +10425,7 @@ function mergeStudents(){
 pbAuth.onAuthStateChanged(async user => {
   if(!user){ window.location.href = 'index.html'; return; }
   let isAdmin = false;
+  let espacioUid = user.uid;
   try{
     const adminSnap = await pbDb.ref('admins/' + user.uid).once('value');
     isAdmin = adminSnap.val() === true;
@@ -10416,6 +10438,10 @@ pbAuth.onAuthStateChanged(async user => {
     if(!isAdmin && perfil){
       pbAccesoPrimaria = perfil.accesoPrimaria !== false;
       pbAccesoSecundaria = perfil.accesoSecundaria !== false;
+      // Mismo criterio que index.html / checkin-kids.html: un colega creado
+      // por un administrador comparte el ESPACIO de ese administrador
+      // (perfil.espacioUid), no su propio uid — si no, ve su cajón vacío.
+      espacioUid = perfil.espacioUid || user.uid;
     }
   }catch(e){}
 
@@ -10433,7 +10459,7 @@ pbAuth.onAuthStateChanged(async user => {
   scanFilter.nivel = pbAccesoSecundaria ? 'secundaria' : 'primaria';
   histFilter.nivel = scanFilter.nivel;
 
-  const base = 'usuarios/' + user.uid; // SaaS: Todos usan su propio UID, incluyendo admin
+  const base = 'usuarios/' + espacioUid; // SaaS: admin usa su propio UID; un colega comparte el de su administrador
   priStudentsRef = pbAccesoPrimaria ? pbDb.ref(base + '/students') : null;
   secStudentsRef = pbAccesoSecundaria ? pbDb.ref(base + '/secStudents') : null;
   banoLogRef = pbDb.ref(base + '/banoLog');
@@ -10478,7 +10504,8 @@ function fromFirebaseStudent(id, v, nivel){
     id, nivel: nivel || 'primaria',
     name: v.name || '', grade: v.grade || '1°', group: v.grupo || '',
     folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || [],
-    padreTelefono: v.padreTelefono || '', tutorTelefono: v.tutorTelefono || ''
+    padreTelefono: v.padreTelefono || '', tutorTelefono: v.tutorTelefono || '',
+    faceDescriptor: v.faceDescriptor || null
   };
 }
 function resolveContactBano(s){
@@ -10584,6 +10611,53 @@ function showToast(msg, kind){
   showToast._t = setTimeout(()=>t.classList.remove('show'), 2800);
 }
 
+/* ---------- Reconocimiento facial (RESPALDO cuando se olvida la credencial) ----------
+   OJO: esto NO es una verificación de seguridad — es una ayuda de conveniencia.
+   Siempre muestra "¿Eres [nombre]?" para que el propio alumno (o un maestro)
+   confirme antes de registrar. El rostro se registra únicamente desde
+   CheckIn Kids (Alumnos → editar alumno) — aquí solo se usa para comparar,
+   ya que ambos módulos comparten la misma base de datos de alumnos. */
+let faceApiLoaded = false, faceApiLoadingPromise = null;
+const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+const FACE_MATCH_THRESHOLD = 0.5; // menor = más estricto. 0.5 es el valor típico recomendado por face-api.js
+
+function loadFaceApi(){
+  if (faceApiLoaded) return Promise.resolve();
+  if (faceApiLoadingPromise) return faceApiLoadingPromise;
+  faceApiLoadingPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+    script.onload = async () => {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODELS_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODELS_URL);
+        faceApiLoaded = true;
+        resolve();
+      } catch (e) { reject(e); }
+    };
+    script.onerror = () => reject(new Error('No se pudo descargar face-api.js (revisa tu conexión a internet).'));
+    document.head.appendChild(script);
+  });
+  return faceApiLoadingPromise;
+}
+
+async function detectarDescriptorDeVideo(videoEl){
+  const result = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks().withFaceDescriptor();
+  return result ? result.descriptor : null;
+}
+
+function mejorCoincidenciaFacial(descriptor){
+  let mejor = null, mejorDistancia = Infinity;
+  students.forEach(s => {
+    if (!s.faceDescriptor || !s.faceDescriptor.length) return;
+    const distancia = faceapi.euclideanDistance(descriptor, s.faceDescriptor);
+    if (distancia < mejorDistancia) { mejor = s; mejorDistancia = distancia; }
+  });
+  return { student: mejor, distancia: mejorDistancia, coincide: mejor && mejorDistancia <= FACE_MATCH_THRESHOLD };
+}
+
 /* ---------- Lógica principal: salida / entrada al baño ---------- */
 function processCode(rawText){
   const text = (rawText || '').trim();
@@ -10597,7 +10671,13 @@ function processCode(rawText){
   if(!student){
     return {ok:false, msg:'Código no reconocido. Verifica que el alumno tenga credencial generada en CheckIn Kids.'};
   }
+  return registrarBanoAlumno(student);
+}
 
+// Registra salida/regreso del baño para un alumno ya identificado (por QR,
+// folio, o reconocimiento facial de respaldo). Compartida por los tres
+// métodos para que el historial y los avisos funcionen exactamente igual.
+function registrarBanoAlumno(student){
   const openEntry = banoLog.find(b => b.studentId === student.id && !b.entrada);
   if(openEntry){
     const mins = minutesBetween(new Date(openEntry.salida).getTime(), Date.now());
@@ -10618,6 +10698,79 @@ function registerReturn(studentId){
   banoLogRef.child(openEntry.id).update({ entrada: new Date().toISOString() });
   showToast('Regreso registrado', 'ok');
 }
+/* ---------- Respaldo "Olvidé mi credencial" (reconocimiento facial) ---------- */
+let faceFallbackStream = null, faceFallbackRAF = null, faceFallbackCandidate = null, faceFallbackPausado = false;
+
+async function openFaceFallback(){
+  document.getElementById('faceFallbackModal').classList.add('show');
+  document.getElementById('faceFallbackConfirm').style.display = 'none';
+  faceFallbackPausado = false;
+  const status = document.getElementById('faceFallbackStatus');
+  status.textContent = 'Cargando reconocimiento facial…';
+  try { await loadFaceApi(); }
+  catch(e){ status.textContent = 'No se pudo cargar el reconocimiento facial. Revisa tu conexión a internet, o usa tu credencial/folio.'; return; }
+
+  const video = document.getElementById('faceFallbackVideo');
+  try { faceFallbackStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }); }
+  catch(e){ status.textContent = 'No se pudo acceder a la cámara.'; return; }
+  video.srcObject = faceFallbackStream;
+  await video.play();
+  status.textContent = 'Mira a la cámara…';
+  faceFallbackLoop();
+}
+async function faceFallbackLoop(){
+  if(!document.getElementById('faceFallbackModal').classList.contains('show')) return;
+  if(faceFallbackPausado){ faceFallbackRAF = requestAnimationFrame(faceFallbackLoop); return; }
+  const video = document.getElementById('faceFallbackVideo');
+  const status = document.getElementById('faceFallbackStatus');
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    try {
+      const descriptor = await detectarDescriptorDeVideo(video);
+      if(descriptor){
+        const { student, coincide } = mejorCoincidenciaFacial(descriptor);
+        if(coincide){
+          faceFallbackCandidate = student;
+          faceFallbackPausado = true;
+          status.textContent = '';
+          document.getElementById('faceFallbackNombre').textContent = `¿Eres ${student.name}?`;
+          document.getElementById('faceFallbackConfirm').style.display = 'block';
+        } else {
+          status.textContent = 'No se reconoce tu rostro. Intenta de nuevo o pide ayuda a tu maestro(a). Recuerda que el rostro se registra desde CheckIn Kids.';
+        }
+      } else {
+        status.textContent = 'Buscando un rostro… acércate y mira a la cámara.';
+      }
+    } catch(e){ /* un fallo puntual de detección no debe detener el ciclo */ }
+  }
+  faceFallbackRAF = requestAnimationFrame(faceFallbackLoop);
+}
+function confirmarCoincidenciaFacial(){
+  if(!faceFallbackCandidate) return;
+  const res = registrarBanoAlumno(faceFallbackCandidate);
+  closeFaceFallback();
+  reportScanResult(res);
+}
+function rechazarCoincidenciaFacial(){
+  faceFallbackCandidate = null;
+  faceFallbackPausado = false;
+  document.getElementById('faceFallbackConfirm').style.display = 'none';
+  document.getElementById('faceFallbackStatus').textContent = 'Mira a la cámara…';
+}
+function closeFaceFallback(){
+  document.getElementById('faceFallbackModal').classList.remove('show');
+  if(faceFallbackRAF) cancelAnimationFrame(faceFallbackRAF);
+  if(faceFallbackStream){ faceFallbackStream.getTracks().forEach(t=>t.stop()); faceFallbackStream=null; }
+  faceFallbackCandidate = null;
+  faceFallbackPausado = false;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (typeof faceFallbackStream !== 'undefined' && faceFallbackStream) closeFaceFallback();
+  } else {
+    document.querySelectorAll('.modal-bg.show').forEach(m => { if (m.id !== 'faceFallbackModal') m.classList.remove('show'); });
+  }
+});
+
 function processManualCode(){
   const input = document.getElementById('manualCode');
   const res = processCode(input.value);
