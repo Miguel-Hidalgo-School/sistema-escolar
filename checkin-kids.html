@@ -335,6 +335,7 @@
           Acepta los QR generados por este sistema, códigos ya vinculados (por ejemplo credenciales SEJAL) y folios. Si el código es nuevo, el sistema preguntará a qué alumno vincularlo.
         </p>
       </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:4px;" onclick="openFaceFallback()">😕 Olvidé mi credencial</button>
     </div>
   </section>
 
@@ -430,6 +431,40 @@
   </div>
 </div>
 
+<!-- Registrar rostro de un alumno (para el respaldo "Olvidé mi credencial") -->
+<div class="modal-bg" id="faceEnrollModal">
+  <div class="modal">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">Registrar rostro</b>
+    <p class="note" style="font-size:12px;margin-top:4px;color:var(--slate);">Es un respaldo por si el alumno olvida su credencial — pide que mire de frente, con buena luz.</p>
+    <div class="cam-frame"><video id="faceEnrollVideo" playsinline muted></video></div>
+    <p id="faceEnrollStatus" style="font-size:13px;font-weight:600;margin-top:8px;">Cargando reconocimiento facial…</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeFaceEnroll()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="faceEnrollSaveBtn" style="display:none;" onclick="guardarRostroEnrolado()">Guardar rostro</button>
+    </div>
+  </div>
+</div>
+
+<!-- Respaldo: "Olvidé mi credencial" -->
+<div class="modal-bg" id="faceFallbackModal">
+  <div class="modal">
+    <b style="font-family:'Baloo 2',sans-serif;font-size:16px;">😕 Olvidé mi credencial</b>
+    <p class="note" style="font-size:12px;margin-top:4px;color:var(--slate);">Párate frente a la cámara. Siempre se confirma antes de registrar — esto no sustituye al QR como verificación.</p>
+    <div class="cam-frame"><video id="faceFallbackVideo" playsinline muted></video></div>
+    <p id="faceFallbackStatus" style="font-size:13px;font-weight:600;margin-top:8px;">Cargando reconocimiento facial…</p>
+    <div id="faceFallbackConfirm" style="display:none;margin-top:6px;">
+      <p style="font-weight:700;font-size:15px;" id="faceFallbackNombre"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm" onclick="rechazarCoincidenciaFacial()">No soy yo</button>
+        <button class="btn btn-primary btn-sm" onclick="confirmarCoincidenciaFacial()">Sí, soy yo</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeFaceFallback()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Vincular código no reconocido -->
 <div class="modal-bg" id="linkModal">
   <div class="modal">
@@ -480,6 +515,7 @@
         <button type="button" class="btn btn-ghost btn-sm" onclick="openCamera('edit')">Tomar foto</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('editFileInput').click()">Subir foto</button>
         <input type="file" id="editFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(event,'edit')">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openFaceEnroll()">😊 <span id="faceEnrollBtnLabel">Registrar rostro</span></button>
       </div>
     </div>
     <div class="grid3">
@@ -13348,7 +13384,8 @@ function ckToFirebaseStudent(s){
     allergy: s.allergy || '', folio: s.folio || '', token: s.token || '', altCodes: s.altCodes || [],
     sexo: s.sexo || '',
     createdAt: s.createdAt || new Date().toISOString(),
-    grades: s.grades || {}, observaciones: s.observaciones || {}
+    grades: s.grades || {}, observaciones: s.observaciones || {},
+    faceDescriptor: s.faceDescriptor || null
   };
 }
 // Convierte un alumno del formato compartido (o creado en Sistema Escolar) al formato de CheckIn Kids
@@ -13364,7 +13401,8 @@ function ckFromFirebaseStudent(id, v, nivel){
     pickupAuthorized: v.pickupAuthorized || (v.tutorNombre ? [{ name: v.tutorNombre, phone: v.tutorTelefono || '' }] : []),
     allergy: v.allergy || '', folio: v.folio || '', token: v.token || '', altCodes: v.altCodes || [],
     sexo: v.sexo || '',
-    createdAt: v.createdAt || new Date().toISOString()
+    createdAt: v.createdAt || new Date().toISOString(),
+    faceDescriptor: v.faceDescriptor || null
   };
 }
 
@@ -13449,6 +13487,8 @@ function ckStartSync(){
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     if (typeof scannerActive !== 'undefined' && scannerActive) stopScanner();
+    if (typeof faceEnrollStream !== 'undefined' && faceEnrollStream) closeFaceEnroll();
+    if (typeof faceFallbackStream !== 'undefined' && faceFallbackStream) closeFaceFallback();
   } else {
     document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
     if (typeof renderAll === 'function') renderAll();
@@ -13796,6 +13836,7 @@ function openEditModal(studentId){
   editPhotoData = s.photo || '';
   const img = document.getElementById('editPhotoPreview');
   if(s.photo){ img.src = s.photo; img.classList.add('has-img'); } else { img.src=''; img.classList.remove('has-img'); }
+  document.getElementById('faceEnrollBtnLabel').textContent = s.faceDescriptor ? 'Actualizar rostro' : 'Registrar rostro';
   document.getElementById('editModal').classList.add('show');
 }
 function saveEditStudent(){
@@ -13919,7 +13960,13 @@ function processCode(rawText){
   if(!student){
     return {ok:false, unregistered:true, rawCode:text, msg:'Código no reconocido'};
   }
+  return registrarAsistenciaAlumno(student);
+}
 
+// Registra entrada/salida para un alumno ya identificado (por QR, folio, o
+// reconocimiento facial de respaldo). Compartida por los tres métodos para
+// que el historial y las notificaciones funcionen exactamente igual.
+function registrarAsistenciaAlumno(student){
   const today = todayStr();
   let openEntry = attendance.find(a => a.studentId===student.id && a.date===today && !a.checkout);
 
@@ -13994,6 +14041,133 @@ function sendNotifySMS(){
   closeModal('notifyModal');
 }
 
+/* ---------- Enrolar rostro de un alumno (desde el modal de edición) ---------- */
+let faceEnrollStream = null, faceEnrollRAF = null, faceEnrollLastDescriptor = null;
+
+async function openFaceEnroll(){
+  const studentId = document.getElementById('editStudentId').value;
+  if(!studentId) return;
+  document.getElementById('faceEnrollModal').classList.add('show');
+  const status = document.getElementById('faceEnrollStatus');
+  const saveBtn = document.getElementById('faceEnrollSaveBtn');
+  saveBtn.style.display = 'none';
+  faceEnrollLastDescriptor = null;
+  status.textContent = 'Cargando reconocimiento facial…';
+  try { await loadFaceApi(); }
+  catch(e){ status.textContent = 'No se pudo cargar el reconocimiento facial. Revisa tu conexión a internet.'; return; }
+
+  const video = document.getElementById('faceEnrollVideo');
+  try { faceEnrollStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }); }
+  catch(e){ status.textContent = 'No se pudo acceder a la cámara.'; return; }
+  video.srcObject = faceEnrollStream;
+  await video.play();
+  status.textContent = 'Buscando un rostro…';
+  faceEnrollLoop();
+}
+async function faceEnrollLoop(){
+  if(!document.getElementById('faceEnrollModal').classList.contains('show')) return;
+  const video = document.getElementById('faceEnrollVideo');
+  const status = document.getElementById('faceEnrollStatus');
+  const saveBtn = document.getElementById('faceEnrollSaveBtn');
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    try {
+      const descriptor = await detectarDescriptorDeVideo(video);
+      if(descriptor){
+        faceEnrollLastDescriptor = Array.from(descriptor);
+        status.textContent = '✓ Rostro detectado. Puedes guardar.';
+        saveBtn.style.display = 'inline-flex';
+      } else {
+        status.textContent = 'Buscando un rostro… acércate y mira a la cámara.';
+        saveBtn.style.display = 'none';
+      }
+    } catch(e){ /* un fallo puntual de detección no debe detener el ciclo */ }
+  }
+  faceEnrollRAF = requestAnimationFrame(faceEnrollLoop);
+}
+function guardarRostroEnrolado(){
+  if(!faceEnrollLastDescriptor) return;
+  const studentId = document.getElementById('editStudentId').value;
+  const s = students.find(x => x.id === studentId);
+  if(!s) return;
+  s.faceDescriptor = faceEnrollLastDescriptor;
+  saveJSON(STUDENTS_KEY, students);
+  showToast(`Rostro de ${s.name} guardado`, 'ok');
+  closeFaceEnroll();
+}
+function closeFaceEnroll(){
+  document.getElementById('faceEnrollModal').classList.remove('show');
+  if(faceEnrollRAF) cancelAnimationFrame(faceEnrollRAF);
+  if(faceEnrollStream){ faceEnrollStream.getTracks().forEach(t=>t.stop()); faceEnrollStream=null; }
+}
+
+/* ---------- Respaldo "Olvidé mi credencial" (reconocimiento facial) ---------- */
+let faceFallbackStream = null, faceFallbackRAF = null, faceFallbackCandidate = null, faceFallbackPausado = false;
+
+async function openFaceFallback(){
+  document.getElementById('faceFallbackModal').classList.add('show');
+  document.getElementById('faceFallbackConfirm').style.display = 'none';
+  faceFallbackPausado = false;
+  const status = document.getElementById('faceFallbackStatus');
+  status.textContent = 'Cargando reconocimiento facial…';
+  try { await loadFaceApi(); }
+  catch(e){ status.textContent = 'No se pudo cargar el reconocimiento facial. Revisa tu conexión a internet, o usa tu credencial/folio.'; return; }
+
+  const video = document.getElementById('faceFallbackVideo');
+  try { faceFallbackStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }); }
+  catch(e){ status.textContent = 'No se pudo acceder a la cámara.'; return; }
+  video.srcObject = faceFallbackStream;
+  await video.play();
+  status.textContent = 'Mira a la cámara…';
+  faceFallbackLoop();
+}
+async function faceFallbackLoop(){
+  if(!document.getElementById('faceFallbackModal').classList.contains('show')) return;
+  if(faceFallbackPausado){ faceFallbackRAF = requestAnimationFrame(faceFallbackLoop); return; }
+  const video = document.getElementById('faceFallbackVideo');
+  const status = document.getElementById('faceFallbackStatus');
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    try {
+      const descriptor = await detectarDescriptorDeVideo(video);
+      if(descriptor){
+        const { student, coincide } = mejorCoincidenciaFacial(descriptor);
+        if(coincide){
+          faceFallbackCandidate = student;
+          faceFallbackPausado = true;
+          status.textContent = '';
+          document.getElementById('faceFallbackNombre').textContent = `¿Eres ${student.name}?`;
+          document.getElementById('faceFallbackConfirm').style.display = 'block';
+        } else {
+          status.textContent = 'No se reconoce tu rostro. Intenta de nuevo o pide ayuda a tu maestro(a).';
+        }
+      } else {
+        status.textContent = 'Buscando un rostro… acércate y mira a la cámara.';
+      }
+    } catch(e){ /* un fallo puntual de detección no debe detener el ciclo */ }
+  }
+  faceFallbackRAF = requestAnimationFrame(faceFallbackLoop);
+}
+function confirmarCoincidenciaFacial(){
+  if(!faceFallbackCandidate) return;
+  const res = registrarAsistenciaAlumno(faceFallbackCandidate);
+  closeFaceFallback();
+  reportScanResult(res);
+  renderAll();
+  maybeOfferNotify(res);
+}
+function rechazarCoincidenciaFacial(){
+  faceFallbackCandidate = null;
+  faceFallbackPausado = false;
+  document.getElementById('faceFallbackConfirm').style.display = 'none';
+  document.getElementById('faceFallbackStatus').textContent = 'Mira a la cámara…';
+}
+function closeFaceFallback(){
+  document.getElementById('faceFallbackModal').classList.remove('show');
+  if(faceFallbackRAF) cancelAnimationFrame(faceFallbackRAF);
+  if(faceFallbackStream){ faceFallbackStream.getTracks().forEach(t=>t.stop()); faceFallbackStream=null; }
+  faceFallbackCandidate = null;
+  faceFallbackPausado = false;
+}
+
 function processManualCode(){
   const input = document.getElementById('manualCode');
   const res = processCode(input.value);
@@ -14052,6 +14226,56 @@ function confirmLinkCode(){
   renderAll();
   maybeOfferNotify(res);
   showToast(`Código vinculado a ${s.name}`, 'ok');
+}
+
+/* ---------- Reconocimiento facial (RESPALDO cuando se olvida la credencial) ----------
+   OJO: esto NO es una verificación de seguridad — es una ayuda de conveniencia.
+   Siempre muestra "¿Eres [nombre]?" para que el propio alumno (o un maestro)
+   confirme antes de registrar, porque la coincidencia puede fallar entre
+   hermanos, mala luz, etc. face-api.js corre 100% en el navegador, gratis,
+   sin mandar fotos a ningún servicio externo. */
+let faceApiLoaded = false, faceApiLoadingPromise = null;
+const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+const FACE_MATCH_THRESHOLD = 0.5; // menor = más estricto. 0.5 es el valor típico recomendado por face-api.js
+
+function loadFaceApi(){
+  if (faceApiLoaded) return Promise.resolve();
+  if (faceApiLoadingPromise) return faceApiLoadingPromise;
+  faceApiLoadingPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+    script.onload = async () => {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODELS_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODELS_URL);
+        faceApiLoaded = true;
+        resolve();
+      } catch (e) { reject(e); }
+    };
+    script.onerror = () => reject(new Error('No se pudo descargar face-api.js (revisa tu conexión a internet).'));
+    document.head.appendChild(script);
+  });
+  return faceApiLoadingPromise;
+}
+
+async function detectarDescriptorDeVideo(videoEl){
+  const result = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks().withFaceDescriptor();
+  return result ? result.descriptor : null;
+}
+
+// Compara un descriptor contra TODOS los alumnos con rostro ya registrado
+// dentro de la lista visible actual (ya filtrada por nivel/grado/grupo
+// asignado a esta cuenta). Devuelve el mejor candidato y qué tan lejos está.
+function mejorCoincidenciaFacial(descriptor){
+  let mejor = null, mejorDistancia = Infinity;
+  students.forEach(s => {
+    if (!s.faceDescriptor || !s.faceDescriptor.length) return;
+    const distancia = faceapi.euclideanDistance(descriptor, s.faceDescriptor);
+    if (distancia < mejorDistancia) { mejorDistancia = distancia; mejor = s; }
+  });
+  return { student: mejor, distancia: mejorDistancia, coincide: mejor && mejorDistancia <= FACE_MATCH_THRESHOLD };
 }
 
 /* ---------- Scanner (camera + jsQR) ---------- */
