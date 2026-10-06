@@ -1391,6 +1391,13 @@ function goToBanos() {
 if (!tieneAccesoBanos()) return;
 window.location.href = 'banos.html';
 }
+// Servicio Social: mismo criterio que Pase de Baño — no tiene permiso propio,
+// basta con tener acceso a Primaria o Secundaria.
+function tieneAccesoServicioSocial() { return tieneAccesoPrimaria() || tieneAccesoSecundaria(); }
+function goToServicioSocial() {
+if (!tieneAccesoServicioSocial()) return;
+window.location.href = 'servicio-social.html';
+}
 function goToBitacora(nivel) {
 // El acceso real a Bitácora ya se controla con el permiso accesoBitacora de
 // cada cuenta (ver tieneAccesoBitacora) — el dominio del correo ya no importa,
@@ -1803,6 +1810,7 @@ const permPrim = tieneAccesoPrimaria();
 const permSec = tieneAccesoSecundaria();
 const permCheckin = tieneAccesoCheckin();
 const permBanos = tieneAccesoBanos();
+const permServicioSocial = tieneAccesoServicioSocial();
 if (!permPrim && !permSec && !permCheckin) {
 return `<main><div class="card" style="text-align:center;padding:28px;">
 <p style="font-size:1.8em;margin-bottom:8px;">🔒</p>
@@ -1833,6 +1841,11 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 <p style="font-size:2.2em;margin-bottom:6px;">🚻</p>
 <p style="font-weight:700;font-size:1.2em;">PASE DE BAÑO</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Registra salidas y regresos del baño</p>
+</div>` : ''}
+${permServicioSocial ? `<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#17C3A2,#0E8C72);color:#fff;text-align:center;padding:28px;" onclick="goToServicioSocial()">
+<p style="font-size:2.2em;margin-bottom:6px;">🎓</p>
+<p style="font-weight:700;font-size:1.2em;">SERVICIO SOCIAL</p>
+<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Checador independiente de prestadores</p>
 </div>` : ''}
 </div>
 <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
