@@ -13143,6 +13143,19 @@ let ckAccesoSecundaria = true;
 // alumnos, totalmente separada de Primaria/Secundaria (nodo "checkinStudents"),
 // en vez de los alumnos compartidos con Sistema Escolar.
 let ckModoSoloCheckin = false;
+// Restricción de grados/grupos asignada por el administrador en el perfil de
+// esta cuenta (perfiles/{uid}/ckAsignacion). null = sin restricción, ve todo
+// (comportamiento de siempre). Si existe para un nivel, solo ve alumnos cuyo
+// grado Y grupo estén en las listas asignadas para ese nivel.
+let ckAsignacion = null;
+function ckAlumnoPermitido(s){
+  if (!ckAsignacion) return true;
+  const asign = ckAsignacion[s.nivel || 'primaria'];
+  if (!asign) return true;
+  const grados = asign.grados || [], grupos = asign.grupos || [];
+  if (grados.length === 0 || grupos.length === 0) return false;
+  return grados.includes(s.grade) && grupos.includes(s.group);
+}
 function ckNivelesDisponibles(){
   if (ckModoSoloCheckin) return ['checkin'];
   const arr = [];
@@ -13296,8 +13309,12 @@ const ckDb = firebase.database();
 let ckStudentsRef = null, ckSecStudentsRef = null, ckAttendanceRef = null;
 let ckCheckinStudentsRef = null; // lista propia, solo para cuentas SOLO CheckIn Kids
 let ckSyncReady = false;
-function ckDbBase(uid, isAdmin) {
-  return 'usuarios/' + uid; // SaaS: Todos usan su propio UID
+function ckDbBase(espacioUid) {
+  // SaaS multi-tenant: un administrador (de escuela) usa su propio espacio
+  // (su propio uid). Un maestro creado por ese administrador comparte el
+  // MISMO espacio (perfil.espacioUid), igual que ya hace index.html —
+  // nunca su propio uid, o vería su cajón vacío en vez del compartido.
+  return 'usuarios/' + espacioUid;
 }
 function ckBindRefs(base) {
   if (ckModoSoloCheckin) {
@@ -13355,7 +13372,9 @@ let ckPriStudents = [];
 let ckSecStudentsArr = [];
 let ckCheckinOwnStudents = []; // lista propia de una cuenta SOLO CheckIn Kids
 function ckMergeStudents(){
-  students = ckModoSoloCheckin ? [...ckCheckinOwnStudents] : [...ckPriStudents, ...ckSecStudentsArr];
+  students = ckModoSoloCheckin
+    ? [...ckCheckinOwnStudents]
+    : [...ckPriStudents, ...ckSecStudentsArr].filter(ckAlumnoPermitido);
   renderAll();
 }
 
@@ -13423,6 +13442,19 @@ function ckStartSync(){
   ckMergeStudents();
 }
 
+// Respaldo contra pantallas "congeladas" al volver de WhatsApp u otra app:
+// al salir, suelta la cámara (si estaba activa) para que no quede un stream
+// de video inválido; al volver, cierra cualquier modal que se haya quedado
+// abierto y fuerza un repintado completo de la pantalla.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (typeof scannerActive !== 'undefined' && scannerActive) stopScanner();
+  } else {
+    document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
+    if (typeof renderAll === 'function') renderAll();
+  }
+});
+
 ckAuth.onAuthStateChanged(async user => {
   if(!user){
     // Usa el mismo sistema de autenticación de Sistema Escolar; si no
@@ -13439,6 +13471,7 @@ ckAuth.onAuthStateChanged(async user => {
     ckAccesoPrimaria = true;
     ckAccesoSecundaria = true;
   }
+  let espacioUid = user.uid;
   try {
     const perfilSnap = await ckDb.ref('perfiles/' + user.uid).once('value');
     const perfil = perfilSnap.val();
@@ -13461,6 +13494,12 @@ ckAuth.onAuthStateChanged(async user => {
         window.location.href = 'index.html';
         return;
       }
+      // Mismo criterio que index.html: un colega creado por un administrador
+      // comparte el ESPACIO de ese administrador (perfil.espacioUid), no usa
+      // su propio uid como cajón de datos. Sin este campo, cae a su propio
+      // uid (cuentas admin, o creadas antes de que existiera espacioUid).
+      espacioUid = perfil.espacioUid || user.uid;
+      ckAsignacion = perfil.ckAsignacion || null;
     }
   } catch(e) { /* cuenta sin perfil = administrador original */ }
   // Cuenta SOLO CheckIn Kids: ni Primaria ni Secundaria. Usa su propia lista de
@@ -13469,7 +13508,7 @@ ckAuth.onAuthStateChanged(async user => {
   ckAjustarNivelesAlAcceso();
   ckPopulateNivelSelect('inNivel', 'primaria');
   updateNivelOptions('in');
-  ckBindRefs(ckDbBase(user.uid, isAdmin));
+  ckBindRefs(ckDbBase(espacioUid));
   ckStartSync();
 });
 
@@ -13931,8 +13970,20 @@ function sendNotifyWhatsApp(){
   const msg = document.getElementById('notifyMessage').value.trim();
   const digits = cleanPhoneForWhatsapp(phone);
   if(!digits || !msg){ showToast('Falta el número o el mensaje', 'err'); return; }
-  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, '_blank');
+  const url = `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`;
+  // Cerrar el modal ANTES de salir a WhatsApp: si algo falla al volver, no
+  // se queda el fondo oscuro del modal bloqueando los toques en pantalla.
   closeModal('notifyModal');
+  // Como app instalada/acceso directo (modo standalone), window.open a veces
+  // se queda a medias al entregarle el enlace a la app de WhatsApp y la
+  // pantalla queda congelada al volver; location.href sí entrega el enlace
+  // de forma confiable ahí. En el navegador normal, window.open sigue igual.
+  const esStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (esStandalone) {
+    window.location.href = url;
+  } else {
+    window.open(url, '_blank');
+  }
 }
 function sendNotifySMS(){
   const phone = document.getElementById('notifyRecipientSelect').value;

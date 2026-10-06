@@ -757,6 +757,47 @@ const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
 if (u) u[campo] = valor;
 render();
 }
+// Restricción de grados/grupos en CheckIn Kids para una cuenta creada (colega):
+// sin "ckAsignacion" en su perfil, ve TODOS los grados y grupos (comportamiento
+// de siempre). Al activarla, solo ve los alumnos cuyo grado esté en su lista de
+// "grados" Y cuyo grupo esté en su lista de "grupos" (combinación), para cada
+// nivel al que ya tenga acceso (Primaria/Secundaria).
+function toggleCkRestriccionGeneral(uid, activar) {
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+if (activar) {
+const nuevo = { primaria: { grados: [], grupos: [] }, secundaria: { grados: [], grupos: [] } };
+db.ref('perfiles/' + uid + '/ckAsignacion').set(nuevo);
+if (u) u.ckAsignacion = nuevo;
+} else {
+db.ref('perfiles/' + uid + '/ckAsignacion').remove();
+if (u) delete u.ckAsignacion;
+}
+render();
+}
+function toggleCkAsignacionValor(uid, nivel, tipo, valor, checked) {
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+const actual = (u && u.ckAsignacion && u.ckAsignacion[nivel] && u.ckAsignacion[nivel][tipo]) || [];
+const nuevo = checked ? (actual.includes(valor) ? actual : [...actual, valor]) : actual.filter(v => v !== valor);
+db.ref('perfiles/' + uid + '/ckAsignacion/' + nivel + '/' + tipo).set(nuevo);
+if (u) {
+u.ckAsignacion = u.ckAsignacion || { primaria: { grados: [], grupos: [] }, secundaria: { grados: [], grupos: [] } };
+u.ckAsignacion[nivel] = u.ckAsignacion[nivel] || { grados: [], grupos: [] };
+u.ckAsignacion[nivel][tipo] = nuevo;
+}
+render();
+}
+function ckAsignacionBloqueHtml(u, nivel, etiqueta, grados, grupos) {
+const asign = (u.ckAsignacion && u.ckAsignacion[nivel]) || { grados: [], grupos: [] };
+const chip = (tipo, valor, marcado) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.76em;margin:2px 6px 2px 0;"><input type="checkbox" ${marcado ? 'checked' : ''} onchange="toggleCkAsignacionValor('${u.uid}','${nivel}','${tipo}','${valor}',this.checked)"/>${valor}</label>`;
+return `
+<div style="margin-top:6px;padding:6px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+<p style="font-size:0.74em;font-weight:700;color:#374151;margin-bottom:3px;">${etiqueta}</p>
+<p style="font-size:0.7em;color:#6b7280;margin-bottom:2px;">Grados:</p>
+<div>${grados.map(g => chip('grados', g, asign.grados.includes(g))).join('')}</div>
+<p style="font-size:0.7em;color:#6b7280;margin:4px 0 2px;">Grupos:</p>
+<div>${grupos.map(g => chip('grupos', g, asign.grupos.includes(g))).join('')}</div>
+</div>`;
+}
 function toggleDeshabilitarUsuario(u) {
 const nuevoValor = !u.deshabilitado;
 const mensaje = nuevoValor
@@ -1350,12 +1391,6 @@ function goToBanos() {
 if (!tieneAccesoBanos()) return;
 window.location.href = 'banos.html';
 }
-// Servicio Social: independiente de los datos de alumnos (prestadores propios,
-// no vinculados a Primaria/Secundaria/CheckIn Kids), disponible para cualquier
-// cuenta con sesión iniciada en el sistema.
-function goToServicioSocial() {
-window.location.href = 'servicio-social.html';
-}
 function goToBitacora(nivel) {
 // El acceso real a Bitácora ya se controla con el permiso accesoBitacora de
 // cada cuenta (ver tieneAccesoBitacora) — el dominio del correo ya no importa,
@@ -1799,11 +1834,6 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 <p style="font-weight:700;font-size:1.2em;">PASE DE BAÑO</p>
 <p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Registra salidas y regresos del baño</p>
 </div>` : ''}
-<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#2D8C8C,#1F6B6B);color:#fff;text-align:center;padding:28px;" onclick="goToServicioSocial()">
-<p style="font-size:2.2em;margin-bottom:6px;">🧑‍🎓</p>
-<p style="font-weight:700;font-size:1.2em;">SERVICIO SOCIAL</p>
-<p style="font-size:0.8em;opacity:0.85;margin-top:4px;">Checador independiente por QR, con horas requeridas</p>
-</div>
 </div>
 <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
 <button class="btn btn-ghost btn-sm" onclick="openCambiarPasswordVoluntario()">🔑 Cambiar mi contraseña</button>
@@ -1890,6 +1920,14 @@ ${puedeEditarPermisos ? `
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoPrimaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoPrimaria',this.checked)"/> Primaria</label>
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoSecundaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoSecundaria',this.checked)"/> Secundaria</label>
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoCheckin !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoCheckin',this.checked)"/> CheckIn Kids</label>
+${u.accesoCheckin !== false ? `
+<div style="margin:4px 0 8px 22px;padding:6px;background:#f9fafb;border-radius:8px;">
+<label style="display:flex;align-items:center;gap:8px;font-size:0.78em;font-weight:600;margin-bottom:4px;"><input type="checkbox" ${u.ckAsignacion ? 'checked' : ''} onchange="toggleCkRestriccionGeneral('${u.uid}', this.checked)"/> Limitar a grados/grupos específicos en CheckIn Kids</label>
+${u.ckAsignacion ? `
+${(u.accesoPrimaria !== false) ? ckAsignacionBloqueHtml(u, 'primaria', 'Primaria', ['1°','2°','3°','4°','5°','6°'], ['A','B','C','D']) : ''}
+${(u.accesoSecundaria !== false) ? ckAsignacionBloqueHtml(u, 'secundaria', 'Secundaria', ['1°','2°','3°'], ['A','B','C','D','E','F']) : ''}
+` : `<p style="font-size:0.7em;color:#6b7280;">Sin marcar: ve todos los grados y grupos de CheckIn Kids (como hasta ahora).</p>`}
+</div>` : ''}
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoBitacora === true ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoBitacora',this.checked)"/> Bitácora</label>
 ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.puedeGestionarUsuarios ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','puedeGestionarUsuarios',this.checked)"/> Puede gestionar sus propios usuarios</label>` : ''}
 </div>
