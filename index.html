@@ -134,7 +134,8 @@ const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 const IA_WORKER_URL = 'https://sistema-escolar-ia.beltrannpipee.workers.dev'; // sugerencias de texto con IA (Evaluación Formativa)
 const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
-const ADMIN_EMAIL = 'jose.chavarria@jaliscoedu.mx'; // única cuenta que es administradora de todo el sistema — correo real para poder recuperar la contraseña si se olvida
+// Únicas dos cuentas Súper Administrador del sistema (ninguna otra puede serlo).
+const ADMIN_EMAILS = ['educacion@chavarria.edu.com', 'jose.chavarria@jaliscoedu.mx'];
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
 const FIREBASE_CONFIG = {
@@ -361,7 +362,7 @@ async function continuarSesionPostTerminos() {
 // Solo la cuenta oficial del administrador (por correo) puede tener privilegios
 // de administrador; ninguna otra cuenta puede auto-otorgárselos.
 const email = (state.user && state.user.email) || (auth.currentUser && auth.currentUser.email) || '';
-if (email && email.toLowerCase() === ADMIN_EMAIL) {
+if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
 state.isAdmin = true;
 try { await db.ref('admins/' + currentUid).set(true); } catch (e2) { /* las reglas ya lo protegen */ }
 } else {
