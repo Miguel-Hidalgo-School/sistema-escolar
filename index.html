@@ -1859,6 +1859,7 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 ${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openUserAdmin()">👥 Gestionar usuarios</button>` : ''}
 ${!state.isAdmin && state.perfilActual && state.perfilActual.puedeGestionarUsuarios ? `<button class="btn btn-ghost btn-sm" onclick="openMisUsuarios()">👥 Gestionar mis usuarios</button>` : ''}
 </div>
+<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 15-oct-2026 · periodos · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
 </main>`;
 }
 function openCambiarPasswordVoluntario() {
