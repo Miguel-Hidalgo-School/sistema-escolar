@@ -321,6 +321,7 @@ setTimeout(()=>{ box.innerHTML=''; }, 2600);
 function dbBase() {
     // Modelo SaaS: cada usuario (incluyendo admin) tiene su propio espacio privado
     // No hay carpeta compartida DB_ROOT — garantiza privacidad total
+    if (state.espacioAdmin === '__ROOT__') return DB_ROOT;
     const espacio = state.espacioAdmin || (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
     return 'usuarios/' + espacio;
 }
@@ -378,6 +379,19 @@ state.espacioAdmin = currentUid;
 const es = await conTimeout(db.ref('adminEspacio').once('value'), 8000);
 state.espacioAdmin = es.val() || null;
 }
+// Si el espacio por-cuenta está vacío pero la carpeta original "Sistema Escolar"
+// (la que usaba el administrador antes) sí tiene alumnos, se usa esa para ambos.
+if (state.espacioAdmin) {
+const tiene = async (b) => {
+for (const n of ['students', 'secStudents']) {
+const sn = await conTimeout(db.ref(b + '/' + n).limitToFirst(1).once('value'), 8000);
+if (sn.exists()) return true;
+}
+return false;
+};
+state.espacioAdminUid = state.espacioAdmin;
+if (!(await tiene('usuarios/' + state.espacioAdmin)) && (await tiene(DB_ROOT))) state.espacioAdmin = '__ROOT__';
+}
 } catch (e3) { state.espacioAdmin = null; }
 } else {
 try {
@@ -407,6 +421,7 @@ state.authError = '';
 state.forcePasswordChange = false;
 state.isAdmin = false;
 state.espacioAdmin = null;
+state.espacioAdminUid = null;
 state.perfilActual = null;
 // Misma limpieza de seguridad: se hace también aquí (no solo al cerrar
 // sesión) para que ninguna cuenta nueva pueda heredar por accidente la
@@ -633,6 +648,7 @@ return;
 state.showUserAdmin = true;
 state.userAdminScope = 'all';
 state.adminUsersList = null;
+try { unsubscribeData(); } catch (e) {}
 render();
 cargarListaUsuarios();
 }
@@ -662,6 +678,7 @@ return;
 state.showUserAdmin = true;
 state.userAdminScope = 'own';
 state.adminUsersList = null;
+try { unsubscribeData(); } catch (e) {}
 render();
 cargarListaUsuarios();
 }
@@ -669,10 +686,26 @@ function closeUserAdmin() {
 state.showUserAdmin = false;
 state.deleteConfirmUid = null;
 state.passwordsVisibles = {};
+try { if (!state.forcePasswordChange) subscribeData(); } catch (e) {}
 render();
 }
 function conTimeout(promesa, ms) {
 return Promise.race([promesa, new Promise((_, rechazar) => setTimeout(() => rechazar({ code: 'tiempo-agotado', message: 'La base de datos tardó demasiado en responder' }), ms))]);
+}
+// Lectura por HTTP directo (no usa el canal en tiempo real, que puede estar saturado
+// descargando datos pesados). Devuelve el JSON del nodo.
+async function leerNodoRest(path, ms) {
+const tok = await conTimeout(auth.currentUser.getIdToken(), ms);
+const ctrl = new AbortController();
+const t = setTimeout(() => ctrl.abort(), ms);
+try {
+const r = await fetch(firebase.app().options.databaseURL + '/' + path + '.json?auth=' + encodeURIComponent(tok), { signal: ctrl.signal });
+if (!r.ok) throw { code: 'http-' + r.status, message: 'HTTP ' + r.status };
+return await r.json();
+} catch (e) {
+if (e && e.name === 'AbortError') throw { code: 'tiempo-agotado', message: 'La consulta HTTP tardó demasiado' };
+throw e;
+} finally { clearTimeout(t); }
 }
 // Prueba paso a paso la conexión con la base de datos y escribe el resultado en pantalla.
 async function correrDiagnosticoUsuarios() {
@@ -695,6 +728,7 @@ lineas.push('❌ ' + nombre + ': ' + ((e && e.code) || '') + ' ' + ((e && e.mess
 }
 pintar();
 }
+await paso('HTTP directo: lista de perfiles', async () => { const v = (await leerNodoRest('perfiles', 20000)) || {}; return Object.keys(v).length + ' perfiles'; });
 await paso('Conexión a Firebase', async () => (await db.ref('.info/connected').once('value')).val() ? 'conectado' : 'sin conexión todavía');
 await paso('Registro admins/<tu uid>', async () => String((await db.ref('admins/' + currentUid).once('value')).val()));
 await paso('Tu perfil', async () => { const v = (await db.ref('perfiles/' + currentUid).once('value')).val(); return v ? 'existe' : 'no existe (cuenta original)'; });
@@ -719,8 +753,9 @@ state.adminUsersList = perfiles
 .map((snap, i) => snap.val() ? { uid: uids[i], ...snap.val() } : null)
 .filter(Boolean);
 } else {
-const snap = await conTimeout(db.ref('perfiles').once('value'), 15000);
-const val = snap.val() || {};
+let val;
+try { val = (await leerNodoRest('perfiles', 20000)) || {}; }
+catch (eRest) { const snap = await conTimeout(db.ref('perfiles').once('value'), 20000); val = snap.val() || {}; }
 state.adminUsersList = Object.keys(val).map(uid => ({ uid, ...val[uid] }));
 }
 } catch (e) {
@@ -1478,7 +1513,7 @@ const puente = {
 generadoEn: Date.now(),
 // Los Súper Administradores comparten un solo espacio (state.espacioAdmin);
 // cualquier otra cuenta usa su propio UID, como antes.
-espacioId: (state.isAdmin && state.espacioAdmin) ? state.espacioAdmin : currentUid,
+espacioId: (state.isAdmin && (state.espacioAdminUid || state.espacioAdmin) && (state.espacioAdminUid || state.espacioAdmin) !== '__ROOT__') ? (state.espacioAdminUid || state.espacioAdmin) : currentUid,
 Primaria: {
 escuela: si.nombre || '',
 cct: si.cct || '',
@@ -1910,7 +1945,7 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 ${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openUserAdmin()">👥 Gestionar usuarios</button>` : ''}
 ${!state.isAdmin && state.perfilActual && state.perfilActual.puedeGestionarUsuarios ? `<button class="btn btn-ghost btn-sm" onclick="openMisUsuarios()">👥 Gestionar mis usuarios</button>` : ''}
 </div>
-<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 16-oct-2026 · espacio compartido · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
+<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 16-oct-2026 · usuarios HTTP · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
 </main>`;
 }
 function openCambiarPasswordVoluntario() {
