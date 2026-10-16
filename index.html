@@ -417,6 +417,7 @@ return false;
 }
 auth.onAuthStateChanged(async u => {
 state.user = u;
+state.authListo = true;
 state.authError = '';
 state.forcePasswordChange = false;
 state.isAdmin = false;
@@ -639,18 +640,7 @@ return out;
 }
 function openUserAdmin() {
 if (!state.isAdmin) return;
-const pinIngresado = prompt('Ingresa tu PIN para entrar a Gestionar usuarios:');
-if (pinIngresado === null) return;
-if (pinIngresado.trim() !== getPinGestionUsuarios()) {
-alert('PIN incorrecto.');
-return;
-}
-state.showUserAdmin = true;
-state.userAdminScope = 'all';
-state.adminUsersList = null;
-try { unsubscribeData(); } catch (e) {}
-render();
-cargarListaUsuarios();
+window.location.href = 'usuarios.html';
 }
 // PIN para entrar a "Gestionar usuarios". Se guarda por dispositivo en
 // localStorage; si nunca se ha cambiado, usa 6103 como valor por defecto.
@@ -669,18 +659,7 @@ alert('PIN actualizado correctamente.');
 }
 function openMisUsuarios() {
 if (!state.perfilActual || !state.perfilActual.puedeGestionarUsuarios) return;
-const pinIngresado = prompt('Ingresa tu PIN para entrar a Gestionar usuarios:');
-if (pinIngresado === null) return;
-if (pinIngresado.trim() !== getPinGestionUsuarios()) {
-alert('PIN incorrecto.');
-return;
-}
-state.showUserAdmin = true;
-state.userAdminScope = 'own';
-state.adminUsersList = null;
-try { unsubscribeData(); } catch (e) {}
-render();
-cargarListaUsuarios();
+window.location.href = 'usuarios.html';
 }
 function closeUserAdmin() {
 state.showUserAdmin = false;
@@ -1829,7 +1808,7 @@ function renderModalTerminos() {
 function render() {
 const app = document.getElementById('app');
 if (!auth) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
-if (!state.user) { app.innerHTML = renderLogin(); return; }
+if (!state.user) { app.innerHTML = state.authListo ? renderLogin() : '<div class="center-screen"><p>Cargando...</p></div>'; return; }
 // MOSTRAR MODAL DE TÉRMINOS (BLOQUEADOR) ANTES DE CUALQUIER OTRA COSA
 if (state.mostrarModalTerminos) {
   app.innerHTML = renderModalTerminos();
@@ -1945,7 +1924,7 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 ${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openUserAdmin()">👥 Gestionar usuarios</button>` : ''}
 ${!state.isAdmin && state.perfilActual && state.perfilActual.puedeGestionarUsuarios ? `<button class="btn btn-ghost btn-sm" onclick="openMisUsuarios()">👥 Gestionar mis usuarios</button>` : ''}
 </div>
-<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 16-oct-2026 · usuarios HTTP · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
+<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 16-oct-2026 · usuarios.html · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
 </main>`;
 }
 function openCambiarPasswordVoluntario() {

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Usuarios · Sistema Escolar</title>
+<meta name="theme-color" content="#2563eb">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; max-width: 100vw; }
+body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #1f2937; }
+.hidden { display: none !important; }
+.center-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg,#dbeafe,#e0e7ff); }
+.login-card { background: #fff; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 32px; width: 100%; max-width: 380px; text-align: center; }
+.avatar { width: 56px; height: 56px; border-radius: 999px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 22px; margin: 0 auto 16px; }
+.login-card h1 { font-size: 1.25em; margin-bottom: 4px; }
+.login-card p.sub { color: #6b7280; font-size: 0.85em; margin-bottom: 20px; }
+.field { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; text-align: left; }
+.field input { border: none; outline: none; width: 100%; font-size: 0.9em; }
+.btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95em; cursor: pointer; }
+.btn-blue { background: #2563eb; color: #fff; }
+.btn-gray { background: #f3f4f6; color: #374151; }
+.btn-green { background: #16a34a; color: #fff; }
+.btn-red { background: #fee2e2; color: #dc2626; }
+.btn-purple { background: #9333ea; color: #fff; }
+.btn-dark { background: #1f2937; color: #fff; }
+.hint { font-size: 0.75em; color: #9ca3af; margin-top: 14px; }
+.errtext { font-size: 0.75em; color: #dc2626; margin-top: 10px; }
+.inicio-hero { background: linear-gradient(135deg,#6366f1,#a855f7); border-radius: 18px; padding: 28px 20px; text-align: center; color: #fff; margin-bottom: 12px; box-shadow: 0 10px 24px rgba(124,58,237,0.25); }
+.inicio-hero .logo-box { width: 96px; height: 96px; border-radius: 18px; background: rgba(255,255,255,0.2); margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; backdrop-filter: blur(4px); }
+.inicio-hero .upload-label { display: inline-block; width: auto; padding: 8px 16px; margin-top: 10px; cursor: pointer; background: rgba(255,255,255,0.9); color: #6d28d9; border-radius: 999px; font-size: 0.8em; font-weight: 700; }
+header.topbar { background: linear-gradient(120deg,#2563eb,#7c3aed); border-bottom: none; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; box-shadow: 0 2px 8px rgba(37,99,235,0.25); }
+header.topbar h1 { font-size: 1.1em; font-weight: 700; color: #fff; flex: 1; text-align: center; }
+.userchip { display: flex; align-items: center; gap: 8px; font-size: 0.8em; color: rgba(255,255,255,0.85); }
+.userchip .av { width: 32px; height: 32px; border-radius: 999px; background: #f97316; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8em; }
+.userchip button { border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 0.8em; cursor: pointer; padding: 5px 10px; border-radius: 999px; }
+nav.tabs { display: flex; flex-wrap: wrap; justify-content: center; background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 57px; z-index: 30; }
+nav.tabs button { padding: 10px 14px; font-size: 0.9em; font-weight: 500; white-space: nowrap; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer; }
+nav.tabs button.active { color: #2563eb; border-color: #7c3aed; font-weight: 700; }
+main { max-width: 640px; width: 100%; margin: 0 auto; padding: 16px; }
+.grade-pills { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; }
+.grade-pills button { padding: 6px 16px; border-radius: 999px; font-size: 0.85em; font-weight: 500; white-space: nowrap; border: 1px solid #d1d5db; background: #fff; color: #4b5563; cursor: pointer; }
+.grade-pills button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.grade-pills.purple button.active { background: #9333ea; border-color: #9333ea; }
+.card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; width: 100%; min-width: 0; }
+.row-flex { display: flex; gap: 8px; min-width: 0; }
+.row-flex button { min-width: 0; flex-shrink: 1; }
+.row-flex input { flex: 1; min-width: 0; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 0.9em; outline: none; }
+.student-row { display: flex; align-items: center; justify-content: space-between; }
+.student-row .info { flex: 1; cursor: pointer; }
+.student-row .info p.name { font-weight: 500; font-size: 0.9em; }
+.student-row .info p.avg { font-size: 0.75em; color: #9ca3af; }
+.student-row button.del { border: none; background: none; color: #f87171; font-size: 0.75em; cursor: pointer; padding: 0 8px; }
+.edit-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f3f4f6; }
+.edit-panel input, .edit-panel select { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; font-size: 0.75em; }
+.edit-panel .full { grid-column: 1 / -1; }
+.edit-panel .section-title { grid-column: 1 / -1; font-size: 0.75em; font-weight: 600; color: #4b5563; margin-top: 6px; }
+table.grades-table { width: 100%; font-size: 0.75em; border-collapse: collapse; }
+table.grades-table th { color: #9ca3af; font-weight: 500; padding: 4px; text-align: center; }
+table.grades-table th:first-child { text-align: left; }
+table.grades-table td { padding: 6px 4px; border-top: 1px solid #f3f4f6; text-align: center; }
+table.grades-table td:first-child { text-align: left; color: #374151; }
+table.grades-table input.grade-input { width: 44px; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center; padding: 4px; font-size: 0.9em; }
+.avgcell { font-weight: 600; color: #2563eb; }
+.periodo-pills { display: flex; gap: 4px; margin: 8px 0; }
+.periodo-pills button { padding: 5px 10px; border-radius: 999px; font-size: 0.7em; font-weight: 500; border: none; background: #f3f4f6; color: #4b5563; cursor: pointer; }
+.periodo-pills button.active { background: #4f46e5; color: #fff; }
+.obs-label { font-size: 0.7em; color: #6b7280; margin-bottom: 2px; }
+textarea.obs-input { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; font-size: 0.75em; resize: none; outline: none; margin-bottom: 8px; }
+.boleta-list-item { display: flex; align-items: center; justify-content: space-between; }
+.boleta-list-item span.link { color: #3b82f6; font-size: 0.75em; }
+.grade-group-label { font-size: 0.7em; font-weight: 600; color: #9ca3af; text-transform: uppercase; margin: 10px 0 4px; }
+.boleta-sheet { font-size: 10px; }
+.boleta-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 10px; }
+.boleta-header .badge-circle { width: 34px; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 8px; }
+.boleta-header .center-text { text-align: center; flex: 1; padding: 0 4px; }
+.boleta-header .center-text p { line-height: 1.3; }
+.boleta-sheet table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.boleta-sheet table th, .boleta-sheet table td { border: 1px solid #d1d5db; padding: 4px; text-align: center; }
+.boleta-sheet .info-block { margin-bottom: 8px; }
+.boleta-sheet .info-block p.label { color: #9ca3af; font-size: 9px; }
+.boleta-sheet .info-block p.value { font-weight: 600; }
+.side-boxes { width: 90px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+.side-boxes .box { border: 1px solid #d1d5db; border-radius: 6px; padding: 4px; text-align: center; background: #fefce8; }
+.side-boxes .box p.l { font-size: 8px; color: #9ca3af; }
+.side-boxes .box p.v { font-weight: 700; }
+.diploma-card { border-radius: 18px; padding: 24px; text-align: center; color: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.15); margin-bottom: 20px; }
+.diploma-card .inner-box { background: rgba(255,255,255,0.2); border-radius: 10px; padding: 16px 12px; margin: 16px 0; backdrop-filter: blur(4px); }
+.diploma-card button { margin-top: 14px; background: rgba(255,255,255,0.9); color: #1f2937; border: none; font-size: 0.7em; font-weight: 700; padding: 8px 16px; border-radius: 999px; cursor: pointer; }
+.toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; font-size: 0.85em; padding: 8px 16px; border-radius: 999px; z-index: 100; }
+.empty-note { text-align: center; color: #9ca3af; font-size: 0.85em; padding: 30px 0; }
+.info-banner { background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #4338ca; margin-bottom: 12px; }
+.blue-banner { background: #eff6ff; border: 1px solid #dbeafe; border-radius: 10px; padding: 10px; font-size: 0.78em; color: #1d4ed8; }
+.honor-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.honor-grade-box { background: #fff; border-radius: 16px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 2px dashed #f0abfc; }
+.honor-grade-title { text-align: center; font-weight: 800; font-size: 0.85em; color: #7e22ce; margin-bottom: 8px; }
+.honor-medals-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.honor-medal-card { flex: 1; min-width: 82px; max-width: 120px; border-radius: 14px; text-align: center; padding: 8px 4px; }
+.honor-medal-emoji { font-size: 1.1em; }
+.honor-photo { width: 40px; height: 40px; border-radius: 999px; background: #fff; border: 3px solid #ccc; margin: 3px auto 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 1.1em; }
+.honor-name { font-weight: 700; font-size: 0.68em; color: #1f2937; line-height: 1.15; }
+.honor-avg { font-size: 0.62em; color: #374151; margin-top: 1px; }
+.honor-empty { font-size: 0.75em; color: #9ca3af; text-align: center; width: 100%; padding: 10px 0; }
+@media print {
+header.topbar, nav.tabs, .no-print { display: none !important; }
+main { max-width: 100%; padding: 0; }
+body { background: #fff; }
+#honorPage { grid-template-columns: 1fr 1fr 1fr !important; gap: 6px !important; }
+#honorPage .honor-grade-box { break-inside: avoid; padding: 6px !important; }
+#honorPage .honor-photo { width: 32px !important; height: 32px !important; }
+#honorPage .honor-name { font-size: 0.6em !important; }
+}
+</style>
+</head>
+<body>
+<div id="app"><div class="center-screen"><p>Cargando...</p></div></div>
+<div id="toastBox"></div>
+<script>
+// Gestionar usuarios — página independiente: solo carga cuentas y permisos,
+// sin descargar alumnos, asistencias ni mural, para que abra rápido.
+const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com';
+const ADMIN_EMAILS = ['educacion@chavarria.edu.com', 'jose.chavarria@jaliscoedu.mx'];
+// Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
+};
+
+
+let auth = null, db = null, currentUid = null, secondaryApp = null;
+let state = { fbConfig: FIREBASE_CONFIG, user: null, isAdmin: false, perfilActual: null, espacioAdmin: null,
+  userAdminScope: 'all', adminUsersList: null, adminUsersLoading: false, adminUsersError: '', passwordsVisibles: {},
+  deleteConfirmUid: null, deleteConfirmPassword: '', deleteConfirmError: '', deleteConfirmBusy: false, diagTexto: '', diagCorriendo: false };
+function esc2(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function showToast(msg) {
+const box = document.getElementById('toastBox');
+box.innerHTML = '<div class="toast">'+msg+'</div>';
+setTimeout(()=>{ box.innerHTML=''; }, 2600);
+}
+function traducirErrorAuth(code) {
+const map = {
+'auth/user-not-found': 'No existe una cuenta con ese correo. Pídele al administrador que la cree.',
+'auth/wrong-password': 'Contraseña incorrecta.',
+'auth/invalid-email': 'El correo no es válido.',
+'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos.',
+'auth/email-already-in-use': 'Ya existe una cuenta con ese correo.',
+'auth/weak-password': 'La contraseña es demasiado corta (mínimo 6 caracteres).'
+};
+return map[code] || code;
+}
+function conTimeout(promesa, ms) {
+return Promise.race([promesa, new Promise((_, rechazar) => setTimeout(() => rechazar({ code: 'tiempo-agotado', message: 'La base de datos tardó demasiado en responder' }), ms))]);
+}
+async function leerNodoRest(path, ms) {
+const tok = await conTimeout(auth.currentUser.getIdToken(), ms);
+const ctrl = new AbortController();
+const t = setTimeout(() => ctrl.abort(), ms);
+try {
+const r = await fetch(firebase.app().options.databaseURL + '/' + path + '.json?auth=' + encodeURIComponent(tok), { signal: ctrl.signal });
+if (!r.ok) throw { code: 'http-' + r.status, message: 'HTTP ' + r.status };
+return await r.json();
+} catch (e) {
+if (e && e.name === 'AbortError') throw { code: 'tiempo-agotado', message: 'La consulta HTTP tardó demasiado' };
+throw e;
+} finally { clearTimeout(t); }
+}
+function getSecondaryAuth() {
+if (!secondaryApp) {
+secondaryApp = firebase.initializeApp(state.fbConfig, 'CuentaSecundaria' + Date.now());
+}
+return secondaryApp.auth();
+}
+function randomTempPassword() {
+const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+let out = '';
+for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
+return out;
+}
+function getPinGestionUsuarios() {
+return localStorage.getItem('pin_gestionar_usuarios') || '6103';
+}
+function cambiarPinGestionUsuarios() {
+const actual = getPinGestionUsuarios();
+const pinActualIngresado = prompt('Ingresa el PIN actual:');
+if (pinActualIngresado === null) return;
+if (pinActualIngresado.trim() !== actual) { alert('PIN actual incorrecto.'); return; }
+const nuevo = prompt('Ingresa el nuevo PIN (solo números):');
+if (nuevo === null || nuevo.trim() === '') return;
+localStorage.setItem('pin_gestionar_usuarios', nuevo.trim());
+alert('PIN actualizado correctamente.');
+}
+async function correrDiagnosticoUsuarios() {
+if (state.diagCorriendo) return;
+state.diagCorriendo = true;
+const lineas = [];
+const pintar = () => { state.diagTexto = lineas.join('\n'); render(); };
+lineas.push('Cuenta: ' + ((state.user && state.user.email) || '(sin sesión)'));
+lineas.push('UID: ' + currentUid);
+lineas.push('Admin en la app: ' + (state.isAdmin ? 'sí' : 'no'));
+pintar();
+const t0 = Date.now();
+async function paso(nombre, fn) {
+const ini = Date.now();
+try {
+const r = await conTimeout(fn(), 8000);
+lineas.push('✅ ' + nombre + ': ' + r + ' (' + (Date.now() - ini) + ' ms)');
+} catch (e) {
+lineas.push('❌ ' + nombre + ': ' + ((e && e.code) || '') + ' ' + ((e && e.message) || e));
+}
+pintar();
+}
+await paso('HTTP directo: lista de perfiles', async () => { const v = (await leerNodoRest('perfiles', 20000)) || {}; return Object.keys(v).length + ' perfiles'; });
+await paso('Conexión a Firebase', async () => (await db.ref('.info/connected').once('value')).val() ? 'conectado' : 'sin conexión todavía');
+await paso('Registro admins/<tu uid>', async () => String((await db.ref('admins/' + currentUid).once('value')).val()));
+await paso('Tu perfil', async () => { const v = (await db.ref('perfiles/' + currentUid).once('value')).val(); return v ? 'existe' : 'no existe (cuenta original)'; });
+await paso('Lista de perfiles', async () => { const v = (await db.ref('perfiles').once('value')).val() || {}; return Object.keys(v).length + ' perfiles'; });
+lineas.push('Versión: 15-oct-2026 periodos');
+state.diagCorriendo = false;
+pintar();
+}
+async function cargarListaUsuarios() {
+state.adminUsersLoading = true;
+state.adminUsersError = '';
+render();
+try {
+if (state.userAdminScope === 'own') {
+// Un usuario delegado nunca lee el nodo global "perfiles"; solo consulta su propio
+// índice "gestores/<su-uid>/misUsuarios" y luego lee, uno por uno, únicamente los
+// perfiles que él mismo creó (cada uno con permiso propio a nivel de reglas).
+const idxSnap = await conTimeout(db.ref('gestores/' + currentUid + '/misUsuarios').once('value'), 15000);
+const uids = Object.keys(idxSnap.val() || {});
+const perfiles = await conTimeout(Promise.all(uids.map(uid => db.ref('perfiles/' + uid).once('value'))), 15000);
+state.adminUsersList = perfiles
+.map((snap, i) => snap.val() ? { uid: uids[i], ...snap.val() } : null)
+.filter(Boolean);
+} else {
+let val;
+try { val = (await leerNodoRest('perfiles', 20000)) || {}; }
+catch (eRest) { const snap = await conTimeout(db.ref('perfiles').once('value'), 20000); val = snap.val() || {}; }
+state.adminUsersList = Object.keys(val).map(uid => ({ uid, ...val[uid] }));
+}
+} catch (e) {
+state.adminUsersError = ((e && e.code) ? e.code + ' — ' : '') + ((e && e.message) || 'error desconocido');
+showToast('❌ No se pudo cargar la lista de usuarios');
+state.adminUsersList = null;
+}
+state.adminUsersLoading = false;
+render();
+}
+async function crearUsuarioNuevo() {
+const emailInput = document.getElementById('newUserEmail').value.trim();
+const nombre = document.getElementById('newUserNombre').value.trim();
+const telefono = document.getElementById('newUserPhone').value.trim();
+const correoContacto = document.getElementById('newUserCorreoContacto').value.trim();
+if (!emailInput) { showToast('❌ Escribe el usuario del nuevo correo'); return; }
+// El correo de acceso puede ser el alias corto de la escuela (se completa
+// solo con @chavarria.edu.com) O un correo real completo (por ejemplo, uno
+// @jaliscoedu.mx o un Gmail personal) — en ese caso se usa tal cual, para que
+// esa persona pueda recuperar su propia contraseña con el correo real de
+// Firebase si la olvida.
+const usuario = emailInput.includes('@') ? emailInput.split('@')[0] : emailInput;
+const email = usuario.toLowerCase() + REQUIRED_EMAIL_DOMAIN;
+const accesoPrimaria = !!document.getElementById('newUserAccesoPrimaria').checked;
+const accesoSecundaria = !!document.getElementById('newUserAccesoSecundaria').checked;
+const accesoCheckin = !!document.getElementById('newUserAccesoCheckin').checked;
+const accesoBitacora = !!document.getElementById('newUserAccesoBitacora').checked;
+const elGestionarUsuarios = document.getElementById('newUserPuedeGestionar');
+// Solo el administrador global puede otorgar el permiso de gestionar usuarios;
+// un usuario delegado nunca puede crear más sub-administradores.
+const puedeGestionarUsuarios = state.isAdmin && elGestionarUsuarios ? !!elGestionarUsuarios.checked : false;
+// El "espacio" (carpeta de datos) del nuevo usuario:
+//  - Si lo crea el administrador global: el nuevo usuario tiene su propio espacio aislado (su propio uid).
+//  - Si lo crea un usuario delegado: el nuevo usuario comparte el mismo espacio de datos que su creador,
+//    sin tocar el espacio del administrador ni el de ningún otro usuario independiente.
+const btn = document.getElementById('crearUsuarioBtn');
+if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
+const tempPass = randomTempPassword();
+try {
+const secAuth = getSecondaryAuth();
+const cred = await secAuth.createUserWithEmailAndPassword(email, tempPass);
+const newUid = cred.user.uid;
+const espacioUid = (() => {
+  // Si SOLO tiene CheckIn Kids (sin Primaria ni Secundaria), comparte espacio con el admin/creador
+  if (accesoCheckin && !accesoPrimaria && !accesoSecundaria) {
+    return (state.isAdmin && state.espacioAdmin && state.espacioAdmin !== '__ROOT__') ? state.espacioAdmin : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
+  }
+  // Si tiene Primaria/Secundaria o combinaciones, obtiene su propio espacio (admin → newUid, delegado → su propio espacio)
+  return state.isAdmin ? newUid : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
+})();
+const nuevoPerfil = {
+email, nombre: nombre || '', telefono: telefono || '',
+correoContacto: correoContacto || '',
+mustChangePassword: true,
+tempPasswordActual: tempPass,
+creadoPor: currentUid,
+creadoEn: new Date().toISOString(),
+espacioUid,
+accesoPrimaria, accesoSecundaria, accesoCheckin, accesoBitacora,
+puedeGestionarUsuarios,
+deshabilitado: false,
+eliminado: false
+};
+const escrituras = { ['perfiles/' + newUid]: nuevoPerfil };
+if (!state.isAdmin) {
+// Índice propio del usuario delegado: le permite después volver a listar
+// exactamente a quién creó, sin necesitar leer el nodo "perfiles" completo.
+escrituras['gestores/' + currentUid + '/misUsuarios/' + newUid] = true;
+}
+await db.ref().update(escrituras);
+await secAuth.signOut();
+showToast('✅ Usuario creado. Comparte su contraseña temporal por WhatsApp.');
+document.getElementById('newUserEmail').value = '';
+document.getElementById('newUserNombre').value = '';
+document.getElementById('newUserPhone').value = '';
+document.getElementById('newUserCorreoContacto').value = '';
+document.getElementById('newUserAccesoPrimaria').checked = false;
+document.getElementById('newUserAccesoSecundaria').checked = false;
+document.getElementById('newUserAccesoCheckin').checked = false;
+document.getElementById('newUserAccesoBitacora').checked = false;
+if (elGestionarUsuarios) elGestionarUsuarios.checked = false;
+cargarListaUsuarios();
+} catch (e) {
+showToast('❌ No se pudo crear: ' + traducirErrorAuth(e.code));
+}
+if (btn) { btn.disabled = false; btn.textContent = '➕ Crear usuario'; }
+}
+function actualizarPermisoUsuario(uid, campo, valor) {
+db.ref('perfiles/' + uid).update({ [campo]: valor });
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+if (u) u[campo] = valor;
+render();
+}
+function toggleCkRestriccionGeneral(uid, activar) {
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+if (activar) {
+const nuevo = { primaria: { grados: [], grupos: [] }, secundaria: { grados: [], grupos: [] } };
+db.ref('perfiles/' + uid + '/ckAsignacion').set(nuevo);
+if (u) u.ckAsignacion = nuevo;
+} else {
+db.ref('perfiles/' + uid + '/ckAsignacion').remove();
+if (u) delete u.ckAsignacion;
+}
+render();
+}
+function toggleCkAsignacionValor(uid, nivel, tipo, valor, checked) {
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+const actual = (u && u.ckAsignacion && u.ckAsignacion[nivel] && u.ckAsignacion[nivel][tipo]) || [];
+const nuevo = checked ? (actual.includes(valor) ? actual : [...actual, valor]) : actual.filter(v => v !== valor);
+db.ref('perfiles/' + uid + '/ckAsignacion/' + nivel + '/' + tipo).set(nuevo);
+if (u) {
+u.ckAsignacion = u.ckAsignacion || { primaria: { grados: [], grupos: [] }, secundaria: { grados: [], grupos: [] } };
+u.ckAsignacion[nivel] = u.ckAsignacion[nivel] || { grados: [], grupos: [] };
+u.ckAsignacion[nivel][tipo] = nuevo;
+}
+render();
+}
+function ckAsignacionBloqueHtml(u, nivel, etiqueta, grados, grupos) {
+const asign = (u.ckAsignacion && u.ckAsignacion[nivel]) || { grados: [], grupos: [] };
+const chip = (tipo, valor, marcado) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.76em;margin:2px 6px 2px 0;"><input type="checkbox" ${marcado ? 'checked' : ''} onchange="toggleCkAsignacionValor('${u.uid}','${nivel}','${tipo}','${valor}',this.checked)"/>${valor}</label>`;
+return `
+<div style="margin-top:6px;padding:6px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+<p style="font-size:0.74em;font-weight:700;color:#374151;margin-bottom:3px;">${etiqueta}</p>
+<p style="font-size:0.7em;color:#6b7280;margin-bottom:2px;">Grados:</p>
+<div>${grados.map(g => chip('grados', g, asign.grados.includes(g))).join('')}</div>
+<p style="font-size:0.7em;color:#6b7280;margin:4px 0 2px;">Grupos:</p>
+<div>${grupos.map(g => chip('grupos', g, asign.grupos.includes(g))).join('')}</div>
+</div>`;
+}
+function toggleDeshabilitarUsuario(u) {
+const nuevoValor = !u.deshabilitado;
+const mensaje = nuevoValor
+? `¿Deshabilitar a ${u.nombre || u.email}? No podrá iniciar sesión hasta que lo vuelvas a habilitar.`
+: `¿Habilitar de nuevo a ${u.nombre || u.email}?`;
+if (!confirm(mensaje)) return;
+db.ref('perfiles/' + u.uid).update({ deshabilitado: nuevoValor });
+u.deshabilitado = nuevoValor;
+render();
+showToast(nuevoValor ? '🚫 Usuario deshabilitado' : '✅ Usuario habilitado');
+}
+function pedirEliminarUsuario(uid) {
+state.deleteConfirmUid = uid;
+state.deleteConfirmPassword = '';
+state.deleteConfirmError = '';
+render();
+}
+function cancelarEliminarUsuario() {
+state.deleteConfirmUid = null;
+state.deleteConfirmPassword = '';
+state.deleteConfirmError = '';
+render();
+}
+async function confirmarEliminarUsuario(u) {
+state.deleteConfirmError = '';
+if (!state.deleteConfirmPassword) {
+state.deleteConfirmError = 'Escribe tu contraseña para confirmar.';
+render();
+return;
+}
+state.deleteConfirmBusy = true;
+render();
+try {
+// Se vuelve a pedir la contraseña de quien está eliminando (administrador o usuario
+// delegado) para evitar que se borre a alguien por accidente.
+const cred = firebase.auth.EmailAuthProvider.credential(state.user.email, state.deleteConfirmPassword);
+await auth.currentUser.reauthenticateWithCredential(cred);
+// No es posible borrar la cuenta de acceso (Firebase Auth) de otra persona desde
+// el navegador; en su lugar la marcamos como eliminada para que ya no pueda
+// volver a entrar, y la quitamos de la lista visible.
+await db.ref('perfiles/' + u.uid).update({ eliminado: true, deshabilitado: true });
+showToast('🗑️ Usuario eliminado');
+state.deleteConfirmUid = null;
+state.deleteConfirmPassword = '';
+cargarListaUsuarios();
+} catch (e) {
+state.deleteConfirmError = e.code === 'auth/wrong-password' ? 'Contraseña incorrecta.' : 'No se pudo confirmar: ' + (e.code ? traducirErrorAuth(e.code) : e.message);
+}
+state.deleteConfirmBusy = false;
+render();
+}
+function whatsappLinkParaUsuario(u) {
+const nombre = u.nombre ? ' ' + u.nombre : '';
+// Si ya cambió su contraseña, ya no existe ninguna clave temporal guardada que
+// mandarle (por seguridad, se borra en cuanto la cambian) — antes esto mandaba
+// literalmente la palabra "undefined" en el mensaje.
+const mensaje = u.tempPasswordActual
+? `Hola${nombre}, aquí están tus datos de acceso al Sistema Escolar:\nCorreo: ${u.email}\nContraseña: ${u.tempPasswordActual}\n(Al entrar, el sistema te pedirá cambiarla).`
+: `Hola${nombre}, tu cuenta del Sistema Escolar ya está activa con el correo ${u.email}. Si olvidaste tu contraseña, avísame para generarte una nueva.`;
+const texto = encodeURIComponent(mensaje);
+const tel = (u.telefono || '').replace(/[^0-9]/g, '');
+return `https://wa.me/${tel}?text=${texto}`;
+}
+function copiarPassword(pass) {
+navigator.clipboard.writeText(pass).then(() => showToast('📋 Contraseña copiada'));
+}
+function togglePasswordVisible(uid) {
+if (state.passwordsVisibles[uid]) {
+state.passwordsVisibles[uid] = false;
+render();
+return;
+}
+const pinIngresado = prompt('Ingresa tu PIN para ver esta contraseña:');
+if (pinIngresado === null) return;
+if (pinIngresado.trim() !== getPinGestionUsuarios()) {
+alert('PIN incorrecto.');
+return;
+}
+state.passwordsVisibles[uid] = true;
+render();
+}
+function renderTopbarSimple() {
+const name = state.user.email;
+return `
+<header class="topbar">
+<h1>Sistema Escolar</h1>
+<div class="userchip">
+<span>${name}</span>
+<div class="av">${name.slice(0,2).toUpperCase()}</div>
+<button onclick="handleLogout()">Salir</button>
+</div>
+</header>`;
+}
+function renderAdminUsuarios() {
+const scope = state.userAdminScope;
+const tituloScope = scope === 'own' ? '👥 Mis usuarios' : '👥 Usuarios del sistema';
+let html = `
+<main>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+<p style="font-weight:700;font-size:1.15em;">${tituloScope}</p>
+<div style="display:flex;gap:8px;">
+${scope === 'all' ? `<button class="btn btn-sm" style="background:#475569;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="cambiarPinGestionUsuarios()">🔑 Cambiar PIN</button>` : ''}
+<button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;cursor:pointer;" onclick="closeUserAdmin()">← Volver al Sistema Escolar</button>
+</div>
+</div>
+<div class="card">
+<p style="font-weight:600;margin-bottom:10px;">Crear nuevo usuario</p>
+<div class="field"><label>Usuario de acceso (se completa con ${REQUIRED_EMAIL_DOMAIN})</label><input id="newUserEmail" type="text" placeholder="ej. maestra.lopez"/></div>
+<div class="field"><label>Nombre (opcional)</label><input id="newUserNombre" type="text" placeholder="Nombre para identificarlo"/></div>
+<div class="field"><label>Correo real de contacto (privado, opcional)</label><input id="newUserCorreoContacto" type="email" placeholder="su_correo_real@gmail.com"/></div>
+<div class="field"><label>WhatsApp (opcional, con lada, solo números)</label><input id="newUserPhone" type="text" placeholder="521XXXXXXXXXX"/></div>
+<p style="font-size:0.8em;font-weight:600;color:#374151;margin-top:12px;margin-bottom:6px;">¿A qué le das acceso? (solo si tú se lo permites)</p>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoPrimaria" type="checkbox"/> Primaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoSecundaria" type="checkbox"/> Secundaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoCheckin" type="checkbox"/> CheckIn Kids</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserAccesoBitacora" type="checkbox"/> Bitácora</label>
+${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;margin-bottom:6px;"><input id="newUserPuedeGestionar" type="checkbox"/> Puede gestionar sus propios usuarios (tendrá su propio botón "Gestionar usuarios")</label>` : ''}
+<p style="font-size:0.75em;color:#6b7280;margin-top:4px;">Si le das <b>solo</b> Bitácora (sin Primaria, Secundaria ni CheckIn Kids), esa cuenta entrará directo a la Bitácora al iniciar sesión y nunca verá el resto del sistema.</p>
+<button id="crearUsuarioBtn" class="btn btn-blue btn-sm" style="margin-top:8px;" onclick="crearUsuarioNuevo()">➕ Crear usuario</button>
+<p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} — sirve para iniciar sesión, pero no para consultar ni recibir correos ahí. Por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla.${scope === 'own' ? ' Los usuarios que crees aquí trabajarán dentro de tu propio espacio de datos, sin tocar el del administrador ni el de nadie más.' : ' Cada usuario ve y agrega solo los datos de su propio espacio.'}</p>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px;"><p style="font-weight:600;">Usuarios creados</p><button class="btn btn-ghost btn-sm" style="width:auto;padding:6px 10px;" onclick="correrDiagnosticoUsuarios()">${state.diagCorriendo ? 'Probando...' : '🔧 Diagnóstico'}</button></div>
+${state.diagTexto ? `<pre style="white-space:pre-wrap;word-break:break-word;font-size:0.72em;background:#f3f4f6;border-radius:8px;padding:10px;margin-bottom:10px;">${esc2(state.diagTexto)}</pre>` : ''}`;
+if (state.adminUsersLoading) {
+html += `<p class="empty-note">Cargando...</p>`;
+} else if (state.adminUsersError) {
+html += `<div class="card" style="border:1px solid #fecaca;background:#fef2f2;"><p style="font-size:0.85em;font-weight:700;color:#b91c1c;margin-bottom:4px;">No se pudo cargar la lista de usuarios</p><p style="font-size:0.75em;color:#7f1d1d;word-break:break-word;margin-bottom:8px;">${esc2(state.adminUsersError)}</p><button class="btn btn-blue btn-sm" onclick="cargarListaUsuarios()">🔄 Reintentar</button></div>`;
+} else if (!state.adminUsersList || !state.adminUsersList.length) {
+html += `<p class="empty-note">Aún no has creado ningún usuario.</p>`;
+} else {
+html += state.adminUsersList.filter(u => !u.eliminado).map(u => {
+const puedeEditarPermisos = state.isAdmin || u.creadoPor === currentUid;
+const enConfirmacion = state.deleteConfirmUid === u.uid;
+return `
+<div class="card" style="margin-bottom:10px;${u.deshabilitado ? 'opacity:0.6;' : ''}">
+<p style="font-weight:600;">${esc2(u.nombre || u.email)} ${u.deshabilitado ? '<span style="color:#b91c1c;font-size:0.75em;">(deshabilitado)</span>' : ''}</p>
+<p style="font-size:0.82em;color:#6b7280;">${esc2(u.email)}</p>
+${u.correoContacto ? `<p style="font-size:0.78em;color:#6b7280;">📧 Contacto real: ${esc2(u.correoContacto)}</p>` : ''}
+<p style="font-size:0.82em;margin-top:4px;">Contraseña actual: <b>${u.tempPasswordActual ? (state.passwordsVisibles[u.uid] ? esc2(u.tempPasswordActual) : '••••••••') : '—'}</b> ${u.tempPasswordActual ? `<button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="togglePasswordVisible('${u.uid}')">${state.passwordsVisibles[u.uid] ? '🙈 Ocultar' : '👁️ Ver'}</button> ${state.passwordsVisibles[u.uid] ? `<button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="copiarPassword('${esc2(u.tempPasswordActual)}')">Copiar</button>` : ''}` : ''}</p>
+<p style="font-size:0.78em;color:${u.mustChangePassword ? '#b45309' : '#059669'};margin-top:2px;">${u.mustChangePassword ? '⏳ Pendiente de cambiar su contraseña' : '✅ Ya cambió su contraseña'}</p>
+<a href="${whatsappLinkParaUsuario(u)}" target="_blank" class="btn btn-sage btn-sm" style="margin-top:8px;text-decoration:none;display:inline-block;">📲 Enviar por WhatsApp</a>
+${puedeEditarPermisos ? `
+<div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb;">
+<p style="font-size:0.78em;font-weight:600;color:#374151;margin-bottom:6px;">Acceso:</p>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoPrimaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoPrimaria',this.checked)"/> Primaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoSecundaria !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoSecundaria',this.checked)"/> Secundaria</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoCheckin !== false ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoCheckin',this.checked)"/> CheckIn Kids</label>
+${u.accesoCheckin !== false ? `
+<div style="margin:4px 0 8px 22px;padding:6px;background:#f9fafb;border-radius:8px;">
+<label style="display:flex;align-items:center;gap:8px;font-size:0.78em;font-weight:600;margin-bottom:4px;"><input type="checkbox" ${u.ckAsignacion ? 'checked' : ''} onchange="toggleCkRestriccionGeneral('${u.uid}', this.checked)"/> Limitar a grados/grupos específicos en CheckIn Kids</label>
+${u.ckAsignacion ? `
+${(u.accesoPrimaria !== false) ? ckAsignacionBloqueHtml(u, 'primaria', 'Primaria', ['1°','2°','3°','4°','5°','6°'], ['A','B','C','D']) : ''}
+${(u.accesoSecundaria !== false) ? ckAsignacionBloqueHtml(u, 'secundaria', 'Secundaria', ['1°','2°','3°'], ['A','B','C','D','E','F']) : ''}
+` : `<p style="font-size:0.7em;color:#6b7280;">Sin marcar: ve todos los grados y grupos de CheckIn Kids (como hasta ahora).</p>`}
+</div>` : ''}
+<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoBitacora === true ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoBitacora',this.checked)"/> Bitácora</label>
+${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.puedeGestionarUsuarios ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','puedeGestionarUsuarios',this.checked)"/> Puede gestionar sus propios usuarios</label>` : ''}
+</div>
+<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+<button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;" onclick='toggleDeshabilitarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>${u.deshabilitado ? '✅ Habilitar' : '🚫 Deshabilitar'}</button>
+<button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;color:#b91c1c;" onclick="pedirEliminarUsuario('${u.uid}')">🗑️ Eliminar</button>
+</div>
+${enConfirmacion ? `
+<div style="margin-top:10px;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
+<p style="font-size:0.8em;color:#991b1b;margin-bottom:6px;">Para eliminar a ${esc2(u.nombre || u.email)}, confirma tu propia contraseña:</p>
+<input type="password" value="${esc2(state.deleteConfirmPassword)}" placeholder="Tu contraseña" oninput="state.deleteConfirmPassword=this.value" onkeydown="if(event.key==='Enter')confirmarEliminarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})" style="width:100%;padding:6px;border:1px solid #fca5a5;border-radius:6px;margin-bottom:6px;"/>
+${state.deleteConfirmError ? `<p class="errtext" style="font-size:0.78em;">${esc2(state.deleteConfirmError)}</p>` : ''}
+<div style="display:flex;gap:8px;">
+<button class="btn btn-ghost btn-sm" onclick="cancelarEliminarUsuario()">Cancelar</button>
+<button class="btn btn-sm" style="background:#dc2626;color:#fff;" ${state.deleteConfirmBusy ? 'disabled' : ''} onclick='confirmarEliminarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>${state.deleteConfirmBusy ? 'Eliminando...' : 'Sí, eliminar definitivamente'}</button>
+</div>
+</div>` : ''}
+` : ''}
+</div>
+`;
+}).join('');
+}
+html += `</main>`;
+return html;
+}
+function render() {
+  const app = document.getElementById('app');
+  if (!state.user) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
+  app.innerHTML = renderTopbarSimple() + renderAdminUsuarios();
+}
+function closeUserAdmin() { window.location.href = 'index.html'; }
+function handleLogout() { auth.signOut().then(() => { window.location.href = 'index.html'; }); }
+function pedirPinYEntrar() {
+  const pin = prompt('Ingresa tu PIN para entrar a Gestionar usuarios:');
+  if (pin === null || pin.trim() !== getPinGestionUsuarios()) {
+    if (pin !== null) alert('PIN incorrecto.');
+    window.location.href = 'index.html';
+    return false;
+  }
+  return true;
+}
+firebase.initializeApp(FIREBASE_CONFIG);
+auth = firebase.auth();
+db = firebase.database();
+auth.onAuthStateChanged(async u => {
+  if (!u) { window.location.href = 'index.html'; return; }
+  currentUid = u.uid;
+  state.user = u;
+  const email = (u.email || '').toLowerCase();
+  if (ADMIN_EMAILS.includes(email)) {
+    state.isAdmin = true;
+    state.userAdminScope = 'all';
+    try { const es = await conTimeout(db.ref('adminEspacio').once('value'), 8000); state.espacioAdmin = es.val() || null; } catch (e) {}
+  } else {
+    try {
+      const ps = await conTimeout(db.ref('perfiles/' + u.uid).once('value'), 15000);
+      state.perfilActual = ps.val();
+    } catch (e) {}
+    if (!state.perfilActual || !state.perfilActual.puedeGestionarUsuarios) { window.location.href = 'index.html'; return; }
+    state.userAdminScope = 'own';
+  }
+  if (!pedirPinYEntrar()) return;
+  render();
+  cargarListaUsuarios();
+});
+</script>
+</body>
+</html>
