@@ -246,6 +246,8 @@ userAdminScope: 'all', // 'all' = administrador global ve/gestiona a todos; 'own
 adminUsersList: null,
 adminUsersLoading: false,
 adminUsersError: '',
+diagTexto: '',
+diagCorriendo: false,
 newUserPhone: '',
 pwForm: { current: '', pass1: '', pass2: '' },
 pwSaving: false,
@@ -653,6 +655,35 @@ render();
 }
 function conTimeout(promesa, ms) {
 return Promise.race([promesa, new Promise((_, rechazar) => setTimeout(() => rechazar({ code: 'tiempo-agotado', message: 'La base de datos tardó demasiado en responder' }), ms))]);
+}
+// Prueba paso a paso la conexión con la base de datos y escribe el resultado en pantalla.
+async function correrDiagnosticoUsuarios() {
+if (state.diagCorriendo) return;
+state.diagCorriendo = true;
+const lineas = [];
+const pintar = () => { state.diagTexto = lineas.join('\n'); render(); };
+lineas.push('Cuenta: ' + ((state.user && state.user.email) || '(sin sesión)'));
+lineas.push('UID: ' + currentUid);
+lineas.push('Admin en la app: ' + (state.isAdmin ? 'sí' : 'no'));
+pintar();
+const t0 = Date.now();
+async function paso(nombre, fn) {
+const ini = Date.now();
+try {
+const r = await conTimeout(fn(), 8000);
+lineas.push('✅ ' + nombre + ': ' + r + ' (' + (Date.now() - ini) + ' ms)');
+} catch (e) {
+lineas.push('❌ ' + nombre + ': ' + ((e && e.code) || '') + ' ' + ((e && e.message) || e));
+}
+pintar();
+}
+await paso('Conexión a Firebase', async () => (await db.ref('.info/connected').once('value')).val() ? 'conectado' : 'sin conexión todavía');
+await paso('Registro admins/<tu uid>', async () => String((await db.ref('admins/' + currentUid).once('value')).val()));
+await paso('Tu perfil', async () => { const v = (await db.ref('perfiles/' + currentUid).once('value')).val(); return v ? 'existe' : 'no existe (cuenta original)'; });
+await paso('Lista de perfiles', async () => { const v = (await db.ref('perfiles').once('value')).val() || {}; return Object.keys(v).length + ' perfiles'; });
+lineas.push('Versión: 15-oct-2026 periodos');
+state.diagCorriendo = false;
+pintar();
 }
 async function cargarListaUsuarios() {
 state.adminUsersLoading = true;
@@ -1917,7 +1948,8 @@ ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-si
 <button id="crearUsuarioBtn" class="btn btn-blue btn-sm" style="margin-top:8px;" onclick="crearUsuarioNuevo()">➕ Crear usuario</button>
 <p style="font-size:0.78em;color:#6b7280;margin-top:10px;">El correo de acceso es solo un usuario dentro de ${REQUIRED_EMAIL_DOMAIN} — sirve para iniciar sesión, pero no para consultar ni recibir correos ahí. Por eso puedes guardar aparte un correo real de contacto, privado, visible solo para ti. Se genera una contraseña temporal automática; al iniciar sesión por primera vez el sistema le pedirá cambiarla.${scope === 'own' ? ' Los usuarios que crees aquí trabajarán dentro de tu propio espacio de datos, sin tocar el del administrador ni el de nadie más.' : ' Cada usuario ve y agrega solo los datos de su propio espacio.'}</p>
 </div>
-<p style="font-weight:600;margin:18px 0 8px;">Usuarios creados</p>`;
+<div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px;"><p style="font-weight:600;">Usuarios creados</p><button class="btn btn-ghost btn-sm" style="width:auto;padding:6px 10px;" onclick="correrDiagnosticoUsuarios()">${state.diagCorriendo ? 'Probando...' : '🔧 Diagnóstico'}</button></div>
+${state.diagTexto ? `<pre style="white-space:pre-wrap;word-break:break-word;font-size:0.72em;background:#f3f4f6;border-radius:8px;padding:10px;margin-bottom:10px;">${esc2(state.diagTexto)}</pre>` : ''}`;
 if (state.adminUsersLoading) {
 html += `<p class="empty-note">Cargando...</p>`;
 } else if (state.adminUsersError) {
