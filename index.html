@@ -321,7 +321,7 @@ setTimeout(()=>{ box.innerHTML=''; }, 2600);
 function dbBase() {
     // Modelo SaaS: cada usuario (incluyendo admin) tiene su propio espacio privado
     // No hay carpeta compartida DB_ROOT — garantiza privacidad total
-    const espacio = (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
+    const espacio = state.espacioAdmin || (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
     return 'usuarios/' + espacio;
 }
 function bindRefs() {
@@ -368,6 +368,17 @@ const email = (state.user && state.user.email) || (auth.currentUser && auth.curr
 if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
 state.isAdmin = true;
 try { await db.ref('admins/' + currentUid).set(true); } catch (e2) { /* las reglas ya lo protegen */ }
+// Ambos Súper Administradores comparten UN solo espacio de datos: el de educacion@.
+// educacion@ lo registra al entrar; el otro correo lo lee y usa ese mismo espacio.
+try {
+if (email.toLowerCase() === ADMIN_EMAILS[0]) {
+await db.ref('adminEspacio').set(currentUid);
+state.espacioAdmin = currentUid;
+} else {
+const es = await conTimeout(db.ref('adminEspacio').once('value'), 8000);
+state.espacioAdmin = es.val() || null;
+}
+} catch (e3) { state.espacioAdmin = null; }
 } else {
 try {
 const adminSnap = await db.ref('admins/' + currentUid).once('value');
@@ -395,6 +406,7 @@ state.user = u;
 state.authError = '';
 state.forcePasswordChange = false;
 state.isAdmin = false;
+state.espacioAdmin = null;
 state.perfilActual = null;
 // Misma limpieza de seguridad: se hace también aquí (no solo al cerrar
 // sesión) para que ninguna cuenta nueva pueda heredar por accidente la
@@ -1896,7 +1908,7 @@ ${permBanos ? `<div class="card" style="cursor:pointer;background:linear-gradien
 ${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openUserAdmin()">👥 Gestionar usuarios</button>` : ''}
 ${!state.isAdmin && state.perfilActual && state.perfilActual.puedeGestionarUsuarios ? `<button class="btn btn-ghost btn-sm" onclick="openMisUsuarios()">👥 Gestionar mis usuarios</button>` : ''}
 </div>
-<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 15-oct-2026 · periodos · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
+<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;word-break:break-all;">Versión 16-oct-2026 · espacio compartido · ${esc2((state.user && state.user.email) || '')} · ${state.isAdmin ? 'Súper Administrador' : 'Usuario'}</p>
 </main>`;
 }
 function openCambiarPasswordVoluntario() {
