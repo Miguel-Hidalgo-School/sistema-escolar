@@ -94,27 +94,34 @@
 
 <script>
 const CK_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
-  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
-  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
-  projectId: "sistema-escolar-a5c31",
-  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
-  messagingSenderId: "234198294318",
-  appId: "1:234198294318:web:a65521e9607753d68664bf"
+  apiKey: "AIzaSyDcrp6WP_Iug874NiL-Nna-JivVTmA_Ll8",
+  authDomain: "sistema-escolar-checkin-kids.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-checkin-kids-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-checkin-kids",
+  storageBucket: "sistema-escolar-checkin-kids.firebasestorage.app",
+  messagingSenderId: "854234357267",
+  appId: "1:854234357267:web:0f0c8fdeddde21bf6429e6"
 };
 firebase.initializeApp(CK_FIREBASE_CONFIG);
 const db = firebase.database();
-// Identifica de qué escuela es este mural a partir del link (?escuela=...).
-// Si el link no trae ese dato (por ejemplo, uno que ya compartiste antes de este
-// cambio), se usa 'Sistema Escolar' como respaldo, para que los links que ya
-// mandaste a los padres de familia sigan funcionando exactamente igual.
-const ESPACIO_MURAL = new URLSearchParams(window.location.search).get('escuela') || currentUid; // SaaS: usa UID del usuario
+// Espacio (carpeta de la escuela) de este mural. El link que genera el Sistema Escolar
+// trae ?e=<espacio>. Si un link viejo no lo trae, se usa el espacio compartido de los
+// Súper Administradores (adminEspacio), para que los links ya enviados sigan funcionando.
+const _qs = new URLSearchParams(window.location.search);
+function obtenerEspacio() {
+  const e = _qs.get('e') || _qs.get('escuela');
+  if (e) return Promise.resolve(e.replace(/^usuarios\//, ''));
+  return db.ref('adminEspacio').once('value').then(s => s.val() || '').catch(() => '');
+}
+let ESPACIO_MURAL = '';
 const GRADOS_PRI = ['1°','2°','3°','4°','5°','6°'];
 const GRADOS_SEC = ['1°','2°','3°'];
-const GRUPOS_PRI = ['A','B'];
+const GRUPOS_PRI = ['A','B','C','D'];
 const GRUPOS_SEC = ['A','B','C','D','E','F'];
 
 let sel = JSON.parse(localStorage.getItem('mural_seleccion') || 'null');
+const _nivelUrl = _qs.get('nivel');
+if ((_nivelUrl === 'primaria' || _nivelUrl === 'secundaria') && (!sel || sel.nivel !== _nivelUrl)) sel = { nivel: _nivelUrl, grade: '', grupo: '' };
 let avisos = [];
 let avisosCargados = false;
 
@@ -204,11 +211,15 @@ function renderAvisos() {
 }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-db.ref(ESPACIO_MURAL + '/mural').on('value', snap => {
-  const val = snap.val() || {};
-  avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
-  avisosCargados = true;
-  if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos();
+function marcarCargado() { avisosCargados = true; if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos(); }
+const espacioListo = obtenerEspacio().then(esp => { ESPACIO_MURAL = esp; return esp; });
+espacioListo.then(esp => {
+  if (!esp) { marcarCargado(); return; }
+  db.ref('usuarios/' + esp + '/mural').on('value', snap => {
+    const val = snap.val() || {};
+    avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    marcarCargado();
+  }, () => marcarCargado());
 });
 
 // Nombre/logo de la escuela — respeta un logo fijo del Mural si el docente
@@ -229,15 +240,15 @@ function actualizarLogoYNombre(){
     document.getElementById('headerIcon').classList.remove('hidden');
   }
 }
-Promise.all([
-  db.ref(ESPACIO_MURAL + '/schoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
-  db.ref(ESPACIO_MURAL + '/secSchoolInfo').once('value').then(s=>s.val()||{}).catch(()=>({})),
-  db.ref(ESPACIO_MURAL + '/muralConfig').once('value').then(s=>s.val()||{}).catch(()=>({}))
-]).then(([si, ssi, mc])=>{
-  logoPri = si.logoURL || ''; nombrePri = si.nombre || '';
-  logoSec = ssi.logoURL || ''; nombreSec = ssi.nombre || '';
-  logoMural = mc.logoURL || '';
-  actualizarLogoYNombre();
+// Solo se leen los campos públicos (nombre y logo): el resto de los datos de la escuela es privado.
+espacioListo.then(esp => {
+  if (!esp) return;
+  const leer = ruta => db.ref('usuarios/' + esp + '/' + ruta).once('value').then(s => s.val() || '').catch(() => '');
+  return Promise.all([leer('schoolInfo/logoURL'), leer('schoolInfo/nombre'), leer('secSchoolInfo/logoURL'), leer('secSchoolInfo/nombre'), leer('muralConfig/logoURL')])
+    .then(([lp, np, ls, ns, lm]) => {
+      logoPri = lp; nombrePri = np; logoSec = ls; nombreSec = ns; logoMural = lm;
+      actualizarLogoYNombre();
+    });
 });
 
 render();

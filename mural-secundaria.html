@@ -58,16 +58,26 @@
 <script>
 const NIVEL = 'secundaria';
 const CK_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
-  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
-  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
-  projectId: "sistema-escolar-a5c31",
-  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
-  messagingSenderId: "234198294318",
-  appId: "1:234198294318:web:a65521e9607753d68664bf"
+  apiKey: "AIzaSyDcrp6WP_Iug874NiL-Nna-JivVTmA_Ll8",
+  authDomain: "sistema-escolar-checkin-kids.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-checkin-kids-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-checkin-kids",
+  storageBucket: "sistema-escolar-checkin-kids.firebasestorage.app",
+  messagingSenderId: "854234357267",
+  appId: "1:854234357267:web:0f0c8fdeddde21bf6429e6"
 };
 firebase.initializeApp(CK_FIREBASE_CONFIG);
 const db = firebase.database();
+// Espacio (carpeta de la escuela) de este mural. El link que genera el Sistema Escolar
+// trae ?e=<espacio>. Si un link viejo no lo trae, se usa el espacio compartido de los
+// Súper Administradores (adminEspacio), para que los links ya enviados sigan funcionando.
+const _qs = new URLSearchParams(window.location.search);
+function obtenerEspacio() {
+  const e = _qs.get('e') || _qs.get('escuela');
+  if (e) return Promise.resolve(e.replace(/^usuarios\//, ''));
+  return db.ref('adminEspacio').once('value').then(s => s.val() || '').catch(() => '');
+}
+
 const GRADOS = ['1°','2°','3°'];
 const GRUPOS = ['A','B','C','D','E','F'];
 
@@ -127,10 +137,13 @@ function renderAvisos() {
 }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-db.ref('Sistema Escolar/mural').on('value', snap => {
-  const val = snap.val() || {};
-  avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
-  if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos();
+obtenerEspacio().then(esp => {
+  if (!esp) return;
+  db.ref('usuarios/' + esp + '/mural').on('value', snap => {
+    const val = snap.val() || {};
+    avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos();
+  }, () => {});
 });
 
 render();
