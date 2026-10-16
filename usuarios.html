@@ -217,7 +217,8 @@ lineas.push('❌ ' + nombre + ': ' + ((e && e.code) || '') + ' ' + ((e && e.mess
 }
 pintar();
 }
-await paso('HTTP directo: lista de perfiles', async () => { const v = (await leerNodoRest('perfiles', 20000)) || {}; return Object.keys(v).length + ' perfiles'; });
+await paso('HTTP directo: cuentas (solo nombres)', async () => { const v = (await leerRest('perfiles', 'shallow=true', 15000)) || {}; return Object.keys(v).length + ' cuentas'; });
+await paso('HTTP directo: tu perfil', async () => { const v = await leerRest('perfiles/' + currentUid, '', 15000); return v ? 'existe' : 'no existe (cuenta original)'; });
 await paso('Conexión a Firebase', async () => (await db.ref('.info/connected').once('value')).val() ? 'conectado' : 'sin conexión todavía');
 await paso('Registro admins/<tu uid>', async () => String((await db.ref('admins/' + currentUid).once('value')).val()));
 await paso('Tu perfil', async () => { const v = (await db.ref('perfiles/' + currentUid).once('value')).val(); return v ? 'existe' : 'no existe (cuenta original)'; });
@@ -226,8 +227,39 @@ lineas.push('Versión: 15-oct-2026 periodos');
 state.diagCorriendo = false;
 pintar();
 }
+async function leerRest(path, query, ms) {
+const tok = await conTimeout(auth.currentUser.getIdToken(), ms);
+const ctrl = new AbortController();
+const t = setTimeout(() => ctrl.abort(), ms);
+try {
+const r = await fetch(firebase.app().options.databaseURL + '/' + path + '.json?' + (query ? query + '&' : '') + 'auth=' + encodeURIComponent(tok), { signal: ctrl.signal });
+if (!r.ok) { let d = ''; try { d = (await r.json()).error || ''; } catch (e) {} throw { code: 'http-' + r.status, message: d || ('HTTP ' + r.status) }; }
+return await r.json();
+} catch (e) {
+if (e && e.name === 'AbortError') throw { code: 'tiempo-agotado', message: 'La consulta tardó más de ' + Math.round(ms/1000) + ' s' };
+throw e;
+} finally { clearTimeout(t); }
+}
+async function cargarPerfilesProgresivo() {
+state.adminUsersProgress = 'Consultando la lista de cuentas...'; render();
+const claves = Object.keys((await leerRest('perfiles', 'shallow=true', 20000)) || {});
+const lista = [];
+state.adminUsersProgress = 'Cuentas encontradas: ' + claves.length + '. Cargando 0 de ' + claves.length + '...'; render();
+let i = 0, hechos = 0;
+async function trabajador() {
+while (i < claves.length) {
+const uid = claves[i++];
+try { const v = await leerRest('perfiles/' + uid, '', 20000); if (v) lista.push({ uid, ...v }); } catch (e) { /* una cuenta que falle no detiene a las demás */ }
+hechos++;
+if (hechos % 5 === 0 || hechos === claves.length) { state.adminUsersProgress = 'Cargando ' + hechos + ' de ' + claves.length + '...'; render(); }
+}
+}
+await Promise.all([trabajador(), trabajador(), trabajador(), trabajador(), trabajador(), trabajador()]);
+return lista;
+}
 async function cargarListaUsuarios() {
 state.adminUsersLoading = true;
+state.adminUsersProgress = '';
 state.adminUsersError = '';
 render();
 try {
@@ -242,10 +274,7 @@ state.adminUsersList = perfiles
 .map((snap, i) => snap.val() ? { uid: uids[i], ...snap.val() } : null)
 .filter(Boolean);
 } else {
-let val;
-try { val = (await leerNodoRest('perfiles', 20000)) || {}; }
-catch (eRest) { const snap = await conTimeout(db.ref('perfiles').once('value'), 20000); val = snap.val() || {}; }
-state.adminUsersList = Object.keys(val).map(uid => ({ uid, ...val[uid] }));
+state.adminUsersList = await cargarPerfilesProgresivo();
 }
 } catch (e) {
 state.adminUsersError = ((e && e.code) ? e.code + ' — ' : '') + ((e && e.message) || 'error desconocido');
@@ -498,7 +527,7 @@ ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-si
 <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px;"><p style="font-weight:600;">Usuarios creados</p><button class="btn btn-ghost btn-sm" style="width:auto;padding:6px 10px;" onclick="correrDiagnosticoUsuarios()">${state.diagCorriendo ? 'Probando...' : '🔧 Diagnóstico'}</button></div>
 ${state.diagTexto ? `<pre style="white-space:pre-wrap;word-break:break-word;font-size:0.72em;background:#f3f4f6;border-radius:8px;padding:10px;margin-bottom:10px;">${esc2(state.diagTexto)}</pre>` : ''}`;
 if (state.adminUsersLoading) {
-html += `<p class="empty-note">Cargando...</p>`;
+html += `<p class="empty-note">${esc2(state.adminUsersProgress || "Cargando...")}</p>`;
 } else if (state.adminUsersError) {
 html += `<div class="card" style="border:1px solid #fecaca;background:#fef2f2;"><p style="font-size:0.85em;font-weight:700;color:#b91c1c;margin-bottom:4px;">No se pudo cargar la lista de usuarios</p><p style="font-size:0.75em;color:#7f1d1d;word-break:break-word;margin-bottom:8px;">${esc2(state.adminUsersError)}</p><button class="btn btn-blue btn-sm" onclick="cargarListaUsuarios()">🔄 Reintentar</button></div>`;
 } else if (!state.adminUsersList || !state.adminUsersList.length) {
