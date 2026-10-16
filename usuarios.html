@@ -392,7 +392,8 @@ u.ckAsignacion[nivel][tipo] = nuevo;
 render();
 }
 function ckAsignacionBloqueHtml(u, nivel, etiqueta, grados, grupos) {
-const asign = (u.ckAsignacion && u.ckAsignacion[nivel]) || { grados: [], grupos: [] };
+const asignRaw = (u.ckAsignacion && u.ckAsignacion[nivel]) || {};
+const asign = { grados: Array.isArray(asignRaw.grados) ? asignRaw.grados : Object.values(asignRaw.grados || {}), grupos: Array.isArray(asignRaw.grupos) ? asignRaw.grupos : Object.values(asignRaw.grupos || {}) };
 const chip = (tipo, valor, marcado) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.76em;margin:2px 6px 2px 0;"><input type="checkbox" ${marcado ? 'checked' : ''} onchange="toggleCkAsignacionValor('${u.uid}','${nivel}','${tipo}','${valor}',this.checked)"/>${valor}</label>`;
 return `
 <div style="margin-top:6px;padding:6px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
@@ -463,7 +464,7 @@ const mensaje = u.tempPasswordActual
 ? `Hola${nombre}, aquí están tus datos de acceso al Sistema Escolar:\nCorreo: ${u.email}\nContraseña: ${u.tempPasswordActual}\n(Al entrar, el sistema te pedirá cambiarla).`
 : `Hola${nombre}, tu cuenta del Sistema Escolar ya está activa con el correo ${u.email}. Si olvidaste tu contraseña, avísame para generarte una nueva.`;
 const texto = encodeURIComponent(mensaje);
-const tel = (u.telefono || '').replace(/[^0-9]/g, '');
+const tel = String(u.telefono || '').replace(/[^0-9]/g, '');
 return `https://wa.me/${tel}?text=${texto}`;
 }
 function copiarPassword(pass) {
@@ -533,7 +534,7 @@ html += `<div class="card" style="border:1px solid #fecaca;background:#fef2f2;">
 } else if (!state.adminUsersList || !state.adminUsersList.length) {
 html += `<p class="empty-note">Aún no has creado ningún usuario.</p>`;
 } else {
-html += state.adminUsersList.filter(u => !u.eliminado).map(u => {
+html += state.adminUsersList.filter(u => !u.eliminado).map(u => { try {
 const puedeEditarPermisos = state.isAdmin || u.creadoPor === currentUid;
 const enConfirmacion = state.deleteConfirmUid === u.uid;
 return `
@@ -579,15 +580,16 @@ ${state.deleteConfirmError ? `<p class="errtext" style="font-size:0.78em;">${esc
 ` : ''}
 </div>
 `;
-}).join('');
+} catch (errCard) { return '<div class="card" style="margin-bottom:10px;border:1px solid #fecaca;"><p style="font-weight:600;">' + esc2(String(u.email || u.uid)) + '</p><p style="font-size:0.75em;color:#b91c1c;">No se pudo mostrar esta cuenta: ' + esc2(String(errCard && errCard.message)) + '</p></div>'; } }).join('');
 }
-html += `</main>`;
+html += `<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;">usuarios.html · versión 16-oct 13:10</p></main>`;
 return html;
 }
 function render() {
   const app = document.getElementById('app');
   if (!state.user) { app.innerHTML = '<div class="center-screen"><p>Cargando...</p></div>'; return; }
-  app.innerHTML = renderTopbarSimple() + renderAdminUsuarios();
+  try { app.innerHTML = renderTopbarSimple() + renderAdminUsuarios(); }
+  catch (e) { app.innerHTML = renderTopbarSimple() + '<main><div class="card" style="border:1px solid #fecaca;background:#fef2f2;"><p style="font-weight:700;color:#b91c1c;">Error al mostrar la pantalla</p><p style="font-size:0.8em;word-break:break-word;">' + esc2(String(e && e.message)) + '</p></div></main>'; }
 }
 function closeUserAdmin() { window.location.href = 'index.html'; }
 function handleLogout() { auth.signOut().then(() => { window.location.href = 'index.html'; }); }
