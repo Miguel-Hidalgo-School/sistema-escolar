@@ -643,9 +643,14 @@
         // se abrio bitacora.html directo, sin pasar por el Sistema Escolar), se usa el UID
         // de la cuenta como respaldo, igual que antes de este cambio.
         function obtenerEspacioId() {
-            // Cada usuario accede SOLO a su propia bitácora privada (su UID)
-            // No usar DB_ROOT compartido por seguridad en modelo SaaS
+            // Cada usuario accede a su propia bitácora privada (su UID), EXCEPTO
+            // los dos Súper Administradores, que comparten un solo espacio: el
+            // Sistema Escolar (index.html) ya calcula ese espacio compartido y lo
+            // deja aquí, en el puente, como "espacioId". Si no está disponible
+            // (por ejemplo, se abrió bitacora.html directo, sin pasar por el
+            // Sistema Escolar), se usa el UID de la cuenta como respaldo.
             const user = bitUsuarioActual || bitAuth.currentUser;
+            if (datosPuente && datosPuente.espacioId) return datosPuente.espacioId;
             return user ? user.uid : 'sin_cuenta';
         }
         function claveHistorial(nivel) {

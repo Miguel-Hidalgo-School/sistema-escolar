@@ -367,12 +367,12 @@ async function continuarSesionPostTerminos() {
 const email = (state.user && state.user.email) || (auth.currentUser && auth.currentUser.email) || '';
 if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
 state.isAdmin = true;
-try { await db.ref('admins/' + currentUid).set(true); } catch (e2) { /* las reglas ya lo protegen */ }
+try { await conTimeout(db.ref('admins/' + currentUid).set(true), 8000); } catch (e2) { /* las reglas ya lo protegen, o se tardó: seguimos de todos modos */ }
 // Ambos Súper Administradores comparten UN solo espacio de datos: el de educacion@.
 // educacion@ lo registra al entrar; el otro correo lo lee y usa ese mismo espacio.
 try {
 if (email.toLowerCase() === ADMIN_EMAILS[0]) {
-await db.ref('adminEspacio').set(currentUid);
+await conTimeout(db.ref('adminEspacio').set(currentUid), 8000);
 state.espacioAdmin = currentUid;
 } else {
 const es = await conTimeout(db.ref('adminEspacio').once('value'), 8000);
@@ -1476,7 +1476,9 @@ tutorNombre: s.tutorNombre || ''
 });
 const puente = {
 generadoEn: Date.now(),
-espacioId: currentUid,
+// Los Súper Administradores comparten un solo espacio (state.espacioAdmin);
+// cualquier otra cuenta usa su propio UID, como antes.
+espacioId: (state.isAdmin && state.espacioAdmin) ? state.espacioAdmin : currentUid,
 Primaria: {
 escuela: si.nombre || '',
 cct: si.cct || '',
