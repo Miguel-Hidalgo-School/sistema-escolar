@@ -151,6 +151,7 @@ const FIREBASE_CONFIG = {
 let auth = null, db = null, storage = null;
 let currentUid = null;
 let secondaryApp = null;
+let checkinAttendanceQuery = null;
 let studentsRef = null, schoolRef = null, secStudentsRef = null, secSchoolRef = null, formativosPriRef = null, formativosSecRef = null, tareasPriRef = null, tareasSecRef = null, disciplinaPriRef = null, disciplinaSecRef = null, checkinAttendanceRef = null, diasExcluidosRef = null, muralRef = null;
 let sumativaConfigPriRef = null, sumativaConfigSecRef = null, sumativaCalifPriRef = null, sumativaCalifSecRef = null, sumativaPeriodosRef = null;
 let state = {
@@ -499,7 +500,11 @@ render();
 }, () => {});
 }
 if (puedeCheckin) {
-checkinAttendanceRef.on('value', snap => {
+// Solo se descarga la asistencia del ciclo escolar actual (no todo el historial):
+// con conexiones lentas, bajar todo el historial en cada ingreso retrasaba el resto de la app.
+const cicloDesde = getCicloEscolar().slice(0, 4) + '-07-01';
+checkinAttendanceQuery = checkinAttendanceRef.orderByChild('date').startAt(cicloDesde);
+checkinAttendanceQuery.on('value', snap => {
 const val = snap.val() || {};
 state.checkinAttendance = Object.keys(val).map(id => ({ id, ...val[id] }));
 render();
@@ -522,6 +527,7 @@ if (sumativaConfigSecRef) sumativaConfigSecRef.off();
 if (sumativaCalifPriRef) sumativaCalifPriRef.off();
 if (sumativaCalifSecRef) sumativaCalifSecRef.off();
 if (sumativaPeriodosRef) sumativaPeriodosRef.off();
+if (checkinAttendanceQuery) { checkinAttendanceQuery.off(); checkinAttendanceQuery = null; }
 if (checkinAttendanceRef) checkinAttendanceRef.off();
 if (diasExcluidosRef) diasExcluidosRef.off();
 if (muralRef) muralRef.off();
