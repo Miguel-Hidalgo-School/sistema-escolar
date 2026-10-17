@@ -54,20 +54,28 @@
     <div id="listaAvisos"></div>
   </div>
 </div>
+<p id="diagMural" style="text-align:center;font-size:11px;color:#9ca3af;margin:18px 0 0;word-break:break-all;"></p>
 
 <script>
 const NIVEL = 'primaria';
 const CK_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyDcrp6WP_Iug874NiL-Nna-JivVTmA_Ll8",
-  authDomain: "sistema-escolar-checkin-kids.firebaseapp.com",
-  databaseURL: "https://sistema-escolar-checkin-kids-default-rtdb.firebaseio.com",
-  projectId: "sistema-escolar-checkin-kids",
-  storageBucket: "sistema-escolar-checkin-kids.firebasestorage.app",
-  messagingSenderId: "854234357267",
-  appId: "1:854234357267:web:0f0c8fdeddde21bf6429e6"
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
 firebase.initializeApp(CK_FIREBASE_CONFIG);
 const db = firebase.database();
+// Línea de diagnóstico (abajo de la página): ayuda a saber de dónde se leen los avisos.
+const _diag = { proyecto: CK_FIREBASE_CONFIG.projectId, espacio: '', avisos: '-', error: '' };
+function pintarDiag() {
+  const el = document.getElementById('diagMural');
+  if (el) el.textContent = 'Diagnóstico · ' + _diag.proyecto + ' · espacio: ' + (_diag.espacio || 'no encontrado') + ' · avisos: ' + _diag.avisos + (_diag.error ? ' · error: ' + _diag.error : '');
+}
+
 // Espacio (carpeta de la escuela) de este mural. El link que genera el Sistema Escolar
 // trae ?e=<espacio>. Si un link viejo no lo trae, se usa el espacio compartido de los
 // Súper Administradores (adminEspacio), para que los links ya enviados sigan funcionando.
@@ -138,16 +146,19 @@ function renderAvisos() {
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 obtenerEspacio().then(esp => {
+  _diag.espacio = esp; pintarDiag();
   if (!esp) return;
   db.ref('usuarios/' + esp + '/mural').on('value', snap => {
     const val = snap.val() || {};
     avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    _diag.avisos = avisos.length; pintarDiag();
     if (!document.getElementById('avisosView').classList.contains('hidden')) renderAvisos();
-  }, () => {});
+  }, err => { _diag.error = (err && err.code) || 'sin permiso'; pintarDiag(); });
 });
 
 render();
 if (sel.grade) { verAvisos(); }
+pintarDiag();
 </script>
 </body>
 </html>
