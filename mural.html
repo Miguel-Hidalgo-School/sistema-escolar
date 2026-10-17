@@ -187,6 +187,7 @@ function tiempoRelativo(ts){
   return new Date(ts).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' });
 }
 
+const _lista = x => x ? Object.values(x) : [];
 function renderAvisos() {
   const lista = document.getElementById('listaAvisos');
   if (!avisosCargados) {
@@ -196,6 +197,9 @@ function renderAvisos() {
   const filtrados = avisos.filter(a => {
     if (a.nivel === 'todos') return true;
     if (a.nivel !== sel.nivel) return false;
+    const gs = _lista(a.grades), gps = _lista(a.grupos);
+    if (gs.length && !gs.includes(sel.grade)) return false;
+    if (gps.length && !gps.includes(sel.grupo)) return false;
     if (a.grade && a.grade !== sel.grade) return false;
     if (a.grupo && sel.grupo && a.grupo !== sel.grupo) return false;
     if (a.grupo && !sel.grupo) return false; // el aviso es de un grupo específico y el papá no eligió grupo
@@ -225,7 +229,7 @@ espacioListo.then(esp => {
   if (!esp) { marcarCargado(); return; }
   const _fuentes = {};
   const _unir = () => { avisos = Object.values(_fuentes).reduce((acc, v) => acc.concat(Object.keys(v||{}).map(id => ({ id, ...v[id] }))), []).sort((a,b) => (b.createdAt||0) - (a.createdAt||0)); };
-  db.ref('Sistema Escolar/mural').on('value', s2 => { _fuentes.legacy = s2.val() || {}; _unir(); _diag.avisos = avisos.length; pintarDiag(); if (typeof renderAvisos==='function' && document.getElementById('avisosView') && !document.getElementById('avisosView').classList.contains('hidden')) renderAvisos(); }, () => {});
+  if (!(_qs.get('e') || _qs.get('escuela'))) db.ref('Sistema Escolar/mural').on('value', s2 => { _fuentes.legacy = s2.val() || {}; _unir(); _diag.avisos = avisos.length; pintarDiag(); if (typeof renderAvisos==='function' && document.getElementById('avisosView') && !document.getElementById('avisosView').classList.contains('hidden')) renderAvisos(); }, () => {});
   db.ref('usuarios/' + esp + '/mural').on('value', snap => {
     _fuentes.espacio = snap.val() || {}; _unir();
     _diag.avisos = avisos.length; pintarDiag();

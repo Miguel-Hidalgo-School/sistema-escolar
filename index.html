@@ -216,7 +216,7 @@ bloqueadoPorScreenshot: false,
 checkinAttendance: [],
 diasExcluidos: [],
 mural: [],
-muralForm: { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' },
+muralForm: { titulo: '', mensaje: '', grados: [], grupos: [], todaEscuela: false },
 muralShareUrl: '',
 iaCargando: {},
 iaResumenReporte: null,
@@ -4291,27 +4291,29 @@ window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(msg), '_bla
 }
 // ============ MURAL DE AVISOS ============
 function updateMuralFormLocal(field, value) { state.muralForm[field] = value; }
-function setMuralAlcance(alcance) { state.muralForm.alcance = alcance; if (alcance !== 'grado' && alcance !== 'grupo') { state.muralForm.grade = ''; } if (alcance !== 'grupo' && alcance !== 'grupoMulti') { state.muralForm.grupo = ''; } render(); }
+function toggleMuralGrado(g) { const f = state.muralForm; f.grados = f.grados.includes(g) ? f.grados.filter(x => x !== g) : f.grados.concat(g); render(); }
+function toggleMuralGrupo(g) { const f = state.muralForm; f.grupos = f.grupos.includes(g) ? f.grupos.filter(x => x !== g) : f.grupos.concat(g); render(); }
+function toggleMuralTodosGrados(nivel) { const f = state.muralForm; const todos = nivel === 'primaria' ? GRADOS : GRADOS_SEC; f.grados = f.grados.length === todos.length ? [] : todos.slice(); render(); }
+function toggleMuralEscuela() { state.muralForm.todaEscuela = !state.muralForm.todaEscuela; render(); }
 function publicarAviso(nivel) {
 const f = state.muralForm;
 if (!f.titulo.trim() || !f.mensaje.trim()) { showToast('Ponle título y mensaje al aviso'); return; }
-if (f.alcance === 'grado' && !f.grade) { showToast('Elige el grado'); return; }
-if (f.alcance === 'grupo' && (!f.grade || !f.grupo)) { showToast('Elige grado y grupo'); return; }
-if (f.alcance === 'grupoMulti' && !f.grupo) { showToast('Elige el grupo'); return; }
+if (!f.todaEscuela && !f.grados.length) { showToast('Elige al menos un grado'); return; }
+const todosGrados = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
+const gradosOrden = todosGrados.filter(g => f.grados.includes(g));
 const aviso = {
 titulo: f.titulo.trim(),
 mensaje: f.mensaje.trim(),
-nivel: f.alcance === 'todos' ? 'todos' : nivel,
-// En "grupoMulti" (grupo multigrado) NO se guarda grado — así el aviso le
-// llega a las familias sin importar cuál de los varios grados combinados
-// tiene su hijo/a, mientras el grupo coincida.
-grade: f.alcance === 'grado' || f.alcance === 'grupo' ? f.grade : null,
-grupo: (f.alcance === 'grupo' || f.alcance === 'grupoMulti') ? f.grupo : null,
+nivel: f.todaEscuela ? 'todos' : nivel,
+// Solo se guardan los grados elegidos; si se eligieron todos, el aviso va a todo el nivel.
+grades: (!f.todaEscuela && gradosOrden.length < todosGrados.length) ? gradosOrden : null,
+// Sin grupos elegidos = todos los grupos de esos grados.
+grupos: (!f.todaEscuela && f.grupos.length) ? f.grupos.slice().sort() : null,
 autor: (state.perfilActual && state.perfilActual.nombre) || '',
 createdAt: Date.now()
 };
 muralRef.push().set(aviso).then(() => {
-state.muralForm = { titulo: '', mensaje: '', alcance: 'nivel', grade: '', grupo: '' };
+state.muralForm = { titulo: '', mensaje: '', grados: [], grupos: [], todaEscuela: false };
 showToast('📢 Aviso publicado');
 render();
 }).catch(() => showToast('No se pudo publicar el aviso'));
@@ -4322,7 +4324,11 @@ muralRef.child(id).remove().then(() => showToast('Aviso eliminado')).catch(() =>
 }
 function linkMural(nivel) {
 const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
-return base + (nivel === 'secundaria' ? 'mural-secundaria.html' : 'mural-primaria.html');
+const pagina = (nivel === 'secundaria' ? 'mural-secundaria.html' : 'mural-primaria.html');
+const b = dbBase();
+// Cada escuela comparte SU propio mural: el link lleva el espacio de quien lo copia.
+if (b.indexOf('usuarios/') !== 0) return base + pagina;
+return base + pagina + '?e=' + encodeURIComponent(b.replace(/^usuarios\//, ''));
 }
 function copiarLinkMural(nivel) {
 navigator.clipboard.writeText(linkMural(nivel)).then(() => showToast('Link del mural copiado ✅'));
@@ -4341,26 +4347,12 @@ let html = `<div class="card">
 <p style="font-weight:700;margin-bottom:10px;">📢 Publicar un aviso nuevo</p>
 <input class="full" placeholder="Título del aviso" value="${esc2(f.titulo)}" oninput="updateMuralFormLocal('titulo',this.value)" style="margin-bottom:8px;" />
 <textarea placeholder="Escribe el mensaje..." rows="3" oninput="updateMuralFormLocal('mensaje',this.value)" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:0.85em;margin-bottom:10px;">${esc2(f.mensaje)}</textarea>
-<p style="font-size:0.75em;font-weight:600;color:#6b7280;margin-bottom:6px;">¿A quién va dirigido?</p>
-<div class="row-flex" style="margin-bottom:8px;flex-wrap:wrap;gap:6px;">
-<button class="btn btn-sm ${f.alcance==='nivel'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('nivel')">Todo ${nivel === 'primaria' ? 'Primaria' : 'Secundaria'}</button>
-<button class="btn btn-sm ${f.alcance==='grado'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grado')">Un grado</button>
-<button class="btn btn-sm ${f.alcance==='grupo'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupo')">Un grupo</button>
-${nivel === 'primaria' ? `<button class="btn btn-sm ${f.alcance==='grupoMulti'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('grupoMulti')">Grupo multigrado (varios grados)</button>` : ''}
-<button class="btn btn-sm ${f.alcance==='todos'?'btn-blue':'btn-gray'}" onclick="setMuralAlcance('todos')">Toda la escuela</button>
-</div>`;
-if (f.alcance === 'grado' || f.alcance === 'grupo') {
-const gradeOptions = nivel === 'primaria' ? GRADOS : GRADOS_SEC;
-html += `<div class="grade-pills">` + gradeOptions.map(g => `<button class="${g===f.grade?'active':''}" onclick="setMuralGrade('${g}')">${g}</button>`).join('') + `</div>`;
-}
-if (f.alcance === 'grupo' && f.grade) {
-const grupos = nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D'];
-html += `<div class="grade-pills" style="margin-top:6px;">` + grupos.map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
-}
-if (f.alcance === 'grupoMulti') {
-html += `<p style="font-size:0.72em;color:#6b7280;margin-bottom:4px;">Le llegará a todas las familias de este grupo, sin importar cuál de los grados combinados tenga su hijo/a.</p>`;
-html += `<div class="grade-pills">` + ['A','B','C','D'].map(g => `<button class="${f.grupo===g?'active':''}" onclick="updateMuralFormLocal('grupo','${g}');render();">${g}</button>`).join('') + `</div>`;
-}
+<p style="font-size:0.75em;font-weight:600;color:#6b7280;margin-bottom:6px;">¿En qué grados se publica? (puedes elegir varios)</p>
+<div class="grade-pills" style="${f.todaEscuela ? 'opacity:.4;pointer-events:none;' : ''}">${(nivel === 'primaria' ? GRADOS : GRADOS_SEC).map(g => `<button class="${f.grados.includes(g)?'active':''}" onclick="toggleMuralGrado('${g}')">${g}</button>`).join('')}<button class="${f.grados.length === (nivel === 'primaria' ? GRADOS : GRADOS_SEC).length ? 'active' : ''}" onclick="toggleMuralTodosGrados('${nivel}')">Todos</button></div>
+<p style="font-size:0.75em;font-weight:600;color:#6b7280;margin:10px 0 6px;">Grupos (opcional — si no eliges ninguno, va a todos los grupos)</p>
+<div class="grade-pills" style="${f.todaEscuela ? 'opacity:.4;pointer-events:none;' : ''}">${(nivel === 'secundaria' ? GRUPOS_SEC : ['A','B','C','D']).map(g => `<button class="${f.grupos.includes(g)?'active':''}" onclick="toggleMuralGrupo('${g}')">${g}</button>`).join('')}</div>
+<button class="btn btn-sm ${f.todaEscuela?'btn-blue':'btn-gray'}" style="margin-top:10px;" onclick="toggleMuralEscuela()">${f.todaEscuela ? '✅ ' : ''}Publicar para toda la escuela (Primaria y Secundaria)</button>
+`;
 html += `<button class="btn btn-green" style="width:100%;margin-top:10px;" onclick="publicarAviso('${nivel}')">📢 Publicar aviso</button>
 </div>
 <div class="card">
@@ -4377,7 +4369,8 @@ if (!avisos.length) {
 html += `<p style="font-size:0.8em;color:#9ca3af;">Todavía no has publicado ningún aviso.</p>`;
 } else {
 avisos.forEach(a => {
-const destino = a.nivel === 'todos' ? 'Toda la escuela' : (a.grupo ? `${a.grade} Grupo ${a.grupo}` : (a.grade ? a.grade : (nivel === 'primaria' ? 'Primaria' : 'Secundaria')));
+const _gs = a.grades ? Object.values(a.grades) : [], _gp = a.grupos ? Object.values(a.grupos) : [];
+const destino = a.nivel === 'todos' ? 'Toda la escuela' : ((_gs.length || _gp.length) ? ((_gs.length ? _gs.join(', ') : 'Todos los grados') + (_gp.length ? ' · Grupo ' + _gp.join(', ') : '')) : (a.grupo ? ((a.grade ? a.grade + ' ' : '') + 'Grupo ' + a.grupo + (a.grade ? '' : ' (multigrado)')) : (a.grade ? a.grade : (nivel === 'primaria' ? 'Primaria' : 'Secundaria'))));
 const fecha = new Date(a.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
 <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
@@ -4392,7 +4385,6 @@ html += `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12
 html += `</div>`;
 return html;
 }
-function setMuralGrade(g) { state.muralForm.grade = g; state.muralForm.grupo = ''; render(); }
 function renderReporteImprimible() {
 const rm = state.disciplinaReportMode;
 const nivel = rm.nivel;
