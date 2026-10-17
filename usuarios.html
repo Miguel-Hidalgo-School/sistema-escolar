@@ -46,6 +46,9 @@ main { max-width: 640px; width: 100%; margin: 0 auto; padding: 16px; }
 .grade-pills button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 .grade-pills.purple button.active { background: #9333ea; border-color: #9333ea; }
 .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; width: 100%; min-width: 0; }
+/* Tarjetas de usuario bien delimitadas */
+.ucard { border: 2px solid #94a3b8; border-left: 8px solid #2563eb; border-radius: 14px; box-shadow: 0 4px 12px rgba(15,23,42,0.14); margin-bottom: 22px !important; padding: 18px !important; }
+.ucard.ucard-off { border-left-color: #b91c1c; background: #f8fafc; }
 .row-flex { display: flex; gap: 8px; min-width: 0; }
 .row-flex button { min-width: 0; flex-shrink: 1; }
 .row-flex input { flex: 1; min-width: 0; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 0.9em; outline: none; }
@@ -295,8 +298,15 @@ if (!emailInput) { showToast('❌ Escribe el usuario del nuevo correo'); return;
 // @jaliscoedu.mx o un Gmail personal) — en ese caso se usa tal cual, para que
 // esa persona pueda recuperar su propia contraseña con el correo real de
 // Firebase si la olvida.
-const usuario = emailInput.includes('@') ? emailInput.split('@')[0] : emailInput;
-const email = usuario.toLowerCase() + REQUIRED_EMAIL_DOMAIN;
+let email;
+if (emailInput.includes('@')) {
+// Correo completo: se usa tal cual (dominio de la escuela o correo real), para que
+// quien tenga un correo real pueda recuperar su contraseña con "Olvidé mi contraseña".
+email = emailInput.toLowerCase();
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('❌ Escribe un correo válido'); return; }
+} else {
+email = emailInput.toLowerCase() + REQUIRED_EMAIL_DOMAIN;
+}
 const accesoPrimaria = !!document.getElementById('newUserAccesoPrimaria').checked;
 const accesoSecundaria = !!document.getElementById('newUserAccesoSecundaria').checked;
 const accesoCheckin = !!document.getElementById('newUserAccesoCheckin').checked;
@@ -531,7 +541,7 @@ html += state.adminUsersList.filter(u => !u.eliminado).map(u => { try {
 const puedeEditarPermisos = state.isAdmin || u.creadoPor === currentUid;
 const enConfirmacion = state.deleteConfirmUid === u.uid;
 return `
-<div class="card" style="margin-bottom:10px;${u.deshabilitado ? 'opacity:0.6;' : ''}">
+<div class="card ucard${u.deshabilitado ? ' ucard-off' : ''}" style="${u.deshabilitado ? 'opacity:0.7;' : ''}">
 <p style="font-weight:600;">${esc2(u.nombre || u.email)} ${u.deshabilitado ? '<span style="color:#b91c1c;font-size:0.75em;">(deshabilitado)</span>' : ''}</p>
 <p style="font-size:0.82em;color:#6b7280;">${esc2(u.email)}</p>
 ${u.correoContacto ? `<p style="font-size:0.78em;color:#6b7280;">📧 Contacto real: ${esc2(u.correoContacto)}</p>` : ''}
