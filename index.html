@@ -325,6 +325,21 @@ function dbBase() {
     const espacio = state.espacioAdmin || (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
     return 'usuarios/' + espacio;
 }
+// Restricción de grados/grupos asignada por el Súper Administrador en el perfil de
+// esta cuenta (perfiles/<uid>/ckAsignacion). Sin restricción = ve todo. Con ella,
+// solo ve alumnos cuyo grado Y grupo estén en sus listas (Primaria, Secundaria y
+// Pase de baño usan este mismo filtro). Es un filtro de pantalla: las escrituras
+// siguen siendo por alumno, así que no se pierde ningún dato oculto.
+function alumnoPermitidoPorAsignacion(s, nivel) {
+const asig = state.perfilActual && state.perfilActual.ckAsignacion;
+if (!asig || state.isAdmin) return true;
+const n = asig[nivel];
+if (!n) return true;
+const grados = n.grados ? Object.values(n.grados) : [], grupos = n.grupos ? Object.values(n.grupos) : [];
+if (!grados.length || !grupos.length) return false;
+return grados.includes(s.grade) && grupos.includes(s.grupo);
+}
+function tieneRestriccionAsignacion() { return !!(state.perfilActual && state.perfilActual.ckAsignacion && !state.isAdmin); }
 function bindRefs() {
 const base = dbBase();
 studentsRef = db.ref(base + '/students');
@@ -485,7 +500,7 @@ const puedeCheckin = tieneAccesoCheckin();
 if (puedePrimaria) {
 studentsRef.on('value', snap => {
 const val = snap.val() || {};
-state.students = Object.keys(val).map(id => ({ id, ...val[id] }));
+state.students = Object.keys(val).map(id => ({ id, ...val[id] })).filter(x => alumnoPermitidoPorAsignacion(x, 'primaria'));
 render();
 }, err => { showToast('Permisos insuficientes: revisa las reglas de la base de datos.'); });
 schoolRef.on('value', snap => {
@@ -501,7 +516,7 @@ sumativaCalifPriRef.on('value', snap => { state.sumativaCalifPri = snap.val() ||
 if (puedeSecundaria) {
 secStudentsRef.on('value', snap => {
 const val = snap.val() || {};
-state.secStudents = Object.keys(val).map(id => ({ id, ...val[id] }));
+state.secStudents = Object.keys(val).map(id => ({ id, ...val[id] })).filter(x => alumnoPermitidoPorAsignacion(x, 'secundaria'));
 render();
 }, () => {});
 secSchoolRef.on('value', snap => {
@@ -1245,6 +1260,7 @@ studentsRef.child(id).set({ name, grade: grado, grades, observaciones: {}, ...em
 showToast('24 alumnos de ejemplo agregados');
 }
 function clearAllStudents() {
+if (tieneRestriccionAsignacion()) { showToast('Tu cuenta tiene grupos asignados: no puede borrar a todos los alumnos'); return; }
 if (!confirm('¿Seguro que quieres borrar TODOS los alumnos? Esta acción no se puede deshacer.')) return;
 studentsRef.remove();
 showToast('Todos los alumnos fueron eliminados');

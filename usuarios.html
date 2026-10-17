@@ -316,14 +316,7 @@ try {
 const secAuth = getSecondaryAuth();
 const cred = await secAuth.createUserWithEmailAndPassword(email, tempPass);
 const newUid = cred.user.uid;
-const espacioUid = (() => {
-  // Si SOLO tiene CheckIn Kids (sin Primaria ni Secundaria), comparte espacio con el admin/creador
-  if (accesoCheckin && !accesoPrimaria && !accesoSecundaria) {
-    return (state.isAdmin && state.espacioAdmin && state.espacioAdmin !== '__ROOT__') ? state.espacioAdmin : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
-  }
-  // Si tiene Primaria/Secundaria o combinaciones, obtiene su propio espacio (admin → newUid, delegado → su propio espacio)
-  return state.isAdmin ? newUid : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
-})();
+const espacioUid = state.isAdmin ? newUid : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
 const nuevoPerfil = {
 email, nombre: nombre || '', telefono: telefono || '',
 correoContacto: correoContacto || '',
@@ -582,7 +575,7 @@ ${state.deleteConfirmError ? `<p class="errtext" style="font-size:0.78em;">${esc
 `;
 } catch (errCard) { return '<div class="card" style="margin-bottom:10px;border:1px solid #fecaca;"><p style="font-weight:600;">' + esc2(String(u.email || u.uid)) + '</p><p style="font-size:0.75em;color:#b91c1c;">No se pudo mostrar esta cuenta: ' + esc2(String(errCard && errCard.message)) + '</p></div>'; } }).join('');
 }
-html += `<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;">usuarios.html · versión 16-oct 13:10</p></main>`;
+html += `<p style="text-align:center;font-size:0.68em;color:#9ca3af;margin-top:14px;">usuarios.html · versión 17-oct · a5c31</p></main>`;
 return html;
 }
 function render() {

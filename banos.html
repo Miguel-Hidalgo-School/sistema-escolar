@@ -10417,8 +10417,18 @@ let students = [];
 let banoLog = [];
 let directorTelefono = '';
 
+// Restricción de grados/grupos del perfil (perfiles/<uid>/ckAsignacion); null = ve todo.
+let pbAsignacion = null;
+function pbAlumnoPermitido(s){
+  if(!pbAsignacion) return true;
+  const n = pbAsignacion[s.nivel || 'primaria'];
+  if(!n) return true;
+  const grados = n.grados ? Object.values(n.grados) : [], grupos = n.grupos ? Object.values(n.grupos) : [];
+  if(!grados.length || !grupos.length) return false;
+  return grados.includes(s.grade) && grupos.includes(s.group);
+}
 function mergeStudents(){
-  students = [...priStudents, ...secStudentsArr];
+  students = [...priStudents, ...secStudentsArr].filter(pbAlumnoPermitido);
   renderAll();
 }
 
@@ -10442,6 +10452,7 @@ pbAuth.onAuthStateChanged(async user => {
       // por un administrador comparte el ESPACIO de ese administrador
       // (perfil.espacioUid), no su propio uid — si no, ve su cajón vacío.
       espacioUid = perfil.espacioUid || user.uid;
+      pbAsignacion = perfil.ckAsignacion || null;
     }
   }catch(e){}
 
