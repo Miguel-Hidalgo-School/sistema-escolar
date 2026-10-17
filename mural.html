@@ -205,6 +205,7 @@ function renderAvisos() {
     if (a.grupo && !sel.grupo) return false; // el aviso es de un grupo específico y el papá no eligió grupo
     return true;
   });
+  window._filtradosActual = filtrados;
   if (!filtrados.length) {
     lista.innerHTML = '<div class="empty"><div class="big">📭</div>No hay avisos por ahora para este grupo.<br>Vuelve a checar más tarde.</div>';
     return;
@@ -269,6 +270,52 @@ espacioListo.then(esp => {
 render();
 if (sel && sel.nivel && sel.grade) { verAvisos(); }
 pintarDiag();
+</script>
+<script>
+/* ===== Lector de avisos en audio (voz del propio teléfono, sin costo) ===== */
+(function(){
+  if (!('speechSynthesis' in window)) return;
+  const st = { gesto: false };
+  const get = k => { try { return localStorage.getItem(k); } catch(e) { return null; } };
+  const set = (k,v) => { try { localStorage.setItem(k,v); } catch(e) {} };
+  const auto = () => get('mural_audio_auto') !== '0';          // activado por defecto
+  function voz(){ const v = speechSynthesis.getVoices(); return v.find(x => /es[-_]MX/i.test(x.lang)) || v.find(x => /^es/i.test(x.lang)) || null; }
+  function limpio(t){ t = String(t||''); const m = t.match(/[A-Za-zÁÉÍÓÚÑáéíóúñ]/g) || []; const may = (t.match(/[A-ZÁÉÍÓÚÑ]/g) || []).length; return (m.length && may/m.length > 0.7) ? t.toLowerCase() : t; }
+  function leer(a){ if (!a) return; speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(limpio(a.titulo) + '. ' + limpio(a.mensaje)); u.lang = 'es-MX'; const v = voz(); if (v) u.voice = v; u.rate = 0.95; speechSynthesis.speak(u); }
+  function ultimo(){ const f = window._filtradosActual || []; return f[0] || null; }
+  // Al elegir el grado y tocar "Ver avisos" se reproduce solo el último aviso.
+  // Si los avisos aún no cargan, queda pendiente y suena en cuanto llegan.
+  let pendiente = false;
+  function intentarPendiente(){ if (!pendiente) return; const a = ultimo(); if (!a) return; pendiente = false; leer(a); }
+  window.leerUltimoAviso = () => { st.gesto = true; const a = ultimo(); if (a) leer(a); };
+  window.leerAvisoPorIndice = i => { st.gesto = true; leer((window._filtradosActual || [])[i]); };
+  window.detenerAudio = () => speechSynthesis.cancel();
+  window.cambiarAudioAuto = on => { set('mural_audio_auto', on ? '1' : '0'); if (!on) speechSynthesis.cancel(); };
+  function decorar(){
+    const lista = document.getElementById('listaAvisos'); if (!lista) return;
+    const items = lista.querySelectorAll('.aviso');
+    items.forEach((el, i) => { if (el.querySelector('.aud-btn')) return; const b = document.createElement('button'); b.className = 'aud-btn'; b.type = 'button'; b.textContent = '🔊 Escuchar'; b.onclick = () => window.leerAvisoPorIndice(i); el.appendChild(b); });
+    if (items.length && !document.getElementById('audioBar')) {
+      const bar = document.createElement('div'); bar.id = 'audioBar'; bar.className = 'audiobar';
+      bar.innerHTML = '<button type="button" class="aud-main" onclick="leerUltimoAviso()">🔊 Toca aquí para escuchar el último aviso</button><p class="aud-nota">Si no se reproduce solo, toca el botón azul para oírlo.</p><button type="button" class="aud-stop" onclick="detenerAudio()">⏹ Parar</button><label><input type="checkbox" id="chkAudioAuto" onchange="cambiarAudioAuto(this.checked)"' + (auto() ? ' checked' : '') + '> Reproducir solo al elegir mi grado</label>';
+      lista.insertBefore(bar, lista.firstChild);
+    }
+    intentarPendiente();
+  }
+  const css = document.createElement('style');
+  css.textContent = '.audiobar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px}.audiobar .aud-main{flex:1 1 100%;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:1em;padding:13px;border-radius:10px;cursor:pointer}.audiobar .aud-stop{border:1px solid #93c5fd;background:#fff;color:#1d4ed8;font-weight:600;padding:8px 12px;border-radius:10px;cursor:pointer}.audiobar .aud-nota{flex:1 1 100%;margin:0;font-size:.78em;color:#4b5563}.audiobar label{font-size:.8em;color:#374151;display:flex;gap:6px;align-items:center}.aud-btn{margin-top:10px;border:1px solid #d1d5db;background:#f9fafb;color:#374151;font-weight:600;font-size:.8em;padding:6px 12px;border-radius:8px;cursor:pointer}';
+  document.head.appendChild(css);
+  const orig = window.renderAvisos;
+  window.renderAvisos = function(){ const r = orig.apply(this, arguments); decorar(); return r; };
+  renderAvisos = window.renderAvisos;
+  // El navegador solo permite sonido después de que la persona toca la pantalla.
+  const verOrig = window.verAvisos;
+  if (typeof verOrig === 'function') {
+    window.verAvisos = function(){ st.gesto = true; const r = verOrig.apply(this, arguments); if (auto()) { pendiente = true; intentarPendiente(); } return r; };
+    verAvisos = window.verAvisos;
+  }
+  const v = document.getElementById('avisosView'); if (v && !v.classList.contains('hidden')) renderAvisos();
+})();
 </script>
 </body>
 </html>
