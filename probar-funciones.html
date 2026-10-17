@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba de funciones</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:20px 16px}input,button{width:100%;padding:12px;margin:6px 0;font-size:1em;box-sizing:border-box}button{background:#2563eb;color:#fff;border:0;border-radius:10px;font-weight:700}pre{background:#f3f4f6;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-word}</style></head>
+<body>
+<h2>Prueba de funciones</h2>
+<p>Página solo de pruebas. No la enlaces desde el sistema. Solo comprueba que el servidor te reconoce; no crea ni cambia nada.</p>
+<input id="em" type="email" placeholder="Correo"><input id="pw" type="password" placeholder="Contraseña">
+<button onclick="entrar()">Entrar y probar</button>
+<pre id="out">Sin probar todavía.</pre>
+<script>
+firebase.initializeApp({apiKey:"AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",authDomain:"sistema-escolar-a5c31.firebaseapp.com",databaseURL:"https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",projectId:"sistema-escolar-a5c31",appId:"1:234198294318:web:a65521e9607753d68664bf"});
+const out=t=>document.getElementById('out').textContent=t;
+async function entrar(){
+  try{
+    out('Entrando…');
+    await firebase.auth().signInWithEmailAndPassword(document.getElementById('em').value.trim(),document.getElementById('pw').value);
+    out('Llamando al servidor…');
+    const r=await firebase.app().functions('us-central1').httpsCallable('ping')();
+    out('✅ Funciona:\n'+JSON.stringify(r.data,null,2));
+  }catch(e){ out('❌ '+(e.code||'')+' '+(e.message||e)); }
+}
+</script></body></html>
