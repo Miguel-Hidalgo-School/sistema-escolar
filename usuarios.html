@@ -47,8 +47,8 @@ main { max-width: 640px; width: 100%; margin: 0 auto; padding: 16px; }
 .grade-pills.purple button.active { background: #9333ea; border-color: #9333ea; }
 .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; width: 100%; min-width: 0; }
 /* Tarjetas de usuario bien delimitadas */
-.ucard { border: 2px solid #94a3b8; border-left: 8px solid #2563eb; border-radius: 14px; box-shadow: 0 4px 12px rgba(15,23,42,0.14); margin-bottom: 22px !important; padding: 18px !important; }
-.ucard.ucard-off { border-left-color: #b91c1c; background: #f8fafc; }
+.ucard { border: 3px solid #2563eb; border-left-width: 10px; border-radius: 14px; box-shadow: 0 4px 12px rgba(15,23,42,0.14); margin-bottom: 22px !important; padding: 18px !important; }
+.ucard.ucard-off { border-color: #b91c1c; background: #f8fafc; }
 .row-flex { display: flex; gap: 8px; min-width: 0; }
 .row-flex button { min-width: 0; flex-shrink: 1; }
 .row-flex input { flex: 1; min-width: 0; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 0.9em; outline: none; }
@@ -565,7 +565,6 @@ ${(u.accesoSecundaria !== false) ? ckAsignacionBloqueHtml(u, 'secundaria', 'Secu
 <label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.accesoBitacora === true ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','accesoBitacora',this.checked)"/> Bitácora</label>
 ${state.isAdmin ? `<label style="display:flex;align-items:center;gap:8px;font-size:0.82em;margin-bottom:4px;"><input type="checkbox" ${u.puedeGestionarUsuarios ? 'checked' : ''} onchange="actualizarPermisoUsuario('${u.uid}','puedeGestionarUsuarios',this.checked)"/> Puede gestionar sus propios usuarios</label>` : ''}
 </div>
-<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
 <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
 <button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;" onclick='toggleDeshabilitarUsuario(${JSON.stringify(u).replace(/'/g,"&#39;")})'>${u.deshabilitado ? '✅ Habilitar' : '🚫 Deshabilitar'}</button>
 <button class="btn btn-ghost btn-sm" style="width:auto;padding:4px 10px;font-size:0.82em;color:#b91c1c;" onclick="pedirEliminarUsuario('${u.uid}')">🗑️ Eliminar</button>
