@@ -223,9 +223,11 @@ function marcarCargado() { avisosCargados = true; if (!document.getElementById('
 const espacioListo = obtenerEspacio().then(esp => { ESPACIO_MURAL = esp; _diag.espacio = esp; pintarDiag(); return esp; });
 espacioListo.then(esp => {
   if (!esp) { marcarCargado(); return; }
+  const _fuentes = {};
+  const _unir = () => { avisos = Object.values(_fuentes).reduce((acc, v) => acc.concat(Object.keys(v||{}).map(id => ({ id, ...v[id] }))), []).sort((a,b) => (b.createdAt||0) - (a.createdAt||0)); };
+  db.ref('Sistema Escolar/mural').on('value', s2 => { _fuentes.legacy = s2.val() || {}; _unir(); _diag.avisos = avisos.length; pintarDiag(); if (typeof renderAvisos==='function' && document.getElementById('avisosView') && !document.getElementById('avisosView').classList.contains('hidden')) renderAvisos(); }, () => {});
   db.ref('usuarios/' + esp + '/mural').on('value', snap => {
-    const val = snap.val() || {};
-    avisos = Object.keys(val).map(id => ({ id, ...val[id] })).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    _fuentes.espacio = snap.val() || {}; _unir();
     _diag.avisos = avisos.length; pintarDiag();
     marcarCargado();
   }, err => { _diag.error = (err && err.code) || 'sin permiso'; pintarDiag(); marcarCargado(); });
