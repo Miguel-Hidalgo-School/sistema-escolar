@@ -6,8 +6,8 @@
 <title>Sistema Escolar</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2563eb">
-<link rel="icon" href="icon-se-192.png">
-<link rel="apple-touch-icon" href="icon-se-192.png">
+<link rel="icon" href="icons/icon-se-192.png">
+<link rel="apple-touch-icon" href="icons/icon-se-192.png">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -133,19 +133,19 @@ const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - J
 const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
 const IA_WORKER_URL = 'https://sistema-escolar-ia.beltrannpipee.workers.dev'; // sugerencias de texto con IA (Evaluación Formativa)
-const REQUIRED_EMAIL_DOMAIN = '@chavarriaedu.mx';
+const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
 // Únicas dos cuentas Súper Administrador del sistema (ninguna otra puede serlo).
-const ADMIN_EMAILS = ['jose.chavarria@jaliscoedu.mx', 'aaron.chavarria@chavarriaedu.mx'];
+const ADMIN_EMAILS = ['educacion@chavarria.edu.com', 'jose.chavarria@jaliscoedu.mx'];
 
 // Configuración fija de Firebase (ya no se pide en cada dispositivo/navegador)
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyDcrp6WP_Iug874NiL-Nna-JivVTmA_Ll8",
-  authDomain: "sistema-escolar-checkin-kids.firebaseapp.com",
-  databaseURL: "https://sistema-escolar-checkin-kids-default-rtdb.firebaseio.com",
-  projectId: "sistema-escolar-checkin-kids",
-  storageBucket: "sistema-escolar-checkin-kids.firebasestorage.app",
-  messagingSenderId: "854234357267",
-  appId: "1:854234357267:web:0f0c8fdeddde21bf6429e6"
+  apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+  authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+  databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+  projectId: "sistema-escolar-a5c31",
+  storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+  messagingSenderId: "234198294318",
+  appId: "1:234198294318:web:a65521e9607753d68664bf"
 };
 
 let auth = null, db = null, storage = null;
@@ -312,12 +312,16 @@ box.innerHTML = '<div class="toast">'+msg+'</div>';
 setTimeout(()=>{ box.innerHTML=''; }, 2600);
 }
 // ---------------- Firebase Init ----------------
-// Los datos operativos de cada escuela viven en usuarios/<espacioUid>.
-// Las cuentas creadas por un Súper Administrador reciben su propio espacio;
-// las cuentas delegadas comparten únicamente el espacio de su escuela.
+// Cada usuario (el administrador y cada cuenta que él cree) tiene su propia
+// carpeta de datos, totalmente separada de las demás:
+//  - El administrador (la primera cuenta, la que ya existía) sigue usando
+//    la raíz original "Sistema Escolar", tal cual siempre lo ha hecho.
+//  - Cada cuenta nueva creada desde "Usuarios" usa su propia carpeta
+//    "usuarios/<uid>/...", que solo esa persona (y el administrador) pueden ver.
 function dbBase() {
     // Modelo SaaS: cada usuario (incluyendo admin) tiene su propio espacio privado
     // No hay carpeta compartida DB_ROOT — garantiza privacidad total
+    if (state.espacioAdmin === '__ROOT__') return DB_ROOT;
     const espacio = state.espacioAdmin || (state.perfilActual && state.perfilActual.espacioUid) || currentUid;
     return 'usuarios/' + espacio;
 }
@@ -340,8 +344,12 @@ sumativaCalifSecRef = db.ref(base + '/sumativaCalif/secundaria');
 sumativaPeriodosRef = db.ref(base + '/sumativaPeriodos');
 checkinAttendanceRef = db.ref(base + '/checkinAttendance');
 diasExcluidosRef = db.ref(base + '/diasAsistenciaExcluidos');
-// El mural queda dentro del mismo espacio de datos de la escuela (`base`);
-// las reglas publican solo los campos necesarios para consultar el mural.
+// El mural respeta el mismo aislamiento que el resto de los datos: cada
+// cuenta (admin o individual/de prueba) usa su propio "cajón" de datos
+// (`base`). La cuenta administradora real ya usa DB_ROOT de por sí (por eso
+// mural-primaria.html / mural-secundaria.html, que leen directo de DB_ROOT,
+// siguen mostrando exactamente lo que ella publique) — pero una cuenta de
+// prueba o delegada ya no comparte ni ve el mural real de la escuela.
 muralRef = db.ref(base + '/mural');
 }
 function initFirebase() {
@@ -361,12 +369,30 @@ const email = (state.user && state.user.email) || (auth.currentUser && auth.curr
 if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
 state.isAdmin = true;
 try { await conTimeout(db.ref('admins/' + currentUid).set(true), 8000); } catch (e2) { /* las reglas ya lo protegen, o se tardó: seguimos de todos modos */ }
-// Ambos Súper Administradores comparten un espacio administrativo inicializado una sola vez.
+// Ambos Súper Administradores comparten UN solo espacio de datos: el de educacion@.
+// educacion@ lo registra al entrar; el otro correo lo lee y usa ese mismo espacio.
 try {
-const tx = await conTimeout(db.ref('adminEspacio').transaction(valor => valor || currentUid), 8000);
-state.espacioAdmin = (tx && tx.snapshot && tx.snapshot.val()) || currentUid;
+if (email.toLowerCase() === ADMIN_EMAILS[0]) {
+await conTimeout(db.ref('adminEspacio').set(currentUid), 8000);
+state.espacioAdmin = currentUid;
+} else {
+const es = await conTimeout(db.ref('adminEspacio').once('value'), 8000);
+state.espacioAdmin = es.val() || null;
+}
+// Si el espacio por-cuenta está vacío pero la carpeta original "Sistema Escolar"
+// (la que usaba el administrador antes) sí tiene alumnos, se usa esa para ambos.
+if (state.espacioAdmin) {
+const tiene = async (b) => {
+for (const n of ['students', 'secStudents']) {
+const sn = await conTimeout(db.ref(b + '/' + n).limitToFirst(1).once('value'), 8000);
+if (sn.exists()) return true;
+}
+return false;
+};
 state.espacioAdminUid = state.espacioAdmin;
-} catch (e3) { state.espacioAdmin = currentUid; }
+if (!(await tiene('usuarios/' + state.espacioAdmin)) && (await tiene(DB_ROOT))) state.espacioAdmin = '__ROOT__';
+}
+} catch (e3) { state.espacioAdmin = null; }
 } else {
 try {
 const adminSnap = await db.ref('admins/' + currentUid).once('value');
@@ -726,7 +752,7 @@ const telefono = document.getElementById('newUserPhone').value.trim();
 const correoContacto = document.getElementById('newUserCorreoContacto').value.trim();
 if (!emailInput) { showToast('❌ Escribe el usuario del nuevo correo'); return; }
 // El correo de acceso puede ser el alias corto de la escuela (se completa
-// solo con @chavarriaedu.mx) O un correo real completo (por ejemplo, uno
+// solo con @chavarria.edu.com) O un correo real completo (por ejemplo, uno
 // @jaliscoedu.mx o un Gmail personal) — en ese caso se usa tal cual, para que
 // esa persona pueda recuperar su propia contraseña con el correo real de
 // Firebase si la olvida.
@@ -751,7 +777,14 @@ try {
 const secAuth = getSecondaryAuth();
 const cred = await secAuth.createUserWithEmailAndPassword(email, tempPass);
 const newUid = cred.user.uid;
-const espacioUid = state.isAdmin ? newUid : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
+const espacioUid = (() => {
+  // Si SOLO tiene CheckIn Kids (sin Primaria ni Secundaria), comparte espacio con el admin/creador
+  if (accesoCheckin && !accesoPrimaria && !accesoSecundaria) {
+    return currentUid; // Si es admin; si lo crea delegado, será reemplazado abajo por `perfilActual.espacioUid || currentUid`
+  }
+  // Si tiene Primaria/Secundaria o combinaciones, obtiene su propio espacio (admin → newUid, delegado → su propio espacio)
+  return state.isAdmin ? newUid : ((state.perfilActual && state.perfilActual.espacioUid) || currentUid);
+})();
 const nuevoPerfil = {
 email, nombre: nombre || '', telefono: telefono || '',
 correoContacto: correoContacto || '',
@@ -936,7 +969,7 @@ const cred = firebase.auth.EmailAuthProvider.credential(u.email, currentKnownPas
 await u.reauthenticateWithCredential(cred);
 await u.updatePassword(pass1);
 // Las cuentas que usan un correo real (no el dominio inventado
-// @chavarriaedu.mx) sí pueden recuperar su acceso solas con el "olvidé mi
+// @chavarria.edu.com) sí pueden recuperar su acceso solas con el "olvidé mi
 // contraseña" de Firebase, así que para ellas conviene borrar la contraseña
 // guardada. Las que siguen usando el correo inventado no tienen esa opción,
 // así que para esas se sigue guardando — es la única manera práctica de que
@@ -1651,19 +1684,11 @@ async function guardarAceptoTerminos() {
   const btn = document.getElementById('btnAceptarTerminos');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
   try {
-    const emailSesion = ((state.user && state.user.email) || '').toLowerCase();
-    const cambiosPerfil = {
+    await db.ref('perfiles/' + currentUid).update({
       aceptoTerminos: true,
       fechaAceptoTerminos: new Date().toISOString(),
       ipAceptacion: 'navegador-detectado'
-    };
-    if (!state.perfilActual && ADMIN_EMAILS.includes(emailSesion)) {
-      cambiosPerfil.email = emailSesion;
-      cambiosPerfil.espacioUid = currentUid;
-      cambiosPerfil.creadoPor = currentUid;
-      cambiosPerfil.creadoEn = new Date().toISOString();
-    }
-    await db.ref('perfiles/' + currentUid).update(cambiosPerfil);
+    });
   } catch (e) {
     console.error('Error guardando aceptación de términos:', e);
     showToast('❌ No se pudo guardar tu aceptación: ' + (e && e.message ? e.message : e) + '. Avisa al administrador.');
@@ -1773,7 +1798,7 @@ function renderModalTerminos() {
       </div>
 
       <p style="margin-top:12px;font-size:0.75em;text-align:center;color:#6b7280;font-style:italic;">
-        Documento de cumplimiento legal. <strong>Director de Primaria & Administrador:</strong> jose.chavarria@jaliscoedu.mx
+        Documento de cumplimiento legal. <strong>Director de Primaria & Administrador:</strong> educacion@chavarria.edu.com
       </p>
     </div>
   </div>
@@ -1830,7 +1855,7 @@ return `
 </div>
 <h1>Sistema Escolar</h1>
 <p class="sub">Matrícula · Calificaciones · Diplomas</p>
-<div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarriaedu.mx" oninput="updateLoginInitial()" /></div>
+<div class="field"><input id="loginEmail" type="email" placeholder="correo@chavarria.edu.com" oninput="updateLoginInitial()" /></div>
 <div class="field"><input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')handleLoginSubmit()" /></div>
 <button class="btn btn-blue" onclick="handleLoginSubmit()">Iniciar sesión</button>
 ${state.authError ? `<p class="errtext">${state.authError}</p>` : ''}
@@ -3309,7 +3334,7 @@ const safetyTimeout = setTimeout(() => {
 if (state.tareaShareLoading) { state.tareaShareLoading = false; showToast('Tardó demasiado, intenta de nuevo'); render(); }
 }, 12000);
 try {
-const tokenPointerRef = db.ref(dbBase() + '/tareasShareTokens/' + nivel + '/' + studentId);
+const tokenPointerRef = db.ref(DB_ROOT + '/tareasShareTokens/' + nivel + '/' + studentId);
 const snap = await tokenPointerRef.once('value');
 const oldToken = snap.val();
 if (oldToken) {
@@ -4297,9 +4322,7 @@ muralRef.child(id).remove().then(() => showToast('Aviso eliminado')).catch(() =>
 }
 function linkMural(nivel) {
 const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
-// El link lleva el espacio de la escuela (?e=) para que el mural público lea sus avisos.
-const esp = dbBase().replace(/^usuarios\//, '');
-return base + (nivel === 'secundaria' ? 'mural-secundaria.html' : 'mural-primaria.html') + '?e=' + encodeURIComponent(esp);
+return base + (nivel === 'secundaria' ? 'mural-secundaria.html' : 'mural-primaria.html');
 }
 function copiarLinkMural(nivel) {
 navigator.clipboard.writeText(linkMural(nivel)).then(() => showToast('Link del mural copiado ✅'));
