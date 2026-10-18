@@ -608,17 +608,24 @@ state.passwordsVisibles = {};
 }
 async function handleForgotPassword() {
 const email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
-if (!email) { state.authError = 'Escribe tu correo arriba primero.'; state.forgotPasswordMsg = ''; render(); return; }
+const _volver = () => { render(); const el = document.getElementById('loginEmail'); if (el) { el.value = email; updateLoginInitial(); } window.scrollTo(0, 0); };
+if (!email) { state.authError = 'Escribe tu usuario o correo en el primer campo y vuelve a tocar "¿Olvidaste tu contraseña?".'; state.forgotPasswordMsg = ''; _volver(); return; }
+if (email.endsWith(REQUIRED_EMAIL_DOMAIN)) {
+state.authError = '';
+state.forgotPasswordMsg = 'ℹ️ Las cuentas ' + REQUIRED_EMAIL_DOMAIN + ' no reciben correos. Pídele a tu administrador que te genere una contraseña nueva.';
+_volver(); return;
+}
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { state.authError = 'Escribe un correo válido.'; state.forgotPasswordMsg = ''; _volver(); return; }
+state.authError = ''; state.forgotPasswordMsg = '⏳ Enviando...'; _volver();
 try {
 await auth.sendPasswordResetEmail(email);
 state.authError = '';
-state.forgotPasswordMsg = '✅ Si esa cuenta tiene un correo real registrado, te llegará un link para restablecer tu contraseña.';
-render();
+state.forgotPasswordMsg = '✅ Si ' + email + ' es una cuenta del sistema, te enviamos un link para restablecer tu contraseña. Revisa también la carpeta de spam.';
 } catch (e) {
 state.forgotPasswordMsg = '';
-state.authError = 'No se pudo enviar el correo de recuperación.';
-render();
+state.authError = 'No se pudo enviar el correo de recuperación (' + ((e && e.code) || 'error') + ').';
 }
+_volver();
 }
 async function handleLoginSubmit() {
 state.authError = '';
