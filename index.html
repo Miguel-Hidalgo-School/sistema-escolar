@@ -137,8 +137,25 @@ const PERIODOS_LABEL = ['1er','2do','3er'];
 const PERIODOS_FECHAS = ['Septiembre - Noviembre','Noviembre - Marzo','Marzo - Junio'];
 const CALIF_FINAL_MINIMA_SEC = 18;
 const DB_ROOT = 'Sistema Escolar'; // coincide con tus reglas de Realtime Database
-const IA_WORKER_URL = 'https://sistema-escolar-ia.beltrannpipee.workers.dev'; // sugerencias de texto con IA (Evaluación Formativa)
+const IA_WORKER_URL = 'https://sistema-escolar-ia.chavarria.workers.dev'; // sugerencias de texto con IA (Evaluación Formativa)
 const REQUIRED_EMAIL_DOMAIN = '@chavarria.edu.com'; // todas las cuentas de acceso deben usar este dominio
+
+// ---- Servidor propio (Cloudflare Worker) ----
+// Vacío = la app funciona como hasta ahora (sin servidor). Cuando el servidor esté
+// listo, pega aquí su dirección, por ejemplo: 'https://servidor.chavarria.workers.dev'
+const SERVER_URL = '';
+async function llamarServidor(ruta, datos) {
+  if (!SERVER_URL) throw new Error('El servidor no está configurado.');
+  const tok = await auth.currentUser.getIdToken(true);
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 25000);
+  try {
+    const r = await fetch(SERVER_URL.replace(/\/+$/, '') + '/' + ruta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok }, body: JSON.stringify(datos || {}), signal: ctrl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.mensaje || ('Error ' + r.status));
+    return j;
+  } catch (e) { throw new Error(e.name === 'AbortError' ? 'El servidor tardó demasiado en responder.' : (e instanceof TypeError ? 'No se pudo conectar con el servidor. Revisa tu internet o la dirección configurada.' : e.message)); }
+  finally { clearTimeout(to); }
+}
 // Únicas dos cuentas Súper Administrador del sistema (ninguna otra puede serlo).
 const ADMIN_EMAILS = ['educacion@chavarria.edu.com', 'jose.chavarria@jaliscoedu.mx'];
 
@@ -806,6 +823,25 @@ const puedeGestionarUsuarios = state.isAdmin && elGestionarUsuarios ? !!elGestio
 //    sin tocar el espacio del administrador ni el de ningún otro usuario independiente.
 const btn = document.getElementById('crearUsuarioBtn');
 if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
+if (SERVER_URL) {
+if (emailInput.includes('@') && !emailInput.toLowerCase().endsWith(REQUIRED_EMAIL_DOMAIN)) { showToast('❌ Escribe solo el usuario (sin @). Se completa con ' + REQUIRED_EMAIL_DOMAIN); if (btn) { btn.disabled = false; btn.textContent = '➕ Crear usuario'; } return; }
+try {
+const r = await llamarServidor('crearUsuario', { usuario: emailInput.toLowerCase(), nombre, telefono, correoContacto, accesoPrimaria, accesoSecundaria, accesoCheckin, accesoBitacora, puedeGestionarUsuarios });
+showToast('✅ Usuario creado: ' + r.email + '. Su contraseña temporal está en su tarjeta (👁️ Ver).');
+document.getElementById('newUserEmail').value = '';
+document.getElementById('newUserNombre').value = '';
+document.getElementById('newUserPhone').value = '';
+document.getElementById('newUserCorreoContacto').value = '';
+document.getElementById('newUserAccesoPrimaria').checked = false;
+document.getElementById('newUserAccesoSecundaria').checked = false;
+document.getElementById('newUserAccesoCheckin').checked = false;
+document.getElementById('newUserAccesoBitacora').checked = false;
+if (elGestionarUsuarios) elGestionarUsuarios.checked = false;
+cargarListaUsuarios();
+} catch (e) { showToast('❌ No se pudo crear: ' + e.message); }
+if (btn) { btn.disabled = false; btn.textContent = '➕ Crear usuario'; }
+return;
+}
 const tempPass = randomTempPassword();
 try {
 const secAuth = getSecondaryAuth();
@@ -903,13 +939,14 @@ return `
 <div>${grupos.map(g => chip('grupos', g, asign.grupos.includes(g))).join('')}</div>
 </div>`;
 }
-function toggleDeshabilitarUsuario(u) {
+async function toggleDeshabilitarUsuario(u) {
 const nuevoValor = !u.deshabilitado;
 const mensaje = nuevoValor
 ? `¿Deshabilitar a ${u.nombre || u.email}? No podrá iniciar sesión hasta que lo vuelvas a habilitar.`
 : `¿Habilitar de nuevo a ${u.nombre || u.email}?`;
 if (!confirm(mensaje)) return;
-db.ref('perfiles/' + u.uid).update({ deshabilitado: nuevoValor });
+if (SERVER_URL) { try { await llamarServidor('deshabilitarUsuario', { uid: u.uid, deshabilitar: nuevoValor }); } catch (e) { showToast('❌ ' + e.message); return; } }
+else { db.ref('perfiles/' + u.uid).update({ deshabilitado: nuevoValor }); }
 u.deshabilitado = nuevoValor;
 render();
 showToast(nuevoValor ? '🚫 Usuario deshabilitado' : '✅ Usuario habilitado');
@@ -943,7 +980,8 @@ await auth.currentUser.reauthenticateWithCredential(cred);
 // No es posible borrar la cuenta de acceso (Firebase Auth) de otra persona desde
 // el navegador; en su lugar la marcamos como eliminada para que ya no pueda
 // volver a entrar, y la quitamos de la lista visible.
-await db.ref('perfiles/' + u.uid).update({ eliminado: true, deshabilitado: true });
+if (SERVER_URL) { await llamarServidor('eliminarUsuario', { uid: u.uid }); }
+else { await db.ref('perfiles/' + u.uid).update({ eliminado: true, deshabilitado: true }); }
 showToast('🗑️ Usuario eliminado');
 state.deleteConfirmUid = null;
 state.deleteConfirmPassword = '';
@@ -953,6 +991,18 @@ state.deleteConfirmError = e.code === 'auth/wrong-password' ? 'Contraseña incor
 }
 state.deleteConfirmBusy = false;
 render();
+}
+async function restablecerPasswordUsuario(uid) {
+const u = state.adminUsersList && state.adminUsersList.find(x => x.uid === uid);
+if (!u) return;
+if (!confirm('¿Generar una contraseña temporal nueva para ' + (u.nombre || u.email) + '? La actual dejará de funcionar y se le pedirá cambiarla al entrar.')) return;
+try {
+const r = await llamarServidor('restablecerPassword', { uid });
+u.tempPasswordActual = r.passwordTemporal; u.mustChangePassword = true;
+state.passwordsVisibles[uid] = true;
+showToast('🔑 Contraseña nueva lista. Compártela con el botón de WhatsApp.');
+render();
+} catch (e) { showToast('❌ ' + e.message); }
 }
 function whatsappLinkParaUsuario(u) {
 const nombre = u.nombre ? ' ' + u.nombre : '';
@@ -1009,7 +1059,8 @@ await u.updatePassword(pass1);
 // así que para esas se sigue guardando — es la única manera práctica de que
 // el administrador las pueda ayudar si la olvidan.
 const tieneCorreoReal = u.email && !u.email.toLowerCase().endsWith(REQUIRED_EMAIL_DOMAIN);
-const nuevaTempPassword = tieneCorreoReal ? null : pass1;
+// Con servidor propio ya no hace falta guardar la contraseña: el administrador puede generar una nueva.
+const nuevaTempPassword = (tieneCorreoReal || SERVER_URL) ? null : pass1;
 await db.ref('perfiles/' + currentUid).update({ mustChangePassword: false, tempPasswordActual: nuevaTempPassword });
 state.perfilActual = { ...(state.perfilActual || {}), mustChangePassword: false, tempPasswordActual: nuevaTempPassword };
 state.forcePasswordChange = false;
@@ -2037,6 +2088,7 @@ ${u.correoContacto ? `<p style="font-size:0.78em;color:#6b7280;">📧 Contacto r
 <p style="font-size:0.82em;margin-top:4px;">Contraseña actual: <b>${u.tempPasswordActual ? (state.passwordsVisibles[u.uid] ? esc2(u.tempPasswordActual) : '••••••••') : '—'}</b> ${u.tempPasswordActual ? `<button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="togglePasswordVisible('${u.uid}')">${state.passwordsVisibles[u.uid] ? '🙈 Ocultar' : '👁️ Ver'}</button> ${state.passwordsVisibles[u.uid] ? `<button class="btn btn-ghost btn-sm" style="width:auto;padding:2px 8px;font-size:0.85em;" onclick="copiarPassword('${esc2(u.tempPasswordActual)}')">Copiar</button>` : ''}` : ''}</p>
 <p style="font-size:0.78em;color:${u.mustChangePassword ? '#b45309' : '#059669'};margin-top:2px;">${u.mustChangePassword ? '⏳ Pendiente de cambiar su contraseña' : '✅ Ya cambió su contraseña'}</p>
 <a href="${whatsappLinkParaUsuario(u)}" target="_blank" class="btn btn-sage btn-sm" style="margin-top:8px;text-decoration:none;display:inline-block;">📲 Enviar por WhatsApp</a>
+${SERVER_URL && puedeEditarPermisos ? `<button class="btn btn-ghost btn-sm" style="width:auto;display:inline-block;margin-top:8px;margin-left:6px;" onclick="restablecerPasswordUsuario('${u.uid}')">🔑 Nueva contraseña</button>` : ''}
 ${puedeEditarPermisos ? `
 <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb;">
 <p style="font-size:0.78em;font-weight:600;color:#374151;margin-bottom:6px;">Acceso:</p>
