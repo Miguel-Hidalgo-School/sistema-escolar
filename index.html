@@ -1182,7 +1182,10 @@ if (previas.length) {
 contexto += ` Observaciones YA GUARDADAS en periodos anteriores para este campo formativo (no repitas sus frases ni ideas; da seguimiento al avance del alumno y menciona qué sigue): ${previas.join(' || ')}.`;
 }
 contexto += ' Redacta 1 a 2 oraciones en tercera persona, tono positivo y profesional, específicas de este periodo.';
+const ctrl = new AbortController();
+const timer = setTimeout(() => ctrl.abort(), 45000);
 const res = await fetch(IA_WORKER_URL, {
+signal: ctrl.signal,
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify({
@@ -1196,15 +1199,22 @@ comentarioAnterior: obs[periodo] || undefined,
 contexto
 })
 });
-const data = await res.json();
-if (!res.ok || !data.texto) { if (!silencioso) showToast('No se pudo generar la observación'); }
+clearTimeout(timer);
+const data = await res.json().catch(() => ({}));
+const texto = String(data.texto || data.text || data.respuesta || data.result || '').trim();
+if (!res.ok || !texto) {
+console.error('IA observación primaria:', res.status, data);
+const motivo = (data && (data.error || data.message)) ? (typeof (data.error || data.message) === 'string' ? (data.error || data.message) : JSON.stringify(data.error || data.message)) : (res.ok ? 'el servicio respondió sin texto' : 'error ' + res.status);
+if (!silencioso) showToast('No se pudo generar: ' + String(motivo).slice(0, 120));
+}
 else {
-updateObservacionLive(studentId, materia, periodo, data.texto);
+updateObservacionLive(studentId, materia, periodo, texto);
 commitObs(studentId);
 ok = true;
 }
 } catch (e) {
-if (!silencioso) showToast('No se pudo contactar al servicio de IA (revisa tu conexión)');
+console.error('IA observación primaria:', e);
+if (!silencioso) showToast(e && e.name === 'AbortError' ? 'El servicio de IA tardó demasiado (más de 45 s)' : 'No se pudo contactar al servicio de IA (revisa tu conexión)');
 } finally {
 state.iaCargando[key] = false;
 if (!silencioso) render();
