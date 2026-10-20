@@ -1264,7 +1264,7 @@ if (!pendientes.length) { showToast('No hay nada pendiente: faltan calificacione
 const TAM = 5;
 const lotes = [];
 for (let i = 0; i < pendientes.length; i += TAM) lotes.push(pendientes.slice(i, i + TAM));
-let hechos = 0, fallidos = 0, cuota = false;
+let hechos = 0, fallidos = 0, cuota = false, ultimoError = '';
 for (let i = 0; i < lotes.length; i++) {
 state.iaProgresoGrupo = `Lote ${i + 1} de ${lotes.length}`;
 render();
@@ -1282,6 +1282,7 @@ const data = await res.json().catch(() => ({}));
 if (res.status === 429) { cuota = true; break; }
 if (!res.ok || !Array.isArray(data.resultados)) {
 console.error('IA lote primaria:', res.status, data);
+ultimoError = (data.error || ('HTTP ' + res.status)) + (data.detalle ? ' — ' + String(data.detalle).slice(0, 150) : '') + (data.raw ? ' — respuesta: ' + String(data.raw).slice(0, 100) : '');
 fallidos += lotes[i].length;
 continue;
 }
@@ -1297,13 +1298,14 @@ if (guardo) commitObs(al.id);
 });
 } catch (e) {
 console.error('IA lote primaria:', e);
+ultimoError = (e && e.name === 'AbortError') ? 'el servicio tardó demasiado' : String((e && e.message) || e);
 fallidos += lotes[i].length;
 }
 }
 state.iaProgresoGrupo = null;
 render();
 if (cuota) showToast(`⚠️ Se agotó la cuota de Gemini. Se generaron ${hechos} observaciones; el resto puedes hacerlo cuando se reinicie la cuota`);
-else if (fallidos) showToast(`Se generaron ${hechos} observaciones; ${fallidos} alumno(s) no se pudieron procesar, vuelve a intentarlo`);
+else if (fallidos) { showToast(`Se generaron ${hechos} observaciones; ${fallidos} alumno(s) no se pudieron procesar. Motivo: ${String(ultimoError).slice(0, 220)}`); alert(`No se pudieron procesar ${fallidos} alumno(s).\n\nMotivo: ${ultimoError}`); }
 else showToast(`✨ ${hechos} observaciones generadas y guardadas`);
 }
 function setObsPeriodo(studentId, pi) { state.obsPeriodo[studentId] = pi; render(); }
