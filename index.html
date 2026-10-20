@@ -1153,6 +1153,81 @@ studentsRef.child(studentId).update({ observaciones: pendingObs[studentId] });
 delete pendingObs[studentId];
 }
 }
+function nivelPorCalif(v) {
+if (typeof v !== 'number') return 'amarillo';
+return v >= 8 ? 'verde' : (v >= 6 ? 'amarillo' : 'rojo');
+}
+// Genera con IA la observación de un campo formativo para un periodo.
+// Toma en cuenta lo ya guardado en periodos anteriores para no repetirlo.
+async function sugerirObservacionPrimaria(studentId, materia, periodo, silencioso) {
+const s = state.students.find(x => x.id === studentId);
+if (!s) return false;
+const key = 'obs-' + studentId + '-' + materia + '-' + periodo;
+state.iaCargando = state.iaCargando || {};
+state.iaCargando[key] = true;
+if (!silencioso) render();
+let ok = false;
+try {
+const obs = (s.observaciones && s.observaciones[materia]) || [];
+const calif = (s.grades && s.grades[materia]) || [];
+const etiquetas = ['1er', '2do', '3er'];
+const previas = [];
+for (let i = 0; i < periodo; i++) {
+if (obs[i]) previas.push(`Periodo ${etiquetas[i]}${typeof calif[i] === 'number' ? ' (calificación ' + calif[i] + ')' : ''}: ${obs[i]}`);
+}
+const actual = calif[periodo];
+let contexto = `Observación para la boleta de PRIMARIA, campo formativo "${materia}", ${etiquetas[periodo]} periodo.`;
+if (typeof actual === 'number') contexto += ` Calificación de este periodo: ${actual}.`;
+if (previas.length) {
+contexto += ` Observaciones YA GUARDADAS en periodos anteriores para este campo formativo (no repitas sus frases ni ideas; da seguimiento al avance del alumno y menciona qué sigue): ${previas.join(' || ')}.`;
+}
+contexto += ' Redacta 1 a 2 oraciones en tercera persona, tono positivo y profesional, específicas de este periodo.';
+const res = await fetch(IA_WORKER_URL, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+task: 'formativo_sugerencia',
+campo: materia,
+nivel: nivelPorCalif(actual),
+alumno: s.name,
+grado: `${s.grade || ''} ${s.grupo || ''}`.trim(),
+comentariosExistentes: previas.length ? previas.join(' | ') : undefined,
+comentarioAnterior: obs[periodo] || undefined,
+contexto
+})
+});
+const data = await res.json();
+if (!res.ok || !data.texto) { if (!silencioso) showToast('No se pudo generar la observación'); }
+else {
+updateObservacionLive(studentId, materia, periodo, data.texto);
+commitObs(studentId);
+ok = true;
+}
+} catch (e) {
+if (!silencioso) showToast('No se pudo contactar al servicio de IA (revisa tu conexión)');
+} finally {
+state.iaCargando[key] = false;
+if (!silencioso) render();
+}
+return ok;
+}
+// Genera los 4 campos formativos del periodo seleccionado, uno tras otro,
+// para que cada observación ya pueda considerar las anteriores.
+async function sugerirObservacionesPeriodo(studentId, periodo) {
+state.iaCargando = state.iaCargando || {};
+const keyAll = 'obs-all-' + studentId;
+state.iaCargando[keyAll] = true;
+render();
+let fallos = 0;
+for (const m of MATERIAS) {
+const ok = await sugerirObservacionPrimaria(studentId, m, periodo, true);
+if (!ok) fallos++;
+render();
+}
+state.iaCargando[keyAll] = false;
+render();
+showToast(fallos ? `⚠️ ${fallos} observación(es) no se generaron` : '✨ Observaciones generadas y guardadas');
+}
 function setObsPeriodo(studentId, pi) { state.obsPeriodo[studentId] = pi; render(); }
 let pendingSchoolInfo = {};
 function updateSchoolFieldLocal(field, value) {
@@ -2357,12 +2432,16 @@ html += `</tbody></table>
 <p style="font-size:0.78em;font-weight:600;color:#6b7280;margin-bottom:8px;">📝 Observaciones y sugerencias</p>
 <div class="periodo-pills">
 ${PERIODOS_LABEL.map((lbl,pi) => `<button class="${obsP===pi?'active':''}" onclick="setObsPeriodo('${s.id}',${pi})">${lbl} periodo</button>`).join('')}
-</div>`;
+</div>
+<button style="border:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:8px 12px;font-size:0.75em;font-weight:700;width:100%;margin:4px 0 10px;cursor:pointer;" ${(state.iaCargando&&state.iaCargando['obs-all-'+s.id])?'disabled':''} onclick="sugerirObservacionesPeriodo('${s.id}',${obsP})">${(state.iaCargando&&state.iaCargando['obs-all-'+s.id])?'⏳ Generando observaciones...':'✨ Generar los 4 campos con IA ('+PERIODOS_LABEL[obsP]+' periodo)'}</button>`;
 MATERIAS.forEach(m => {
 const val = (s.observaciones && s.observaciones[m] && s.observaciones[m][obsP]) || '';
+const mq = m.replace(/'/g,"\\'");
+const cargando = state.iaCargando && state.iaCargando['obs-'+s.id+'-'+m+'-'+obsP];
 html += `<p class="obs-label">${m}</p>
-<textarea class="obs-input" rows="2" placeholder="Observación sobre el aprendizaje del alumno en este campo formativo..."
-oninput="updateObservacionLive('${s.id}','${m.replace(/'/g,"\\'")}',${obsP},this.value)" onchange="commitObs('${s.id}')">${val}</textarea>`;
+<textarea class="obs-input" rows="3" placeholder="Observación sobre el aprendizaje del alumno en este campo formativo..."
+oninput="updateObservacionLive('${s.id}','${mq}',${obsP},this.value)" onchange="commitObs('${s.id}')">${val}</textarea>
+<button style="border:none;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:5px 10px;font-size:0.72em;font-weight:600;margin:-4px 0 10px;cursor:pointer;" ${cargando?'disabled':''} onclick="sugerirObservacionPrimaria('${s.id}','${mq}',${obsP})">${cargando?'⏳ Generando...':(val?'✨ Volver a generar con IA':'✨ Sugerir con IA')}</button>`;
 });
 html += `</div></div>`;
 });
