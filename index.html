@@ -1214,7 +1214,7 @@ ok = true;
 }
 } catch (e) {
 console.error('IA observación primaria:', e);
-if (!silencioso) showToast(e && e.name === 'AbortError' ? 'El servicio de IA tardó demasiado (más de 45 s)' : 'No se pudo contactar al servicio de IA (revisa tu conexión)');
+if (!silencioso) showToast(e && e.name === 'AbortError' ? 'El servicio de IA tardó demasiado (más de 45 s)' : 'No se pudo contactar al servicio de IA: ' + String((e && e.message) || e).slice(0, 100));
 } finally {
 state.iaCargando[key] = false;
 if (!silencioso) render();
