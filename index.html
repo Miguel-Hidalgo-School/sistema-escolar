@@ -118,22 +118,27 @@ header.topbar, nav.tabs, .no-print { display: none !important; }
 main { max-width: 100%; padding: 0; }
 body { background: #fff; }
 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-/* Cuadro de Honor: una hoja carta completa, 2 columnas x 3 filas (un grado por recuadro) */
-#honorSheet { page: honor; display: flex; flex-direction: column; height: 246mm; }
-#honorSheet .honor-head { flex: 0 0 auto; margin-bottom: 4mm !important; }
-#honorSheet .honor-head .h-escuela { font-size: 13pt !important; }
-#honorSheet .honor-head .h-titulo { font-size: 26pt !important; line-height: 1.1; }
-#honorSheet .honor-head .h-sub { font-size: 11pt !important; }
-#honorPage { flex: 1 1 auto; display: grid !important; grid-template-columns: 1fr 1fr !important; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 5mm !important; min-height: 0; }
-#honorPage .honor-grade-box { break-inside: avoid; padding: 4mm !important; display: flex; flex-direction: column; justify-content: center; border-width: 0.6mm !important; border-radius: 5mm; box-shadow: none !important; overflow: hidden; min-height: 0; }
-#honorPage .honor-grade-title { font-size: 15pt !important; margin-bottom: 4mm !important; }
-#honorPage .honor-medals-row { flex-wrap: nowrap !important; gap: 3mm !important; align-items: stretch; }
-#honorPage .honor-medal-card { min-width: 0 !important; max-width: none !important; flex: 1 1 0 !important; padding: 3mm 1.5mm !important; border-radius: 4mm; }
-#honorPage .honor-medal-emoji { font-size: 16pt !important; }
-#honorPage .honor-photo { width: 20mm !important; height: 20mm !important; border-width: 1mm !important; margin: 2mm auto 2mm !important; font-size: 20pt !important; }
-#honorPage .honor-name { font-size: 8pt !important; line-height: 1.2; }
-#honorPage .honor-avg { font-size: 12pt !important; font-weight: 700; margin-top: 1mm !important; }
-#honorPage .honor-empty { font-size: 11pt !important; }
+/* Cuadro de Honor: una hoja carta, un grado por renglón; los grados sin alumnos ocupan un renglón corto */
+#honorSheet { page: honor; height: 246mm; overflow: hidden; }
+#honorSheet .honor-head { height: 26mm; margin: 0 0 3mm 0 !important; overflow: hidden; }
+#honorSheet .honor-head p { margin: 0 !important; }
+#honorSheet .honor-head .h-escuela { font-size: 12pt !important; }
+#honorSheet .honor-head .h-emojis { font-size: 14pt !important; }
+#honorSheet .honor-head .h-titulo { font-size: 24pt !important; line-height: 1.1; }
+#honorSheet .honor-head .h-sub { font-size: 10pt !important; }
+#honorPage { display: block !important; }
+#honorPage .honor-grade-box { display: flex !important; flex-direction: row; align-items: center; gap: 3mm; height: var(--h, 30mm); margin-bottom: 3mm; padding: 2mm 3mm !important; box-sizing: border-box; break-inside: avoid; border-width: 0.5mm !important; border-radius: 4mm; box-shadow: none !important; overflow: hidden; }
+#honorPage .honor-grade-box:last-child { margin-bottom: 0; }
+#honorPage .honor-grade-title { flex: 0 0 24mm; font-size: 12pt !important; margin: 0 !important; text-align: center; line-height: 1.2; }
+#honorPage .honor-medals-row { flex: 1 1 0; display: flex !important; flex-wrap: nowrap !important; gap: 3mm !important; justify-content: center !important; align-items: center; min-width: 0; }
+#honorPage .honor-medal-card { flex: 0 1 calc((100% - 6mm) / 3) !important; min-width: 0 !important; max-width: none !important; display: grid !important; grid-template-columns: 24mm 1fr; grid-template-rows: auto 1fr auto; grid-template-areas: "photo medal" "photo name" "photo avg"; column-gap: 2mm; align-items: center; text-align: left !important; padding: 2mm !important; border-radius: 3mm; box-sizing: border-box; }
+#honorPage .honor-photo { grid-area: photo; width: 24mm !important; height: 24mm !important; border-width: 0.8mm !important; margin: 0 !important; font-size: 16pt !important; }
+#honorPage .honor-medal-emoji { grid-area: medal; font-size: 13pt !important; line-height: 1; margin: 0 !important; }
+#honorPage .honor-name { grid-area: name; font-size: 9pt !important; line-height: 1.15; margin: 0 !important; }
+#honorPage .honor-avg { grid-area: avg; font-size: 12pt !important; font-weight: 700; margin: 0 !important; }
+#honorPage .honor-grade-box.honor-vacio { justify-content: flex-start; }
+#honorPage .honor-grade-box.honor-vacio .honor-medals-row { justify-content: flex-start !important; }
+#honorPage .honor-empty { font-size: 10pt !important; padding: 0 !important; text-align: left !important; }
 }
 @page honor { size: letter portrait; margin: 10mm; }
 </style>
@@ -3010,7 +3015,7 @@ const GRADO_NOMBRE = { '1°':'Primer Grado', '2°':'Segundo Grado', '3°':'Terce
 const _esc = (state.schoolInfo && state.schoolInfo.nombre) || '';
 let html = `<div id="honorSheet"><div class="honor-head" style="text-align:center;margin-bottom:10px;">
 ${_esc ? `<p class="h-escuela" style="font-weight:700;font-size:0.8em;color:#4b5563;letter-spacing:0.04em;">${_esc}</p>` : ''}
-<p style="font-size:1.6em;">🌟🏆🌟</p>
+<p class="h-emojis" style="font-size:1.6em;">🌟🏆🌟</p>
 <p class="h-titulo" style="font-weight:800;font-size:1.2em;background:linear-gradient(90deg,#f59e0b,#ec4899,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;">Cuadro de Honor</p>
 <p class="h-sub" style="font-size:0.78em;color:#6b7280;">¡Los mejores promedios de la escuela! 🎉 · ${PERIODOS_LABEL[state.honorPeriodo]} periodo · Ciclo ${getCicloEscolar()}</p>
 </div>`;
@@ -3020,15 +3025,21 @@ const medalStyles = [
 { bg: 'linear-gradient(135deg,#e5e7eb,#9ca3af)', medal: '🥈', ring: '#9ca3af' },
 { bg: 'linear-gradient(135deg,#fdba74,#c2410c)', medal: '🥉', ring: '#c2410c' }
 ];
-html += `<div id="honorPage" class="honor-grid">`;
-GRADOS.forEach(g => {
-const ranked = state.students
+const porGrado = GRADOS.map(g => ({ g, ranked: state.students
 .filter(s => s.grade === g)
 .map(s => ({ s, avg: studentPeriodoAvg(s, state.honorPeriodo) }))
 .filter(x => x.avg !== null)
 .sort((a,b) => b.avg - a.avg)
-.slice(0,3);
-html += `<div class="honor-grade-box">
+.slice(0,3) }));
+// Alturas para imprimir en una sola hoja carta: los grados sin alumnos ocupan un renglón
+// corto (12 mm) y el espacio que sobra se reparte entre los grados con alumnos.
+const nVacios = porGrado.filter(x => !x.ranked.length).length, nLlenos = porGrado.length - nVacios;
+const hVacio = 12;
+const hLleno = nLlenos ? Math.min(46, (202 - hVacio * nVacios) / nLlenos) : 30;
+html += `<div id="honorPage" class="honor-grid">`;
+porGrado.forEach(({ g, ranked }) => {
+const h = ranked.length ? hLleno : hVacio;
+html += `<div class="honor-grade-box${ranked.length ? '' : ' honor-vacio'}" style="--h:${h.toFixed(1)}mm;">
 <p class="honor-grade-title">🎈 ${GRADO_NOMBRE[g]} 🎈</p>
 <div class="honor-medals-row">`;
 if (!ranked.length) {
