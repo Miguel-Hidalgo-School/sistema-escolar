@@ -1820,7 +1820,7 @@ const snapshot = {
 nivel: 'primaria',
 name: s.name || '', grade: s.grade || '', grupo: s.grupo || '', curp: s.curp || '',
 matricula: s.matricula || '', turno: s.turno || '', folio: s.folio || '',
-asistencias: s.asistencias || '', lenguaIndigena: s.lenguaIndigena || '', sexo: s.sexo || '',
+asistencias: (() => { const h = diasHabilesCicloCompleto('primaria', s.grade, s.grupo); return h ? String(diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo)) : (s.asistencias || ''); })(), lenguaIndigena: s.lenguaIndigena || '', sexo: s.sexo || '',
 fechaNacimiento: s.fechaNacimiento || '',
 grades: s.grades || {}, observaciones: s.observaciones || {},
 schoolInfo: state.schoolInfo,
