@@ -13092,10 +13092,6 @@ function saveJSON(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }
   catch(e){ showToast('No hay espacio suficiente para guardar (fotos muy pesadas). Prueba con una foto más ligera.', 'err'); return false; }
   if(ckSyncReady && key === STUDENTS_KEY){
-    if(!ckConnected){
-      showToast('Sin conexión: este cambio de alumnos NO se guardó en el sistema. Hazlo cuando tengas Internet.', 'err');
-      return true;
-    }
     if (ckModoSoloCheckin) {
       // Cuenta SOLO CheckIn Kids: su lista es propia, no se reparte entre
       // Primaria/Secundaria.
@@ -13115,9 +13111,9 @@ function saveJSON(key, val){
       if (ckSecStudentsRef) ckSecStudentsRef.set(sec).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
     }
   } else if(ckSyncReady && key === ATTEND_KEY){
-    // Antes se reescribía TODO el historial en cada escaneo. Ahora solo se anota lo que cambió
-    // (cola local) y se manda registro por registro; funciona sin Internet.
-    ckQueueDiff(val);
+    const obj = {};
+    val.forEach(a => { const { id, ...rest } = a; obj[id] = rest; });
+    ckAttendanceRef.set(obj).catch(()=>{ showToast('No se pudo sincronizar la asistencia', 'err'); });
   }
   return true;
 }
@@ -13422,11 +13418,9 @@ function ckMergeStudents(){
 
 function ckStartSync(){
   ckSyncReady = true;
-  ckInitOffline();
   if (ckModoSoloCheckin) {
     if (ckCheckinStudentsRef) {
       ckCheckinStudentsRef.on('value', snap => {
-        ckGotServerStudents = true; ckPersistStudentsSoon();
         const val = snap.val() || {};
         ckCheckinOwnStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'checkin'));
         Object.keys(val).forEach(id => {
@@ -13442,7 +13436,6 @@ function ckStartSync(){
   } else {
     if (ckStudentsRef) {
       ckStudentsRef.on('value', snap => {
-        ckGotServerStudents = true; ckPersistStudentsSoon();
         const val = snap.val() || {};
         ckPriStudents = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'primaria'));
         // A los alumnos creados desde Sistema Escolar se les genera el
@@ -13464,7 +13457,6 @@ function ckStartSync(){
     }
     if (ckSecStudentsRef) {
       ckSecStudentsRef.on('value', snap => {
-        ckGotServerStudents = true; ckPersistStudentsSoon();
         const val = snap.val() || {};
         ckSecStudentsArr = Object.keys(val).map(id => ckFromFirebaseStudent(id, val[id], 'secundaria'));
         Object.keys(val).forEach(id => {
@@ -13482,233 +13474,10 @@ function ckStartSync(){
   }
   ckAttendanceRef.on('value', snap => {
     const val = snap.val() || {};
-    ckServerAtt = Object.keys(val).map(id => ({ id, ...val[id] }));
-    ckGotServerAtt = true;
-    ckPersistAttSoon();
-    ckRebuildAttendance();   // servidor + lo que aún está pendiente en este teléfono
+    attendance = Object.keys(val).map(id => ({ id, ...val[id] }));
     renderAll();
   });
   ckMergeStudents();
-}
-
-/* ====================================================================
-   MODO SIN INTERNET
-   - La lista de alumnos y la asistencia se guardan en el teléfono (IndexedDB)
-     para poder abrir y checar aunque no haya señal.
-   - Cada entrada/salida se anota en una COLA local (sobrevive si se cierra la página)
-     y se manda a Firebase registro por registro (nunca reescribe todo el historial).
-   - Al volver la conexión: ventana que pregunta si guardar (o guarda sola si se
-     activó "guardar automáticamente").
-   ==================================================================== */
-let ckBase = null;
-let ckConnected = false;            // se actualiza con .info/connected
-let ckQueue = [];                   // órdenes pendientes de mandar a Firebase
-let ckFlushing = false;
-let ckOfflineBacklog = false;       // hay pendientes de una desconexión: esperar confirmación
-let ckServerAtt = [];               // última copia de la asistencia recibida del servidor
-let ckGotServerStudents = false, ckGotServerAtt = false;
-let ckShadow = new Map();           // estado conocido (servidor + cola) para detectar cambios
-const CK_AUTO_KEY = 'ck_autoSync';
-
-function ckAutoOn(){ try{ return localStorage.getItem(CK_AUTO_KEY) === '1'; }catch(e){ return false; } }
-function ckTimeout(p, ms){
-  return new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error('timeout')), ms);
-    Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
-  });
-}
-
-/* --- IndexedDB (lista de alumnos con fotos puede pesar varios MB) --- */
-function ckIdb(){
-  return new Promise((res, rej) => {
-    const r = indexedDB.open('checkinKidsOffline', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('kv');
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
-}
-async function ckIdbSet(k, v){
-  try{
-    const db = await ckIdb();
-    await new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-  }catch(e){}
-}
-async function ckIdbGet(k){
-  try{
-    const db = await ckIdb();
-    return await new Promise((res, rej) => { const rq = db.transaction('kv').objectStore('kv').get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); });
-  }catch(e){ return undefined; }
-}
-let ckCacheT = null, ckCacheAttT = null;
-function ckPersistStudentsSoon(){
-  clearTimeout(ckCacheT);
-  ckCacheT = setTimeout(() => { if(ckBase) ckIdbSet('students_' + ckBase, { pri: ckPriStudents, sec: ckSecStudentsArr, own: ckCheckinOwnStudents, t: Date.now() }); }, 1500);
-}
-function ckPersistAttSoon(){
-  clearTimeout(ckCacheAttT);
-  ckCacheAttT = setTimeout(() => { if(ckBase) ckIdbSet('attServer_' + ckBase, ckServerAtt); }, 1500);
-}
-
-/* --- Cola de asistencia --- */
-function ckQKey(){ return 'ck_queue_' + ckBase; }
-function ckQueueLoad(){ try{ ckQueue = JSON.parse(localStorage.getItem(ckQKey()) || '[]') || []; }catch(e){ ckQueue = []; } }
-function ckQueuePersist(){
-  try{ localStorage.setItem(ckQKey(), JSON.stringify(ckQueue)); }
-  catch(e){ showToast('No hay espacio para guardar los registros pendientes en este teléfono', 'err'); }
-  ckRenderBadge();
-}
-function ckQueuePut(o){
-  ckQueue = ckQueue.filter(x => x.op === 'clear' || x.id !== o.id);
-  ckQueue.push(o);
-}
-function ckStrip(a){ const { id, ...rest } = a; return rest; }
-function ckShadowFrom(list){ ckShadow = new Map(list.map(a => [a.id, JSON.stringify(ckStrip(a))])); }
-function ckApplyQueue(list){
-  const m = new Map(list.map(a => [a.id, a]));
-  ckQueue.forEach(o => {
-    if(o.op === 'clear') m.clear();
-    else if(o.op === 'set') m.set(o.id, { id: o.id, ...o.data });
-    else if(o.op === 'update'){ if(m.has(o.id)) m.set(o.id, { ...m.get(o.id), ...o.patch }); }
-    else if(o.op === 'remove') m.delete(o.id);
-  });
-  return [...m.values()];
-}
-function ckRebuildAttendance(){ attendance = ckApplyQueue(ckServerAtt); ckShadowFrom(attendance); }
-
-// Lo llama saveJSON(ATTEND_KEY, ...): compara con el estado anterior y anota solo lo que cambió.
-function ckQueueDiff(val){
-  if(!val.length && ckShadow.size){ ckQueue = [{ op: 'clear' }]; ckShadow = new Map(); ckQueuePersist(); ckFlushSoon(); return; }
-  const next = new Map();
-  val.forEach(a => {
-    const s = JSON.stringify(ckStrip(a));
-    next.set(a.id, s);
-    if(ckShadow.get(a.id) !== s) ckQueuePut({ op: 'set', id: a.id, data: ckStrip(a) });
-  });
-  ckShadow.forEach((_, id) => { if(!next.has(id)) ckQueuePut({ op: 'remove', id }); });
-  ckShadow = next;
-  ckQueuePersist();
-  ckFlushSoon();
-}
-function ckFlushSoon(){
-  if(!ckConnected){ ckOfflineBacklog = true; ckRenderBadge(); return; }
-  if(ckOfflineBacklog){ ckRenderBadge(); return; }   // hay pendientes de una desconexión: esperar confirmación
-  setTimeout(() => { ckFlushQueue(); }, 50);
-}
-async function ckFlushQueue(){
-  if(ckFlushing || !ckQueue.length || !ckAttendanceRef) return true;
-  if(!ckConnected) return false;
-  ckFlushing = true; ckRenderBadge();
-  let ok = true;
-  try{
-    while(ckQueue.length){
-      const o = ckQueue[0];
-      let p;
-      if(o.op === 'set') p = ckAttendanceRef.child(o.id).set(o.data);
-      else if(o.op === 'update') p = ckAttendanceRef.child(o.id).update(o.patch);
-      else if(o.op === 'remove') p = ckAttendanceRef.child(o.id).remove();
-      else if(o.op === 'clear') p = ckAttendanceRef.remove();
-      else { ckQueue.shift(); continue; }
-      await ckTimeout(p, 20000);
-      ckQueue.shift();
-      ckQueuePersist();
-    }
-  }catch(e){ ok = false; }
-  ckFlushing = false;
-  if(ok) ckOfflineBacklog = false;
-  ckRenderBadge();
-  return ok;
-}
-
-/* --- Conexión, aviso y ventana de guardado --- */
-function ckPendientesResumen(){
-  const ids = new Set(ckQueue.filter(o => o.id).map(o => o.id));
-  let ent = 0, sal = 0; const dias = new Set();
-  attendance.forEach(a => { if(ids.has(a.id)){ if(a.checkin) ent++; if(a.checkout) sal++; if(a.date) dias.add(a.date); } });
-  const rem = ckQueue.filter(o => o.op === 'remove' || o.op === 'clear').length;
-  const fechas = [...dias].sort().map(fmtDate).join(', ');
-  let t = `Hay ${ckQueue.length} cambio(s) de asistencia guardados en este teléfono`;
-  if(ent || sal) t += ` (${ent} entradas y ${sal} salidas${fechas ? ' · ' + fechas : ''})`;
-  if(rem) t += `, y ${rem} eliminación(es)`;
-  return t + '.';
-}
-function ckShowSyncModal(){
-  if(!ckQueue.length) return;
-  document.getElementById('ckSyncText').textContent = ckPendientesResumen() + ' ¿Quieres guardarlos ahora en Sistema Escolar?';
-  document.getElementById('ckAutoChk').checked = ckAutoOn();
-  document.getElementById('ckSyncBtn').disabled = false;
-  document.getElementById('ckSyncModal').classList.add('show');
-}
-function ckSyncLater(){
-  try{ localStorage.setItem(CK_AUTO_KEY, document.getElementById('ckAutoChk').checked ? '1' : '0'); }catch(e){}
-  closeModal('ckSyncModal');
-}
-async function ckSyncNow(){
-  try{ localStorage.setItem(CK_AUTO_KEY, document.getElementById('ckAutoChk').checked ? '1' : '0'); }catch(e){}
-  const n = ckQueue.length;
-  const btn = document.getElementById('ckSyncBtn'); btn.disabled = true; btn.textContent = 'Guardando…';
-  ckOfflineBacklog = false;
-  const ok = await ckFlushQueue();
-  btn.textContent = 'Guardar ahora';
-  if(ok){ closeModal('ckSyncModal'); showToast('✅ Se guardaron ' + n + ' registro(s)', 'ok'); }
-  else { ckOfflineBacklog = true; btn.disabled = false; showToast('No se pudo guardar todo (¿conexión inestable?). Quedó pendiente; vuelve a intentar.', 'err'); }
-}
-function ckOnConnection(on){
-  ckConnected = on;
-  ckRenderBadge();
-  if(!on) return;
-  if(!ckQueue.length){ ckOfflineBacklog = false; return; }
-  if(ckAutoOn()){
-    const n = ckQueue.length; ckOfflineBacklog = false;
-    ckFlushQueue().then(ok => { if(ok) showToast('✅ Conexión recuperada: se guardaron ' + n + ' registro(s)', 'ok'); else ckOfflineBacklog = true; });
-  } else {
-    ckOfflineBacklog = true;
-    ckShowSyncModal();
-  }
-}
-function ckBadgeClick(){
-  if(ckQueue.length && ckConnected) ckShowSyncModal();
-  else if(!ckConnected) showToast('Sin conexión: lo que checas se guarda en este teléfono y se envía al reconectar.');
-}
-function ckRenderBadge(){
-  const b = document.getElementById('ckNetBadge');
-  if(!b) return;
-  const n = ckQueue.length;
-  let txt = '', cls = '';
-  if(ckFlushing){ txt = '🔄 Guardando…'; cls = 'warn'; }
-  else if(!ckConnected){ txt = '📴 Sin conexión' + (n ? ' · ' + n + ' pendientes' : ''); cls = 'off'; }
-  else if(n){ txt = '⏳ ' + n + ' pendientes · toca para guardar'; cls = 'warn'; }
-  b.style.display = txt ? 'block' : 'none';
-  b.textContent = txt;
-  b.className = cls;
-}
-function ckInitOffline(){
-  if(ckInitOffline._done) return; ckInitOffline._done = true;
-  // Estilos, aviso fijo y ventana (se crean aquí para no tocar el resto de la página)
-  const st = document.createElement('style');
-  st.textContent = '#ckNetBadge{position:fixed;left:10px;bottom:10px;z-index:9999;padding:8px 12px;border-radius:999px;font:600 13px Inter,system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer;display:none;color:#fff}#ckNetBadge.off{background:#b45309}#ckNetBadge.warn{background:#1d4ed8}';
-  document.head.appendChild(st);
-  const badge = document.createElement('div'); badge.id = 'ckNetBadge'; badge.onclick = ckBadgeClick; document.body.appendChild(badge);
-  const modal = document.createElement('div'); modal.className = 'modal-bg'; modal.id = 'ckSyncModal';
-  modal.innerHTML = '<div class="modal"><b style="font-family:\'Baloo 2\',sans-serif;font-size:16px;">📡 Hay registros por guardar</b>'
-    + '<p id="ckSyncText" style="font-size:14px;margin-top:8px;"></p>'
-    + '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:10px;"><input type="checkbox" id="ckAutoChk" style="margin-top:3px;"> <span>Guardar automáticamente cuando haya conexión (ya no preguntar)</span></label>'
-    + '<div class="modal-actions"><button class="btn btn-ghost btn-sm" onclick="ckSyncLater()">Más tarde</button>'
-    + '<button class="btn btn-primary btn-sm" id="ckSyncBtn" onclick="ckSyncNow()">Guardar ahora</button></div></div>';
-  document.body.appendChild(modal);
-  ckQueueLoad();
-  ckOfflineBacklog = ckQueue.length > 0;        // quedaron pendientes de una sesión anterior
-  ckRenderBadge();
-  window.addEventListener('offline', () => { ckConnected = false; ckRenderBadge(); });
-  window.addEventListener('online', () => { ckRenderBadge(); });
-  try{ ckDb.ref('.info/connected').on('value', s => ckOnConnection(!!s.val())); }catch(e){}
-  // Carga inmediata desde el teléfono (sin esperar a Internet); el servidor, cuando responda, tiene prioridad.
-  (async () => {
-    const st2 = await ckIdbGet('students_' + ckBase);
-    if(st2 && !ckGotServerStudents){ ckPriStudents = st2.pri || []; ckSecStudentsArr = st2.sec || []; ckCheckinOwnStudents = st2.own || []; ckMergeStudents(); }
-    const at2 = await ckIdbGet('attServer_' + ckBase);
-    if(at2 && !ckGotServerAtt){ ckServerAtt = at2; ckRebuildAttendance(); renderAll(); }
-    else if(!ckGotServerAtt){ ckRebuildAttendance(); renderAll(); }
-  })();
 }
 
 // Respaldo contra pantallas "congeladas" al volver de WhatsApp u otra app:
@@ -13734,26 +13503,17 @@ ckAuth.onAuthStateChanged(async user => {
     return;
   }
   let isAdmin = false;
-  // Sin Internet (o con señal tan mala que no responde): se usa lo que se guardó la última vez
-  // que esta cuenta abrió CheckIn Kids con conexión, para poder seguir checando.
-  const ctxCache = loadJSON('ck_ctx_' + user.uid, null);
-  let usoCache = false;
   try {
-    const rd = ckDb.ref('admins/' + user.uid).once('value');
-    const adminSnap = await (ctxCache ? ckTimeout(rd, navigator.onLine === false ? 0 : 3500) : rd);
+    const adminSnap = await ckDb.ref('admins/' + user.uid).once('value');
     isAdmin = adminSnap.val() === true;
-  } catch(e) { if (ctxCache && e && e.message === 'timeout') { usoCache = true; isAdmin = !!ctxCache.isAdmin; } /* si aún no hay reglas configuradas, se sigue como no-admin */ }
+  } catch(e) { /* si aún no hay reglas configuradas, se sigue como no-admin */ }
   if (isAdmin) {
     ckAccesoPrimaria = true;
     ckAccesoSecundaria = true;
   }
   let espacioUid = user.uid;
-  if (usoCache) {
-    ckAccesoPrimaria = ctxCache.pri !== false; ckAccesoSecundaria = ctxCache.sec !== false;
-    espacioUid = ctxCache.espacioUid || user.uid; ckAsignacion = ctxCache.asignacion || null;
-  } else try {
-    const rp = ckDb.ref('perfiles/' + user.uid).once('value');
-    const perfilSnap = await (ctxCache ? ckTimeout(rp, navigator.onLine === false ? 0 : 3500) : rp);
+  try {
+    const perfilSnap = await ckDb.ref('perfiles/' + user.uid).once('value');
     const perfil = perfilSnap.val();
     if (perfil && perfil.mustChangePassword) {
       // Debe cambiar su contraseña temporal primero: se manda a Sistema Escolar
@@ -13781,25 +13541,14 @@ ckAuth.onAuthStateChanged(async user => {
       espacioUid = perfil.espacioUid || user.uid;
       ckAsignacion = perfil.ckAsignacion || null;
     }
-  } catch(e) {
-    if (ctxCache && e && e.message === 'timeout') {
-      usoCache = true; isAdmin = !!ctxCache.isAdmin;
-      ckAccesoPrimaria = ctxCache.pri !== false; ckAccesoSecundaria = ctxCache.sec !== false;
-      espacioUid = ctxCache.espacioUid || user.uid; ckAsignacion = ctxCache.asignacion || null;
-    }
-    /* cuenta sin perfil = administrador original */
-  }
-  if (!usoCache) {
-    try { localStorage.setItem('ck_ctx_' + user.uid, JSON.stringify({ isAdmin, pri: ckAccesoPrimaria, sec: ckAccesoSecundaria, espacioUid, asignacion: ckAsignacion })); } catch(e) {}
-  }
+  } catch(e) { /* cuenta sin perfil = administrador original */ }
   // Cuenta SOLO CheckIn Kids: ni Primaria ni Secundaria. Usa su propia lista de
   // alumnos en vez de la compartida con Sistema Escolar.
   ckModoSoloCheckin = !isAdmin && !ckAccesoPrimaria && !ckAccesoSecundaria;
   ckAjustarNivelesAlAcceso();
   ckPopulateNivelSelect('inNivel', 'primaria');
   updateNivelOptions('in');
-  ckBase = ckDbBase(espacioUid);
-  ckBindRefs(ckBase);
+  ckBindRefs(ckDbBase(espacioUid));
   ckStartSync();
 });
 
