@@ -141,7 +141,55 @@ body { background: #fff; }
 #honorPage .honor-empty { font-size: 10pt !important; padding: 0 !important; text-align: left !important; }
 }
 @page honor { size: letter portrait; margin: 10mm; }
+.dip-wrap { container-type: inline-size; width: 100%; max-width: 760px; margin: 0 auto 14px; box-shadow: 0 6px 18px rgba(0,0,0,.18); background:#fff; }
+.dip-page { position: relative; width: 100%; aspect-ratio: 11 / 8.5; overflow: hidden; font-size: 1cqw; --u: 1cqw; font-family: 'Nunito', Arial, sans-serif; color: var(--c-txt); }
+#dipPrintAll { display: none; }
+.dip-page > * { position: absolute; margin: 0; }
+.dip-bgsvg, .dip-bgimg { left: 0; top: 0; width: 100%; height: 100%; object-fit: fill; }
+.dip-logo { left: calc(var(--u) * 4); top: calc(var(--u) * 3.5); width: calc(var(--u) * 11); height: calc(var(--u) * 11); display:flex; align-items:center; justify-content:center; font-size: 6em; }
+.dip-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.dip-head { left: calc(var(--u) * 17); right: calc(var(--u) * 26); top: calc(var(--u) * 4); text-align: center; font-weight: 800; font-size: 2.1em; line-height: 1.25; color: #111; }
+.dip-head .dip-enc { font-size: .75em; font-weight: 700; }
+.dip-medal { right: calc(var(--u) * 5); top: calc(var(--u) * 2.5); width: calc(var(--u) * 14); }
+.dip-medal-svg { width: 100%; display:block; }
+.dip-otorga { left: 0; right: 0; top: calc(var(--u) * 18); text-align: center; font-weight: 800; font-size: 2.1em; color:#111; }
+.dip-titulo { left: 0; right: 0; top: calc(var(--u) * 21.5); text-align: center; font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 900; font-size: 9em; line-height: 1; text-shadow: .04em .04em .06em rgba(0,0,0,.35); }
+.dip-t1 .dip-titulo, .dip-t2 .dip-titulo { font-family: Arial Black, 'Nunito', sans-serif; font-style: normal; font-weight: 900; font-size: 7.5em; letter-spacing: .08em; top: calc(var(--u) * 22.5); text-shadow: none; }
+.dip-nombre-row { left: calc(var(--u) * 6); right: calc(var(--u) * 6); top: calc(var(--u) * 37.5); text-align: center; white-space: nowrap; }
+.dip-alumno { font-weight: 800; font-size: 1.9em; margin-right: calc(var(--u) * .5); }
+.dip-nombre { font-family: 'Poppins', 'Nunito', Arial, sans-serif; font-weight: 700; font-size: 4.4em; color: var(--c-nom); }
+.dip-script .dip-nombre { font-family: 'Pinyon Script', 'Brush Script MT', cursive; font-weight: 400; font-size: 5.4em; }
+.dip-cuerpo { left: calc(var(--u) * 14); right: calc(var(--u) * 14); top: calc(var(--u) * 47); font-weight: 700; font-size: 1.95em; line-height: 1.3; text-align: justify; }
+.dip-cuerpo p { margin: 0 0 .25em; }
+.dip-t4 .dip-cuerpo, .dip-t5 .dip-cuerpo { left: calc(var(--u) * 16); right: calc(var(--u) * 14); }
+.dip-t3 .dip-cuerpo { left: calc(var(--u) * 14); }
+.dip-t4 .dip-nombre-row, .dip-t5 .dip-nombre-row { left: calc(var(--u) * 13); }
+.dip-t6 .dip-nombre-row { left: calc(var(--u) * 9); right: calc(var(--u) * 14); }
+.dip-t3 .dip-head, .dip-t6 .dip-head { right: calc(var(--u) * 30); }
+.dip-t1 .dip-cuerpo, .dip-t2 .dip-cuerpo { left: calc(var(--u) * 9); right: calc(var(--u) * 9); top: calc(var(--u) * 50); }
+.dip-firmas { left: calc(var(--u) * 8); right: calc(var(--u) * 8); top: calc(var(--u) * 65); display: flex; justify-content: space-around; gap: calc(var(--u) * 6); }
+.dip-firmas > div { flex: 1; text-align: center; font-size: 1.7em; display: flex; flex-direction: column; }
+.dip-firmas span { font-weight: 800; color: var(--c-fir); border-bottom: calc(var(--u) * .12) solid #3b82c4; min-height: calc(var(--u) * 1.4); padding-bottom: calc(var(--u) * .1); text-transform: uppercase; }
+.dip-firmas i { font-style: normal; font-weight: 800; font-size: .8em; color: #111; margin-top: calc(var(--u) * .4); }
+.dip-fecha { left: 0; right: 0; top: calc(var(--u) * 72); text-align: center; font-weight: 800; font-size: 1.8em; color:#111; }
+.dip-deco { left: calc(var(--u) * 4); bottom: calc(var(--u) * 2.5); font-size: 4.6em; line-height: 1; opacity: .9; }
+.dip-custom .dip-cuerpo { top: calc(var(--u) * 48); }
+@media print {
+  #dipPreview.no-print { display: none !important; }
+  #dipPrintAll { display: block !important; }
+  .dip-wrap { page: dip; container-type: normal; width: 279.4mm; max-width: none; height: 215mm; margin: 0; box-shadow: none; break-after: page; contain: layout paint size; overflow: hidden; }
+  .dip-wrap:last-child { break-after: auto; }
+  .dip-page { font-size: 2.794mm; --u: 2.794mm; height: 100%; aspect-ratio: auto; }
+}
+@page dip { size: letter landscape; margin: 0; }
+.dip-t1 .dip-head, .dip-t2 .dip-head { top: calc(var(--u) * 6.5); }
+.dip-t1 .dip-logo, .dip-t2 .dip-logo { top: calc(var(--u) * 6); left: calc(var(--u) * 6); }
+.dip-t1 .dip-firmas, .dip-t2 .dip-firmas { top: calc(var(--u) * 62); }
+.dip-t1 .dip-cuerpo, .dip-t2 .dip-cuerpo { top: calc(var(--u) * 46); }
+.dip-t1 .dip-fecha, .dip-t2 .dip-fecha { top: calc(var(--u) * 69); }
+.dip-t6 .dip-fecha { top: calc(var(--u) * 70.5); }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Pinyon+Script&family=Playfair+Display:ital,wght@1,900&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app"></div>
@@ -2656,32 +2704,209 @@ ${contactBoleta.tel ? `<button class="btn btn-green" style="flex:1;" onclick="en
 }
 return html;
 }
-function renderDiplomas() {
-let html = renderGradePills('purple', state.diplomaGrade, 'setDiplomaGrade');
-const candidates = state.students
-.filter(s => s.grade === state.diplomaGrade)
-.map(s => ({ ...s, avg: studentAverage(s) }))
-.filter(s => s.avg !== null)
-.sort((a,b) => b.avg - a.avg)
-.slice(0,3);
-if (!candidates.length) { html += `<p class="empty-note">Captura calificaciones en ${state.diplomaGrade} para generar diplomas.</p>`; return html; }
-const medals = ['🥇 1er Lugar','🥈 2do Lugar','🥉 3er Lugar'];
-const bgs = ['linear-gradient(135deg,#facc15,#ca8a04)','linear-gradient(135deg,#d1d5db,#6b7280)','linear-gradient(135deg,#fb923c,#c2410c)'];
-candidates.forEach((s, idx) => {
-html += `<div class="diploma-card" style="background:${bgs[idx]};">
-<p style="font-size:0.7em;text-transform:uppercase;letter-spacing:1px;opacity:0.9;">Diploma de Excelencia</p>
-<p style="font-size:1.6em;margin-top:8px;">${medals[idx]}</p>
-<div class="inner-box">
-<p style="font-size:0.7em;opacity:0.8;">Se otorga a</p>
-<p style="font-size:1.2em;font-weight:700;margin-top:4px;">${s.name}</p>
-<p style="font-size:0.7em;opacity:0.8;margin-top:4px;">${s.grade} · Promedio ${s.avg.toFixed(1)}</p>
-</div>
-<p style="font-size:0.7em;opacity:0.85;">Por su destacado desempeño académico</p>
-<button class="no-print" onclick="window.print()">🖨️ Imprimir diploma</button>
-</div>`;
-});
-return html;
+// ===== DIPLOMAS (diseño por grado + medalla por lugar) =====
+const DIP_TEMAS = {
+  '1°': { id:'t1', titulo:'#4d5a12', nombre:'#1d4ed8', texto:'#111827', firma:'#0f766e', kids:true, deco:'🎓📚' },
+  '2°': { id:'t2', titulo:'#4d5a12', nombre:'#b4443c', texto:'#111827', firma:'#0f766e', kids:true, deco:'🌹🎓' },
+  '3°': { id:'t3', titulo:'#a31621', nombre:'#b0413e', texto:'#1f2937', firma:'#0f766e', script:false },
+  '4°': { id:'t4', titulo:'#a31621', nombre:'#9b1c1c', texto:'#1e3a8a', firma:'#0f766e', script:true },
+  '5°': { id:'t5', titulo:'#a31621', nombre:'#9b1c1c', texto:'#1e3a8a', firma:'#0f766e', script:true },
+  '6°': { id:'t6', titulo:'#a31621', nombre:'#166534', texto:'#1e3a8a', firma:'#0f766e', script:true }
+};
+const DIP_LUGARES = ['PRIMER LUGAR','SEGUNDO LUGAR','TERCER LUGAR'];
+const DIP_MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function dipCfg() { return (state.schoolInfo && state.schoolInfo.diplomaCfg) || {}; }
+function dipSetCfg(mut) {
+  const cfg = JSON.parse(JSON.stringify(dipCfg()));
+  mut(cfg);
+  state.schoolInfo.diplomaCfg = cfg;
+  if (schoolRef) schoolRef.child('diplomaCfg').set(cfg);
+  render();
 }
+function dipSetField(k, v) { dipSetCfg(c => { c[k] = v; }); }
+function dipSetDocente(g, v) { dipSetCfg(c => { c.docentes = c.docentes || {}; c.docentes[g] = v; }); }
+function dipSetOv(g, i, k, v) { dipSetCfg(c => { c.ov = c.ov || {}; const key = g + '_' + i; c.ov[key] = c.ov[key] || {}; c.ov[key][k] = v; }); }
+function dipResetOv(g) { dipSetCfg(c => { if (c.ov) Object.keys(c.ov).forEach(k => { if (k.indexOf(g + '_') === 0) delete c.ov[k]; }); }); }
+function dipSetBgFull(g, v) { dipSetCfg(c => { c.bgFull = c.bgFull || {}; c.bgFull[g] = v ? 1 : 0; }); }
+function dipToggleAll(v) { state.dipAll = !!v; render(); }
+function dipTitleCase(s) {
+  return String(s || '').toLowerCase().replace(/(^|\s)([a-záéíóúüñ])/g, (m, a, b) => a + b.toUpperCase())
+    .replace(/\b(De|Del|La|Las|Los|Y)\b(?!$)/g, m => m.toLowerCase()).replace(/^([a-z])/, c => c.toUpperCase());
+}
+function dipNombre(full) {
+  const w = String(full || '').trim().split(/\s+/);
+  const ord = w.length >= 3 ? w.slice(2).concat(w.slice(0, 2)) : w;
+  return dipTitleCase(ord.join(' '));
+}
+function dipFechaTexto() {
+  const c = dipCfg();
+  if (c.fecha) return c.fecha;
+  const d = new Date();
+  return (c.lugar ? c.lugar + ' a ' : '') + String(d.getDate()).padStart(2, '0') + ' de ' + DIP_MESES[d.getMonth()] + ' de ' + d.getFullYear();
+}
+function dipData(g) {
+  const cfg = dipCfg();
+  const cands = state.students.filter(s => s.grade === g)
+    .map(s => ({ s, avg: studentAverage(s) })).filter(x => x.avg !== null)
+    .sort((a, b) => b.avg - a.avg).slice(0, 3);
+  const out = [];
+  for (let i = 0; i < 3; i++) {
+    const ov = (cfg.ov && cfg.ov[g + '_' + i]) || {};
+    const c = cands[i];
+    const name = ov.name ? ov.name : (c ? dipNombre(c.s.name) : '');
+    const prom = ov.prom ? ov.prom : (c ? c.avg.toFixed(1) : '');
+    const sexo = ov.sexo || (c ? (c.s.sexo === 'niña' ? 'f' : (c.s.sexo === 'niño' ? 'm' : '')) : '');
+    const grupo = ov.grupo !== undefined && ov.grupo !== '' ? ov.grupo : (c ? (c.s.grupo || '') : '');
+    out.push({ i, name, prom, sexo, grupo, extra: ov.extra || '', auto: !!c });
+  }
+  return out;
+}
+function dipMedalSvg(i) {
+  const P = [['#fff3b0','#d4a017','#7a5200'], ['#ffffff','#a3a9b3','#4b5563'], ['#ffd7b0','#c7733a','#6e3412']][i];
+  return `<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg" class="dip-medal-svg">
+<defs><radialGradient id="mg${i}" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="${P[0]}"/><stop offset=".55" stop-color="${P[1]}"/><stop offset="1" stop-color="${P[2]}"/></radialGradient></defs>
+<polygon points="26,62 52,62 46,126 34,113 18,118" fill="#c1121f"/><polygon points="74,62 48,62 54,126 66,113 82,118" fill="#9d0208"/>
+<circle cx="50" cy="46" r="43" fill="url(#mg${i})" stroke="${P[2]}" stroke-width="1.5"/>
+<circle cx="50" cy="46" r="33" fill="none" stroke="${P[0]}" stroke-width="2.5" stroke-dasharray="2 3"/>
+<text x="50" y="62" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="46" fill="${P[2]}" stroke="${P[0]}" stroke-width="1.2">${i + 1}</text>
+<text x="50" y="79" text-anchor="middle" font-size="12" fill="${P[2]}">★</text></svg>`;
+}
+function dipThemeSvg(t) {
+  const W = 'viewBox="0 0 1100 850" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" class="dip-bgsvg"';
+  const stripes = `<pattern id="st" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#fff"/><rect width="2" height="14" fill="#ececec"/></pattern>`;
+  switch (t.id) {
+    case 't1': return `<svg ${W}><rect width="1100" height="850" fill="#cfe3ff"/><rect x="14" y="14" width="1072" height="822" rx="36" fill="none" stroke="#60a5fa" stroke-width="10"/><rect x="48" y="48" width="1004" height="754" rx="26" fill="#fff" stroke="#93c5fd" stroke-width="6"/></svg>`;
+    case 't2': return `<svg ${W}><rect width="1100" height="850" fill="#f5a8d1"/><rect x="10" y="10" width="1080" height="830" fill="none" stroke="#e879b9" stroke-width="14"/><rect x="48" y="48" width="1004" height="754" fill="#fff" stroke="#111" stroke-width="5"/></svg>`;
+    case 't3': return `<svg ${W}><defs>${stripes}<linearGradient id="b3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b4f8a"/><stop offset="1" stop-color="#0a2f63"/></linearGradient></defs><rect width="1100" height="850" fill="url(#st)"/><polygon points="640,0 1100,0 1100,330" fill="url(#b3)"/><polygon points="640,0 700,0 1100,300 1100,330" fill="#d9b44a"/><polygon points="0,850 0,650 240,850" fill="url(#b3)"/><polygon points="0,620 0,650 240,850 205,850" fill="#d9b44a" opacity=".9"/></svg>`;
+    case 't4': return `<svg ${W}><defs><linearGradient id="r4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d7263d"/><stop offset="1" stop-color="#7a0b17"/></linearGradient></defs><rect width="1100" height="850" fill="#fff"/><rect x="26" y="26" width="1048" height="798" fill="none" stroke="#d4a64b" stroke-width="7"/><polygon points="0,260 90,470 40,850 0,850" fill="url(#r4)"/><polygon points="0,225 24,225 112,470 62,850 40,850 90,470 0,260" fill="#d9b44a"/><polygon points="820,0 1100,0 1100,400" fill="url(#r4)"/><polygon points="790,0 820,0 1100,400 1100,440" fill="#d9b44a"/></svg>`;
+    case 't5': return `<svg ${W}><defs><linearGradient id="r5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e11d48"/><stop offset="1" stop-color="#8b0a1f"/></linearGradient></defs><rect width="1100" height="850" fill="#fff"/><rect x="22" y="22" width="1056" height="806" fill="none" stroke="#d4a64b" stroke-width="8"/><polygon points="0,300 80,470 0,640" fill="url(#r5)"/><polygon points="0,270 14,270 110,470 14,670 0,670 40,470" fill="#d9b44a" opacity=".8"/><polygon points="880,22 1078,22 1078,260 1010,330" fill="url(#r5)"/><polygon points="1078,260 1078,830 960,830 1040,540" fill="#a31621" opacity=".95"/></svg>`;
+    default: return `<svg ${W}><defs><linearGradient id="r6" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a1020"/><stop offset="1" stop-color="#4a0710"/></linearGradient></defs><rect width="1100" height="850" fill="#3b3b3f"/><polygon points="40,40 860,40 1060,260 1060,810 40,810" fill="#fff"/><polygon points="740,0 1100,0 1100,850 900,850 1040,420" fill="url(#r6)"/><polygon points="702,0 740,0 1040,420 1010,420" fill="#d9b44a"/></svg>`;
+  }
+}
+function dipPage(g, d, bg) {
+  const t = DIP_TEMAS[g], cfg = dipCfg(), si = state.schoolInfo || {};
+  const full = bg && (cfg.bgFull ? cfg.bgFull[g] !== 0 : true);
+  const ciclo = getCicloEscolar();
+  const fem = d.sexo === 'f', masc = d.sexo === 'm';
+  const alumno = fem ? 'A la alumna:' : (masc ? 'Al alumno:' : 'Al alumno(a):');
+  const lo = fem ? 'La' : (masc ? 'Lo' : 'Lo(a)');
+  const docente = (cfg.docentes && cfg.docentes[g]) || '';
+  const cls = 'dip-page dip-' + t.id + (t.script ? ' dip-script' : '') + (bg ? ' dip-custom' : '');
+  const grp = d.grupo ? ` Grupo “${esc2(d.grupo)}”` : '';
+  const header = full ? '' : `
+<div class="dip-logo">${si.logoURL ? `<img src="${si.logoURL}">` : '🏫'}</div>
+<div class="dip-head">${cfg.enc ? `<div class="dip-enc">${esc2(cfg.enc)}</div>` : ''}<div>${esc2((si.nombre || 'NOMBRE DE LA ESCUELA').toUpperCase())}</div>${si.cct ? `<div>C.C.T. ${esc2(si.cct)}</div>` : ''}</div>
+<div class="dip-otorga">Otorga el Presente</div>
+<div class="dip-titulo" style="color:${t.titulo}">${t.kids ? 'DIPLOMA' : 'Diploma'}</div>`;
+  return `<div class="dip-wrap"><div class="${cls}" style="--c-tit:${t.titulo};--c-nom:${t.nombre};--c-txt:${t.texto};--c-fir:${t.firma}">
+${bg ? `<img class="dip-bgimg" src="${bg}">` : dipThemeSvg(t)}
+${bg ? '' : (t.kids ? `<div class="dip-deco">${t.deco}</div>` : '')}
+${bg ? '' : `<div class="dip-medal">${dipMedalSvg(d.i)}</div>`}
+${header}
+<div class="dip-nombre-row"><span class="dip-alumno">${alumno}</span><span class="dip-nombre">${esc2(d.name)}</span></div>
+<div class="dip-cuerpo"><p>Por haber obtenido el <b>${DIP_LUGARES[d.i]}</b> en aprovechamiento en ${g} Grado${grp} del Ciclo Escolar ${ciclo}.${d.prom ? ` Con un promedio general de ${esc2(d.prom)} de aprovechamiento.` : ''}${d.extra ? ' ' + esc2(d.extra) : ''}</p><p>${lo} exhortamos a que siga conservando su interés por el estudio y a ser mejor persona cada día.</p></div>
+<div class="dip-firmas"><div><span>${esc2(docente)}</span><i>DOCENTE DEL GRUPO</i></div><div><span>${esc2(si.autoridadNombre || '')}</span><i>${esc2((si.autoridadCargo || 'DIRECTOR(A)').toUpperCase())}</i></div></div>
+<div class="dip-fecha">${esc2(dipFechaTexto())}</div>
+</div></div>`;
+}
+function dipPagesHtml(grades) {
+  let h = '';
+  grades.forEach(g => {
+    const bg = state.diplomaBg && state.diplomaBg[g];
+    dipData(g).forEach(d => { if (d.name) h += dipPage(g, d, bg || ''); });
+  });
+  return h;
+}
+function dipEnsureBg(g) {
+  state.diplomaBg = state.diplomaBg || {};
+  state.diplomaBgLoading = state.diplomaBgLoading || {};
+  if (state.diplomaBg[g] !== undefined || state.diplomaBgLoading[g] || typeof dbBase !== 'function' || !db) return;
+  state.diplomaBgLoading[g] = true;
+  db.ref(dbBase() + '/diplomaBg/' + g.charAt(0)).once('value').then(s => {
+    state.diplomaBg[g] = s.val() || '';
+    render();
+  }).catch(() => { state.diplomaBg[g] = ''; });
+}
+function dipSubirFondo(ev, g) {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  showToast('Procesando fondo...');
+  const guardar = (url) => {
+    state.diplomaBg = state.diplomaBg || {};
+    state.diplomaBg[g] = url;
+    db.ref(dbBase() + '/diplomaBg/' + g.charAt(0)).set(url).then(() => showToast('Fondo guardado')).catch(() => showToast('No se pudo guardar el fondo'));
+    render();
+  };
+  const err = () => showToast('No se pudo leer el archivo. Prueba con una imagen JPG o PNG.');
+  if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+    const go = () => {
+      const rd = new FileReader();
+      rd.onload = () => {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.getDocument({ data: new Uint8Array(rd.result) }).promise.then(pdf => pdf.getPage(1)).then(pg => {
+          const v0 = pg.getViewport({ scale: 1 }), sc = 1800 / v0.width, v = pg.getViewport({ scale: sc });
+          const cv = document.createElement('canvas'); cv.width = v.width; cv.height = v.height;
+          return pg.render({ canvasContext: cv.getContext('2d'), viewport: v }).promise.then(() => guardar(cv.toDataURL('image/jpeg', 0.82)));
+        }).catch(err);
+      };
+      rd.readAsArrayBuffer(f);
+    };
+    if (window.pdfjsLib) go();
+    else { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; sc.onload = go; sc.onerror = err; document.head.appendChild(sc); }
+  } else resizeImageToBase64(f, 1800, 0.82, guardar, err);
+}
+function dipQuitarFondo(g) {
+  state.diplomaBg[g] = '';
+  db.ref(dbBase() + '/diplomaBg/' + g.charAt(0)).remove();
+  render();
+}
+function renderDiplomas() {
+  const g = state.diplomaGrade, cfg = dipCfg();
+  dipEnsureBg(g);
+  const data = dipData(g);
+  const bg = (state.diplomaBg && state.diplomaBg[g]) || '';
+  const inp = 'style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:0.85em;box-sizing:border-box;"';
+  const lbl = 'style="font-size:0.72em;color:#6b7280;display:block;margin:8px 0 2px;"';
+  let html = `<div class="no-print">${renderGradePills('purple', g, 'setDiplomaGrade')}</div>`;
+  const pages = dipPagesHtml([g]);
+  html += `<div id="dipPreview" class="${state.dipAll ? 'no-print' : ''}">${pages || `<p class="empty-note no-print">Captura calificaciones en ${g} o escribe los nombres abajo para generar diplomas.</p>`}</div>`;
+  if (state.dipAll) html += `<div id="dipPrintAll">${dipPagesHtml(GRADOS)}</div>`;
+  html += `<div class="card no-print" style="margin-top:12px;">
+<p style="font-weight:700;font-size:0.9em;">🏅 Alumnos de ${g} (editables)</p>
+<p style="font-size:0.72em;color:#6b7280;margin-top:2px;">Se llenan solos con los 3 mejores promedios actuales. Cambia lo que necesites.</p>`;
+  data.forEach(d => {
+    html += `<div style="border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:10px;">
+<p style="font-weight:700;font-size:0.8em;">${['🥇','🥈','🥉'][d.i]} ${DIP_LUGARES[d.i]}</p>
+<label ${lbl}>Nombre en el diploma</label><input ${inp} value="${esc2(d.name).replace(/"/g,'&quot;')}" onchange="dipSetOv('${g}',${d.i},'name',this.value.trim())">
+<div style="display:flex;gap:8px;"><div style="flex:1"><label ${lbl}>Promedio</label><input ${inp} value="${esc2(d.prom)}" onchange="dipSetOv('${g}',${d.i},'prom',this.value.trim())"></div>
+<div style="flex:1"><label ${lbl}>Grupo</label><input ${inp} value="${esc2(d.grupo)}" onchange="dipSetOv('${g}',${d.i},'grupo',this.value.trim())"></div>
+<div style="flex:1"><label ${lbl}>Género</label><select ${inp} onchange="dipSetOv('${g}',${d.i},'sexo',this.value)"><option value="" ${!d.sexo?'selected':''}>—</option><option value="f" ${d.sexo==='f'?'selected':''}>Alumna</option><option value="m" ${d.sexo==='m'?'selected':''}>Alumno</option></select></div></div>
+<label ${lbl}>Texto adicional (opcional)</label><input ${inp} value="${esc2(d.extra).replace(/"/g,'&quot;')}" onchange="dipSetOv('${g}',${d.i},'extra',this.value.trim())" placeholder="Ej. y un promedio de 9.5 en el nivel primaria.">
+</div>`;
+  });
+  html += `<button class="btn" style="margin-top:10px;background:#f3f4f6;color:#374151;width:100%;" onclick="dipResetOv('${g}')">↺ Volver a los nombres automáticos de ${g}</button></div>`;
+  html += `<div class="card no-print" style="margin-top:12px;">
+<p style="font-weight:700;font-size:0.9em;">⚙️ Datos del diploma</p>
+<label ${lbl}>Línea superior opcional (ej. Secretaría de Educación Pública Jalisco)</label><input ${inp} value="${esc2(cfg.enc || '').replace(/"/g,'&quot;')}" onchange="dipSetField('enc',this.value.trim())">
+<label ${lbl}>Lugar y fecha (vacío = fecha de hoy)</label><input ${inp} value="${esc2(cfg.fecha || '').replace(/"/g,'&quot;')}" placeholder="Santiago, Mpio. de Tecalitlán, Jal. a 09 de julio de 2026" onchange="dipSetField('fecha',this.value.trim())">
+<label ${lbl}>Docente del grupo (${g})</label><input ${inp} value="${esc2((cfg.docentes && cfg.docentes[g]) || '').replace(/"/g,'&quot;')}" onchange="dipSetDocente('${g}',this.value.trim())">
+<p style="font-size:0.7em;color:#6b7280;margin-top:6px;">El director(a) y el logo salen de los datos de la escuela.</p>
+</div>
+<div class="card no-print" style="margin-top:12px;">
+<p style="font-weight:700;font-size:0.9em;">🖼️ Mi propio diseño para ${g} (opcional)</p>
+<p style="font-size:0.72em;color:#6b7280;margin-top:2px;">Sube tu diploma vacío como imagen (JPG/PNG) o PDF, de 1 página, horizontal. El sistema escribe encima los datos.</p>
+<input type="file" accept="image/*,application/pdf" onchange="dipSubirFondo(event,'${g}')" style="margin-top:8px;font-size:0.8em;">
+${bg ? `<label style="display:flex;gap:6px;align-items:center;font-size:0.78em;margin-top:8px;"><input type="checkbox" ${cfg.bgFull && cfg.bgFull[g] === 0 ? '' : 'checked'} onchange="dipSetBgFull('${g}',this.checked)"> Mi diseño ya trae escuela, «Otorga el presente» y «Diploma»</label>
+<button class="btn" style="margin-top:8px;background:#fee2e2;color:#b91c1c;width:100%;" onclick="dipQuitarFondo('${g}')">Quitar mi diseño de ${g}</button>` : ''}
+</div>
+<div class="no-print" style="margin-top:12px;">
+<label style="display:flex;gap:6px;align-items:center;font-size:0.82em;margin-bottom:8px;"><input type="checkbox" ${state.dipAll ? 'checked' : ''} onchange="dipToggleAll(this.checked)"> Imprimir los 6 grados (18 diplomas)</label>
+<button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir diplomas (1 por hoja)</button>
+<p style="font-size:0.7em;color:#6b7280;margin-top:6px;text-align:center;">En la ventana de impresión elige Carta, Horizontal y activa «Gráficos de fondo».</p></div>`;
+  return html;
+}
+
 function renderSecInicio() {
 const si = state.secSchoolInfo;
 return `
