@@ -3660,6 +3660,11 @@ const si = nivel === 'primaria' ? state.schoolInfo : state.secSchoolInfo;
 const materiaActualPdf = nivel === 'primaria' ? state.tareaFilterMateria : secMateriaNombreActiva();
 const tareasGrupo = Object.entries(map).filter(([id,t]) => t.grade === state.tareaFilterGrade && (nivel==='primaria' ? t.materia === state.tareaFilterMateria : (t.grupo === state.tareaFilterGrupo && (!si.materia2 || t.materia === materiaActualPdf))) && (!PERIODO_NOMBRE[state.tareaFilterPeriodo] || tareaPeriodoId(t, nivel) === state.tareaFilterPeriodo)).sort((a,b)=>(a[1].fecha||'').localeCompare(b[1].fecha||''));
 const alumnos = list.filter(s => s.grade === state.tareaFilterGrade && (nivel==='primaria' || s.grupo === state.tareaFilterGrupo)).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+// Peso real de "Tareas" según la configuración de Sumativa de este nivel
+// (no un número fijo) — por defecto 70%, pero se lee de lo que el docente
+// haya configurado.
+const pesoTareasConfig = sumativaConfigArr(nivel).find(c => c.id === 'tareas');
+const pesoTareas = pesoTareasConfig ? Number(pesoTareasConfig.porcentaje) || 0 : 0;
 let html = `<div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;">
 <button class="btn btn-gray" style="flex:1;" onclick="state.tareaPrintMode=false;render();">← Volver</button>
 <button class="btn btn-dark" style="flex:2;" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
@@ -3676,20 +3681,31 @@ html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:
 <thead><tr style="background:#f3f4f6;">
 <th style="border:1px solid #d1d5db;padding:5px;text-align:left;min-width:110px;">Alumno</th>
 ${tareasGrupo.map(([id,t],i)=>`<th style="border:1px solid #d1d5db;padding:5px;min-width:26px;">T${i+1}</th>`).join('')}
-<th style="border:1px solid #d1d5db;padding:5px;background:#eff6ff;">Prom.</th>
+<th style="border:1px solid #d1d5db;padding:5px;background:#eff6ff;">Calif. de tareas</th>
+<th style="border:1px solid #d1d5db;padding:5px;background:#fef3c7;">Pond. tareas (${pesoTareas}%)</th>
 </tr></thead><tbody>`;
 alumnos.forEach(s => {
-const calif = [];
+// Regla de 3: el promedio se calcula sobre TODAS las tareas de la tabla
+// (tareasGrupo.length), no solo sobre las que sí tienen calificación
+// numérica. Una tarea sin entregar cuenta como 0 en la suma — así un
+// alumno que cumplió 1 de 9 tareas no puede salir con 10 de promedio.
+let suma = 0;
 html += `<tr><td style="border:1px solid #d1d5db;padding:5px;font-weight:600;">${esc2(s.name)}</td>`;
 tareasGrupo.forEach(([id,t]) => {
 const e = (t.entregas || {})[s.id] || {};
-if (typeof e.calificacion === 'number') calif.push(e.calificacion);
+suma += (typeof e.calificacion === 'number' ? e.calificacion : 0);
 const val = e.calificacion != null ? e.calificacion : (e.cumplio ? '✔' : (e.cumplio === false ? '✘' : '—'));
 const bg = e.cumplio ? '#f0fdf4' : (e.cumplio === false ? '#fef2f2' : '#fff');
 html += `<td style="border:1px solid #d1d5db;padding:5px;text-align:center;background:${bg};">${val}</td>`;
 });
-const prom = calif.length ? (calif.reduce((a,b)=>a+b,0)/calif.length).toFixed(1) : '—';
-html += `<td style="border:1px solid #d1d5db;padding:5px;text-align:center;font-weight:700;background:#eff6ff;">${prom}</td></tr>`;
+const promNum = tareasGrupo.length ? (suma / tareasGrupo.length) : null;
+const prom = promNum !== null ? promNum.toFixed(1) : '—';
+// "Pond. tareas" = lo que esa calificación de tareas aporta al 100% de la
+// Sumativa, según el peso configurado (ej. 70%): 9.8 de calificación con
+// un peso de 70% aporta 6.86 al total, no 9.8.
+const ponderado = promNum !== null ? (promNum * (pesoTareas / 100)).toFixed(2) : '—';
+html += `<td style="border:1px solid #d1d5db;padding:5px;text-align:center;font-weight:700;background:#eff6ff;">${prom}</td>`;
+html += `<td style="border:1px solid #d1d5db;padding:5px;text-align:center;font-weight:700;background:#fef3c7;">${ponderado}</td></tr>`;
 });
 html += `</tbody></table></div>
 <p style="font-size:0.7em;color:#9ca3af;margin-top:10px;">✔ = cumplió sin calificación numérica · ✘ = no cumplió · — = sin registro</p>
