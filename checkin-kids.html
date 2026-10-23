@@ -13512,7 +13512,7 @@ window.addEventListener('unhandledrejection', e => ckErr('Promesa: ' + ((e.reaso
     document.body.appendChild(d);
     setInterval(() => {
       try{
-        d.textContent = 'diag v3 | ' + ckStep + ' | base=' + (ckBase || '-') + ' | alum=' + (typeof students !== 'undefined' ? students.length : '?') + ' pri=' + (typeof ckPriStudents !== 'undefined' ? ckPriStudents.length : '?') + ' sec=' + (typeof ckSecStudentsArr !== 'undefined' ? ckSecStudentsArr.length : '?') + ' asist=' + (typeof attendance !== 'undefined' ? attendance.length : '?') + ' | conectado=' + ckConnected + ' | sw=' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'si' : 'no') + (ckLastErr ? '\nERROR: ' + ckLastErr : '');
+        d.textContent = 'diag v4 | ' + ckStep + ' | base=' + (ckBase || '-') + ' | alum=' + (typeof students !== 'undefined' ? students.length : '?') + ' pri=' + (typeof ckPriStudents !== 'undefined' ? ckPriStudents.length : '?') + ' sec=' + (typeof ckSecStudentsArr !== 'undefined' ? ckSecStudentsArr.length : '?') + ' asist=' + (typeof attendance !== 'undefined' ? attendance.length : '?') + ' | conectado=' + ckConnected + ' net=' + navigator.onLine + ' cam=' + (typeof scannerActive !== 'undefined' && scannerActive ? 'on' : 'off') + (typeof ckStopWhy !== 'undefined' && ckStopWhy ? ' stop:' + ckStopWhy : '') + ' | sw=' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'si' : 'no') + (ckLastErr ? '\nERROR: ' + ckLastErr : '');
       }catch(e){ d.textContent = 'diag error: ' + e.message; }
     }, 700);
   };
@@ -13669,6 +13669,14 @@ async function ckSyncNow(){
   if(ok){ closeModal('ckSyncModal'); showToast('✅ Se guardaron ' + n + ' registro(s)', 'ok'); }
   else { ckOfflineBacklog = true; btn.disabled = false; showToast('No se pudo guardar todo (¿conexión inestable?). Quedó pendiente; vuelve a intentar.', 'err'); }
 }
+function ckVerificarConexion(){
+  try{
+    ckDb.ref('.info/connected').once('value').then(sn => {
+      const real = !!sn.val() && navigator.onLine !== false;
+      if(real !== ckConnected) ckOnConnection(real);
+    }).catch(() => {});
+  }catch(e){}
+}
 function ckOnConnection(on){
   ckConnected = on;
   ckRenderBadge();
@@ -13716,7 +13724,10 @@ function ckInitOffline(){
   ckOfflineBacklog = ckQueue.length > 0;        // quedaron pendientes de una sesión anterior
   ckRenderBadge();
   window.addEventListener('offline', () => { ckConnected = false; ckRenderBadge(); });
-  window.addEventListener('online', () => { ckRenderBadge(); });
+  window.addEventListener('online', () => { ckVerificarConexion(); });
+  // Revisión periódica: si el navegador dijo "offline" un momento pero Firebase nunca se desconectó,
+  // no se queda pegado en "Sin conexión".
+  setInterval(ckVerificarConexion, 4000);
   try{ ckDb.ref('.info/connected').on('value', s => ckOnConnection(!!s.val())); }catch(e){}
   // Carga inmediata desde el teléfono (sin esperar a Internet); el servidor, cuando responda, tiene prioridad.
   (async () => {
@@ -13740,6 +13751,8 @@ document.addEventListener('visibilitychange', () => {
   } else {
     document.querySelectorAll('.modal-bg.show').forEach(m => m.classList.remove('show'));
     if (typeof renderAll === 'function') renderAll();
+    // Si la cámara estaba encendida y se apagó solo por salir un momento de la app, se reanuda.
+    ckReanudarCamara(5);
   }
 });
 
@@ -13903,7 +13916,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
-    if(btn.dataset.tab !== 'escaner') stopScanner();
+    if(btn.dataset.tab !== 'escaner'){ ckCamQuiso = false; stopScanner(); }
     renderAll();
   });
 });
@@ -14556,7 +14569,7 @@ let scannerRAF = null;
 let lastScan = {text:'', at:0};
 
 async function toggleScanner(){
-  if(scannerActive){ stopScanner(); return; }
+  if(scannerActive){ ckCamQuiso = false; stopScanner(); return; }
   const video = document.getElementById('scanVideo');
   try{ scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
   catch(e){
@@ -14572,8 +14585,33 @@ async function toggleScanner(){
   document.getElementById('scanOff').style.display='none';
   document.getElementById('scanToggleBtn').textContent = 'Apagar cámara';
   scanLoop();
+  ckCamQuiso = true; ckWakeOn();
 }
+let ckCamQuiso = false, ckWake = null, ckStopWhy = '';
+let ckReanudando = false;
+// Al volver de WhatsApp (u otra app) la cámara se vuelve a encender sola; si el teléfono aún
+// la tiene ocupada, reintenta unos segundos.
+function ckReanudarCamara(intentos){
+  if(ckReanudando) return;
+  ckReanudando = true;
+  const probar = async (n) => {
+    try{
+      const v = document.getElementById('scanVideo');
+      if(!ckCamQuiso || scannerActive || !v || v.offsetParent === null){ ckReanudando = false; return; }
+      await toggleScanner();
+      if(scannerActive){ ckReanudando = false; return; }
+    }catch(e){}
+    if(n > 1) setTimeout(() => probar(n - 1), 900); else ckReanudando = false;
+  };
+  setTimeout(() => probar(intentos), 500);
+}
+window.addEventListener('pageshow', () => ckReanudarCamara(5));
+window.addEventListener('focus', () => ckReanudarCamara(3));
+async function ckWakeOn(){ try{ if(navigator.wakeLock && !ckWake){ ckWake = await navigator.wakeLock.request('screen'); ckWake.addEventListener('release', () => { ckWake = null; }); } }catch(e){} }
+function ckWakeOff(){ try{ if(ckWake){ ckWake.release(); ckWake = null; } }catch(e){} }
 function stopScanner(){
+  try{ ckStopWhy = new Date().toLocaleTimeString() + ' ' + String(new Error().stack).split('\n').slice(2, 4).map(x => x.trim().slice(0, 60)).join(' < '); }catch(e){}
+  ckWakeOff();
   scannerActive = false;
   if(scannerRAF) cancelAnimationFrame(scannerRAF);
   if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); scannerStream=null; }
