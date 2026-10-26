@@ -3144,6 +3144,30 @@ function asisMarcarLote(pares) {
   checkinAttendanceRef.update(lote).catch(() => showToast('No se pudo guardar'));
   render();
 }
+// Día inhábil / sin clases / permiso: no cuenta ni como falta ni como día hábil (boleta y evaluación lo respetan).
+function asisToggleInhabil(fecha) {
+  if (!diasExcluidosRef) return;
+  const g = state.asisGrade, todos = state.asisTodosGrados !== false;
+  const grados = todos ? GRADOS : [g];
+  const ya = (state.diasExcluidos || []).filter(d => d.nivel === 'primaria' && d.fecha === fecha);
+  const estaEnEste = ya.some(d => d.grade === g);
+  if (estaEnEste) {
+    const quitar = ya.filter(d => grados.includes(d.grade));
+    state.diasExcluidos = (state.diasExcluidos || []).filter(d => !quitar.includes(d));
+    quitar.forEach(d => diasExcluidosRef.child(d.id).remove().catch(() => showToast('No se pudo guardar')));
+    showToast('Día restaurado' + (todos ? ' en todos los grados' : ''));
+  } else {
+    grados.filter(gr => !ya.some(d => d.grade === gr)).forEach(gr => {
+      const ref = diasExcluidosRef.push();
+      const rec = { nivel: 'primaria', grade: gr, grupo: null, fecha };
+      state.diasExcluidos = (state.diasExcluidos || []).concat([{ id: ref.key, ...rec }]);
+      ref.set(rec).catch(() => showToast('No se pudo guardar'));
+    });
+    showToast('🚫 Día sin clases' + (todos ? ' en todos los grados' : ' en ' + g) + ': ya no cuenta como falta');
+  }
+  render();
+}
+function asisSetTodosGrados(v) { state.asisTodosGrados = !!v; render(); }
 function asisMarcarDia(fecha) {
   const g = state.asisGrade;
   const tienen = new Set((state.checkinAttendance || []).filter(a => a.date === fecha).map(a => a.studentId));
@@ -3179,10 +3203,12 @@ function renderAsistencias() {
   let html = `<div class="no-print">${renderGradePills('purple', g, 'setAsisGrade')}
 <div class="card" style="margin-top:8px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.8em;">
 Del <input type="date" ${inp} value="${desde}" onchange="asisSetRango('asisDesde',this.value)"> al <input type="date" ${inp} value="${hasta}" onchange="asisSetRango('asisHasta',this.value)"></div>
-<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${fechas.length} día(s) con asistencias registradas en este rango. Toca una celda para marcar o quitar un día. Con «todos» marcas un día completo o a un alumno todos los días.</p></div>${diag}</div>`;
+<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${fechas.length} día(s) con asistencias registradas en este rango. Toca una celda para marcar o quitar un día. Con «todos» marcas un día completo o a un alumno todos los días.</p>
+<p style="font-size:0.72em;color:#6b7280;margin-top:6px;">🚫 bajo una fecha = <b>día sin clases</b> (inhábil, suspensión, permiso económico): ya no cuenta como falta ni como día hábil. Las fechas grises ya están marcadas así.</p>
+<label style="display:flex;gap:6px;align-items:center;font-size:0.75em;margin-top:6px;"><input type="checkbox" ${state.asisTodosGrados !== false ? 'checked' : ''} onchange="asisSetTodosGrados(this.checked)"> Aplicar 🚫 a todos los grados (quítalo si solo fue un grupo)</label></div>${diag}</div>`;
   if (!alumnos.length) return html + '<p class="empty-note">No hay alumnos en este grado.</p>' + asisImportCard();
   html += `<div id="asisScroll" style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72em;min-width:100%;"><thead><tr><th style="text-align:left;padding:4px 6px;position:sticky;left:0;background:#fff;">Alumno</th>`;
-  fechas.forEach(f => { html += `<th style="padding:4px 3px;white-space:nowrap;${excl.has(f) ? 'color:#9ca3af;' : ''}" title="${f}">${f.slice(8)}/${f.slice(5, 7)}<br><button title="Marcar a todos presentes este día" onclick="asisMarcarDia('${f}')" style="border:none;background:#e0e7ff;color:#3730a3;border-radius:6px;font-size:0.9em;padding:1px 5px;margin-top:2px;">todos</button></th>`; });
+  fechas.forEach(f => { html += `<th style="padding:4px 3px;white-space:nowrap;${excl.has(f) ? 'color:#9ca3af;' : ''}" title="${f}">${f.slice(8)}/${f.slice(5, 7)}<br><button title="Marcar a todos presentes este día" onclick="asisMarcarDia('${f}')" style="border:none;background:#e0e7ff;color:#3730a3;border-radius:6px;font-size:0.9em;padding:1px 5px;margin-top:2px;">todos</button><br><button title="${excl.has(f) ? 'Quitar: este día sí hubo clases' : 'Día sin clases (inhábil, suspensión o permiso): no cuenta'}" onclick="asisToggleInhabil('${f}')" style="border:none;background:${excl.has(f) ? '#fde68a' : '#f1f5f9'};border-radius:6px;font-size:0.95em;padding:1px 5px;margin-top:2px;">🚫</button></th>`; });
   html += `<th style="padding:4px 6px;">Total</th></tr></thead><tbody>`;
   alumnos.forEach(s => {
     const set = presentes[s.id] || new Set();
@@ -3190,7 +3216,7 @@ Del <input type="date" ${inp} value="${desde}" onchange="asisSetRango('asisDesde
     html += `<tr style="border-top:1px solid #f1f5f9;"><td style="padding:4px 6px;white-space:nowrap;position:sticky;left:0;background:#fff;">${esc2(s.name)}</td>`;
     fechas.forEach(f => {
       const p = set.has(f);
-      html += `<td style="text-align:center;padding:2px;"><button onclick="asisToggle('${s.id}','${f}',${!p})" style="border:none;border-radius:6px;width:26px;height:24px;background:${p ? '#d1fae5' : '#fee2e2'};color:${p ? '#047857' : '#b91c1c'};font-weight:700;">${p ? '✔' : '·'}</button></td>`;
+      html += `<td style="text-align:center;padding:2px;"><button onclick="asisToggle('${s.id}','${f}',${!p})" style="border:none;border-radius:6px;width:26px;height:24px;background:${excl.has(f) ? '#e5e7eb' : (p ? '#d1fae5' : '#fee2e2')};color:${excl.has(f) ? '#9ca3af' : (p ? '#047857' : '#b91c1c')};font-weight:700;">${p ? '✔' : '·'}</button></td>`;
     });
     html += `<td style="text-align:center;font-weight:700;padding:4px 6px;white-space:nowrap;">${tot}/${fechas.filter(f => !excl.has(f)).length} <button title="Marcar todos los días" onclick='asisMarcarAlumno("${s.id}", ${JSON.stringify(fechas)})' style="border:none;background:#e0e7ff;color:#3730a3;border-radius:6px;font-size:0.9em;padding:2px 5px;">todos</button></td></tr>`;
   });
