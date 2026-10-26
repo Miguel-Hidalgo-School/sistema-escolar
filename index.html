@@ -3057,6 +3057,102 @@ function asisToggle(studentId, fecha, presente) {
   }
   render();
 }
+
+// --- Importar asistencias desde un archivo (respaldo .json de Firebase o del teléfono) ---
+function asisLeerArchivo(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      let t = String(rd.result).trim();
+      if (t[0] === "'" && t[t.length - 1] === "'") t = t.slice(1, -1);
+      const d = JSON.parse(t);
+      const lista = Array.isArray(d) ? d : Object.keys(d).map(id => ({ id, ...d[id] }));
+      const ok = lista.filter(x => x && typeof x.id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.date || '') && typeof x.studentId === 'string');
+      state.asisImport = { ok, malos: lista.length - ok.length, incluirHuerfanos: false, nombre: f.name };
+    } catch (e) { state.asisImport = null; showToast('No se pudo leer el archivo. ¿Es el .json de asistencias?'); }
+    render();
+  };
+  rd.readAsText(f);
+}
+function asisImportCalc() {
+  const im = state.asisImport; if (!im) return null;
+  const roster = new Set([...state.students.map(x => x.id), ...(state.secStudents || []).map(x => x.id)]);
+  const existentes = new Set((state.checkinAttendance || []).map(x => x.id));
+  const nuevos = im.ok.filter(x => !existentes.has(x.id));
+  const deAlumnos = nuevos.filter(x => roster.has(x.studentId));
+  const huerfanos = nuevos.length - deAlumnos.length;
+  const aImportar = im.incluirHuerfanos ? nuevos : deAlumnos;
+  return { aImportar, huerfanos, yaEstaban: im.ok.length - nuevos.length, dias: [...new Set(aImportar.map(x => x.date))].sort() };
+}
+function asisImportToggleHuerfanos(v) { state.asisImport.incluirHuerfanos = !!v; render(); }
+function asisImportCancelar() { state.asisImport = null; render(); }
+async function asisImportConfirmar() {
+  const c = asisImportCalc(); if (!c || !c.aImportar.length || !checkinAttendanceRef) return;
+  showToast('Importando ' + c.aImportar.length + ' registros...');
+  try {
+    for (let i = 0; i < c.aImportar.length; i += 150) {
+      const lote = {};
+      c.aImportar.slice(i, i + 150).forEach(x => { const { id, ...rest } = x; lote[id] = rest; });
+      await checkinAttendanceRef.update(lote);
+    }
+    const ids = new Set((state.checkinAttendance || []).map(x => x.id));
+    state.checkinAttendance = (state.checkinAttendance || []).concat(c.aImportar.filter(x => !ids.has(x.id)));
+    state.asisImport = null;
+    showToast('✅ Se importaron ' + c.aImportar.length + ' registros');
+  } catch (e) { showToast('No se pudo importar (revisa permisos o conexión). Intenta de nuevo.'); }
+  render();
+}
+function asisImportCard() {
+  let h = `<div class="card no-print" style="margin-top:12px;"><p style="font-weight:700;font-size:0.9em;">📥 Recuperar asistencias de un archivo</p>
+<p style="font-size:0.72em;color:#6b7280;margin:2px 0 8px;">Sube el .json de asistencias (exportado de Firebase o copiado del teléfono). Solo se agregan los registros que no existan ya; no se borra nada.</p>
+<input type="file" accept=".json,.txt,application/json,text/plain" onchange="asisLeerArchivo(event)" style="font-size:0.8em;">`;
+  const c = asisImportCalc();
+  if (c) {
+    h += `<div style="margin-top:10px;font-size:0.78em;background:#f8fafc;border-radius:8px;padding:8px;">Archivo: <b>${esc2(state.asisImport.nombre)}</b><br>
+Registros nuevos de tus alumnos: <b>${c.aImportar.length - (state.asisImport.incluirHuerfanos ? c.huerfanos : 0)}</b> · ya estaban: <b>${c.yaEstaban}</b> · de alumnos que no están en tu lista: <b>${c.huerfanos}</b>${state.asisImport.malos ? ` · ilegibles: ${state.asisImport.malos}` : ''}<br>
+Días que se agregarían: <b>${c.dias.length}</b>${c.dias.length ? ' (' + c.dias[0] + ' al ' + c.dias[c.dias.length - 1] + ')' : ''}
+<label style="display:flex;gap:6px;align-items:center;margin-top:6px;"><input type="checkbox" ${state.asisImport.incluirHuerfanos ? 'checked' : ''} onchange="asisImportToggleHuerfanos(this.checked)"> Incluir también los de alumnos que no están en mi lista</label></div>
+<div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-dark" style="flex:1;" ${c.aImportar.length ? '' : 'disabled'} onclick="asisImportConfirmar()">Importar ${c.aImportar.length} registros</button><button class="btn" style="background:#f3f4f6;color:#374151;" onclick="asisImportCancelar()">Cancelar</button></div>`;
+  }
+  return h + '</div>';
+}
+// Al marcar una asistencia la pantalla se repinta; esto conserva el lugar donde ibas (arriba/abajo e izquierda/derecha).
+(function () {
+  const orig = render;
+  render = function () {
+    const keep = state.tab === 'asistencias' && window.__tabAntes === 'asistencias';
+    const y = window.scrollY, sc = document.getElementById('asisScroll'), x = sc ? sc.scrollLeft : 0;
+    const r = orig.apply(this, arguments);
+    window.__tabAntes = state.tab;
+    if (keep) { window.scrollTo(0, y); const n = document.getElementById('asisScroll'); if (n) n.scrollLeft = x; }
+    return r;
+  };
+})();
+function asisMarcarLote(pares) {
+  // pares: [{studentId, fecha}] que aún no tienen asistencia → se guardan todos juntos
+  if (!checkinAttendanceRef || !pares.length) return;
+  const lote = {}, nuevos = [];
+  pares.forEach(p => {
+    const id = 'id' + Date.now() + Math.random().toString(16).slice(2, 8) + nuevos.length;
+    const rec = { studentId: p.studentId, date: p.fecha, checkin: p.fecha + 'T14:00:00.000Z', manual: true };
+    lote[id] = rec; nuevos.push({ id, ...rec });
+  });
+  state.checkinAttendance = (state.checkinAttendance || []).concat(nuevos);
+  checkinAttendanceRef.update(lote).catch(() => showToast('No se pudo guardar'));
+  render();
+}
+function asisMarcarDia(fecha) {
+  const g = state.asisGrade;
+  const tienen = new Set((state.checkinAttendance || []).filter(a => a.date === fecha).map(a => a.studentId));
+  asisMarcarLote(state.students.filter(s => s.grade === g && !tienen.has(s.id)).map(s => ({ studentId: s.id, fecha })));
+}
+function asisMarcarAlumno(studentId, fechas) {
+  const tiene = new Set((state.checkinAttendance || []).filter(a => a.studentId === studentId).map(a => a.date));
+  asisMarcarLote(fechas.filter(f => !tiene.has(f)).map(f => ({ studentId, fecha: f })));
+}
 function renderAsistencias() {
   asisInit();
   const g = state.asisGrade, desde = state.asisDesde, hasta = state.asisHasta;
@@ -3083,10 +3179,10 @@ function renderAsistencias() {
   let html = `<div class="no-print">${renderGradePills('purple', g, 'setAsisGrade')}
 <div class="card" style="margin-top:8px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.8em;">
 Del <input type="date" ${inp} value="${desde}" onchange="asisSetRango('asisDesde',this.value)"> al <input type="date" ${inp} value="${hasta}" onchange="asisSetRango('asisHasta',this.value)"></div>
-<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${fechas.length} día(s) con asistencias registradas en este rango. Toca una celda para marcar o quitar la asistencia de ese día.</p></div>${diag}</div>`;
-  if (!alumnos.length) return html + '<p class="empty-note">No hay alumnos en este grado.</p>';
-  html += `<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72em;min-width:100%;"><thead><tr><th style="text-align:left;padding:4px 6px;position:sticky;left:0;background:#fff;">Alumno</th>`;
-  fechas.forEach(f => { html += `<th style="padding:4px 3px;white-space:nowrap;${excl.has(f) ? 'color:#9ca3af;' : ''}" title="${f}">${f.slice(8)}/${f.slice(5, 7)}</th>`; });
+<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${fechas.length} día(s) con asistencias registradas en este rango. Toca una celda para marcar o quitar un día. Con «todos» marcas un día completo o a un alumno todos los días.</p></div>${diag}</div>`;
+  if (!alumnos.length) return html + '<p class="empty-note">No hay alumnos en este grado.</p>' + asisImportCard();
+  html += `<div id="asisScroll" style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72em;min-width:100%;"><thead><tr><th style="text-align:left;padding:4px 6px;position:sticky;left:0;background:#fff;">Alumno</th>`;
+  fechas.forEach(f => { html += `<th style="padding:4px 3px;white-space:nowrap;${excl.has(f) ? 'color:#9ca3af;' : ''}" title="${f}">${f.slice(8)}/${f.slice(5, 7)}<br><button title="Marcar a todos presentes este día" onclick="asisMarcarDia('${f}')" style="border:none;background:#e0e7ff;color:#3730a3;border-radius:6px;font-size:0.9em;padding:1px 5px;margin-top:2px;">todos</button></th>`; });
   html += `<th style="padding:4px 6px;">Total</th></tr></thead><tbody>`;
   alumnos.forEach(s => {
     const set = presentes[s.id] || new Set();
@@ -3096,7 +3192,7 @@ Del <input type="date" ${inp} value="${desde}" onchange="asisSetRango('asisDesde
       const p = set.has(f);
       html += `<td style="text-align:center;padding:2px;"><button onclick="asisToggle('${s.id}','${f}',${!p})" style="border:none;border-radius:6px;width:26px;height:24px;background:${p ? '#d1fae5' : '#fee2e2'};color:${p ? '#047857' : '#b91c1c'};font-weight:700;">${p ? '✔' : '·'}</button></td>`;
     });
-    html += `<td style="text-align:center;font-weight:700;padding:4px 6px;">${tot}/${fechas.filter(f => !excl.has(f)).length}</td></tr>`;
+    html += `<td style="text-align:center;font-weight:700;padding:4px 6px;white-space:nowrap;">${tot}/${fechas.filter(f => !excl.has(f)).length} <button title="Marcar todos los días" onclick='asisMarcarAlumno("${s.id}", ${JSON.stringify(fechas)})' style="border:none;background:#e0e7ff;color:#3730a3;border-radius:6px;font-size:0.9em;padding:2px 5px;">todos</button></td></tr>`;
   });
   html += `</tbody></table></div>`;
   if (sinReg.length) {
@@ -3104,6 +3200,7 @@ Del <input type="date" ${inp} value="${desde}" onchange="asisSetRango('asisDesde
 <p style="font-size:0.72em;color:#6b7280;margin:2px 0 8px;">Si ese día sí hubo clases y no se guardó, tócalo para agregarlo como columna y marcar quién asistió. Si fue feriado o suspensión, déjalo así.</p>
 <div style="display:flex;flex-wrap:wrap;gap:6px;">${sinReg.map(f => `<button onclick="asisAgregarDia('${f}')" style="border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:8px;padding:4px 8px;font-size:0.75em;">${formatearFechaCorta(f)}</button>`).join('')}</div></div>`;
   }
+  html += asisImportCard();
   html += `<div class="no-print" style="margin-top:12px;"><button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button></div>`;
   return html;
 }
