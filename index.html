@@ -177,7 +177,7 @@ body { background: #fff; }
 @media print {
   #dipPreview.no-print { display: none !important; }
   #dipPrintAll { display: block !important; }
-  .dip-wrap { page: dip; container-type: normal; width: 279.4mm; max-width: none; height: 215mm; margin: 0; box-shadow: none; break-after: page; contain: layout paint size; overflow: hidden; }
+  .dip-wrap { page: dip; container-type: normal; width: 279.4mm; max-width: none; height: 215mm; margin: 0; box-shadow: none; break-after: page; contain: paint; overflow: hidden; }
   .dip-wrap:last-child { break-after: auto; }
   .dip-page { font-size: 2.794mm; --u: 2.794mm; height: 100%; aspect-ratio: auto; }
 }
@@ -188,8 +188,39 @@ body { background: #fff; }
 .dip-t1 .dip-cuerpo, .dip-t2 .dip-cuerpo { top: calc(var(--u) * 46); }
 .dip-t1 .dip-fecha, .dip-t2 .dip-fecha { top: calc(var(--u) * 69); }
 .dip-t6 .dip-fecha { top: calc(var(--u) * 70.5); }
+.rec-wrap { container-type: inline-size; width: 100%; max-width: 760px; margin: 0 auto 14px; box-shadow: 0 6px 18px rgba(0,0,0,.18); background:#fffbea; }
+.rec-page { position: relative; width: 100%; aspect-ratio: 11 / 8.5; overflow: hidden; font-size: 1cqw; --u: 1cqw; font-family: 'Fredoka','Baloo 2','Comic Sans MS','Comic Neue',sans-serif; background:#fffbea; color:#374151; }
+.rec-page > * { position: absolute; margin: 0; }
+.rec-f1 { inset: calc(var(--u) * 2.0); border-radius: calc(var(--u) * 3.64); border: calc(var(--u) * 1.27) dashed #ff9fb2; background:#fff; }
+.rec-f2 { inset: calc(var(--u) * 4.0); border-radius: calc(var(--u) * 2.73); border: calc(var(--u) * 0.55) solid #8fd3ff; }
+.rec-d { font-size: calc(var(--u) * 3.64); line-height:1; }
+.rec-logo { left: calc(var(--u) * 7.09); top: calc(var(--u) * 6.36); width:calc(var(--u) * 6.36); height:calc(var(--u) * 6.36); font-size:calc(var(--u) * 5.82); display:flex; align-items:center; justify-content:center; }
+.rec-logo img { max-width:100%; max-height:100%; object-fit:contain; }
+.rec-medal { right: calc(var(--u) * 7.09); top: calc(var(--u) * 6.18); font-size: calc(var(--u) * 6.36); transform: rotate(12deg); line-height:1; }
+.rec-h1 { left:0; right:0; top:calc(var(--u) * 8.73); text-align:center; font-size:calc(var(--u) * 7.09); color:#ff6b8b; text-shadow:calc(var(--u) * 0.36) calc(var(--u) * 0.36) 0 #ffe08a; letter-spacing:calc(var(--u) * 0.18); font-weight:700; }
+.rec-escuela { left:calc(var(--u) * 11.82); right:calc(var(--u) * 11.82); top:calc(var(--u) * 18.18); text-align:center; font-size:calc(var(--u) * 2.73); color:#4a90e2; font-weight:700; }
+.rec-fel { left:0; right:0; top:calc(var(--u) * 24.73); text-align:center; font-size:calc(var(--u) * 2.55); color:#6b7280; }
+.rec-nombre { left:calc(var(--u) * 10.91); right:calc(var(--u) * 10.91); top:calc(var(--u) * 28.91); text-align:center; font-size:calc(var(--u) * 3.64); color:#7c4dff; border-bottom:calc(var(--u) * 0.45) dotted #ffb74d; padding-bottom:calc(var(--u) * 0.55); font-weight:700; white-space:nowrap; }
+.rec-txt { left:calc(var(--u) * 10.91); right:calc(var(--u) * 10.91); top:calc(var(--u) * 35.91); text-align:center; font-size:calc(var(--u) * 2.55); line-height:1.4; }
+.rec-txt b { color:#ff6b8b; }
+.rec-badges { left:0; right:0; top:calc(var(--u) * 47.7); display:flex; justify-content:center; gap:calc(var(--u) * 3.64); }
+.rec-bd { width:calc(var(--u) * 17.27); height:calc(var(--u) * 7.45); border-radius:calc(var(--u) * 3.73); background:#fff3c4; border:calc(var(--u) * 0.45) solid #ffb74d; text-align:center; font-size:calc(var(--u) * 3.82); font-weight:700; color:#e65100; line-height:calc(var(--u) * 4.73); padding-top:calc(var(--u) * 0.18); box-sizing:border-box; }
+.rec-bd small { display:block; font-size:calc(var(--u) * 1.36); line-height:calc(var(--u) * 1.64); color:#8d6e63; font-weight:600; }
+.rec-bd.rec-lug { background:#e3f2fd; border-color:#64b5f6; color:#1565c0; }
+.rec-bd.rec-lug small { color:#4a6fa5; }
+.rec-firmas { left:calc(var(--u) * 13.64); right:calc(var(--u) * 13.64); top:calc(var(--u) * 62.5); display:flex; justify-content:space-around; gap:calc(var(--u) * 5.45); font-size:calc(var(--u) * 2.0); }
+.rec-firmas > div { flex:1; text-align:center; border-top:calc(var(--u) * 0.27) solid #8fd3ff; padding-top:calc(var(--u) * 0.55); position:relative; }
+.rec-firmas span { position:absolute; left:0; right:0; bottom:calc(100% + calc(var(--u) * 0.27)); font-size:calc(var(--u) * 1.64); font-weight:700; color:#0f766e; text-transform:uppercase; white-space:nowrap; }
+.rec-fecha { left:0; right:0; top:calc(var(--u) * 69.3); text-align:center; font-size:calc(var(--u) * 2.18); color:#6b7280; }
+@media print {
+  #recSheet { display:block; }
+  .rec-wrap { page: recpg; container-type: normal; width: 279.4mm; max-width: none; height: 215mm; margin: 0; box-shadow: none; break-after: page; contain: paint; overflow: hidden; }
+  .rec-wrap:last-child { break-after: auto; }
+  .rec-page { font-size: 2.794mm; --u: 2.794mm; height: 100%; aspect-ratio: auto; }
+}
+@page recpg { size: 279.4mm 215.9mm; margin: 0; }
 </style>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Pinyon+Script&family=Playfair+Display:ital,wght@1,900&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&family=Pinyon+Script&family=Playfair+Display:ital,wght@1,900&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app"></div>
@@ -2371,7 +2402,7 @@ return `
 function renderTabs() {
 const tabs = [['inicio','Inicio'],['alumnos','Alumnos'],['calificaciones','Calificaciones'],['descargas','Descargas'],['evaluacion','Evaluación'],['tareas','Tareas'],['disciplina','Disciplina'],['mural','Mural'],['bitacora','Bitácora'],['datos','Datos']];
 return '<nav class="tabs">' + tabs.map(([id,label]) =>
-`<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor'].includes(state.tab)) || (id==='evaluacion' && ['formativo','sumativa'].includes(state.tab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('primaria')" : `setTab('${id}')`}">${label}</button>`
+`<button class="${state.tab===id || (id==='descargas' && ['boletas','diplomas','honor','reconocimientos','asistencias'].includes(state.tab)) || (id==='evaluacion' && ['formativo','sumativa'].includes(state.tab))?'active':''}" onclick="${id==='bitacora' ? "goToBitacora('primaria')" : `setTab('${id}')`}">${label}</button>`
 ).join('') + '</nav>';
 }
 function renderSecTabs() {
@@ -2398,6 +2429,16 @@ return `
 <p style="font-weight:700;font-size:1.05em;margin-top:4px;">Diplomas</p>
 <p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Diploma de excelencia por grado</p>
 </div>
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#64748b,#334155);color:#fff;text-align:center;padding:22px;margin-bottom:12px;" onclick="setTab('asistencias')">
+<p style="font-size:1.8em;">✅</p>
+<p style="font-weight:700;font-size:1.05em;margin-top:4px;">Asistencias</p>
+<p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Ver y corregir las asistencias por día</p>
+</div>
+<div class="card" style="cursor:pointer;background:linear-gradient(135deg,#34d399,#06b6d4);color:#fff;text-align:center;padding:22px;margin-bottom:12px;" onclick="setTab('reconocimientos')">
+<p style="font-size:1.8em;">🎈</p>
+<p style="font-weight:700;font-size:1.05em;margin-top:4px;">Reconocimientos</p>
+<p style="font-size:0.75em;opacity:0.85;margin-top:2px;">Esfuerzo y promedio del periodo (infantil)</p>
+</div>
 <div class="card" style="cursor:pointer;background:linear-gradient(135deg,#f59e0b,#ec4899);color:#fff;text-align:center;padding:22px;" onclick="setTab('honor')">
 <p style="font-size:1.8em;">🌟</p>
 <p style="font-weight:700;font-size:1.05em;margin-top:4px;">Cuadro de Honor</p>
@@ -2413,6 +2454,8 @@ if (state.tab === 'descargas') return nav + renderDescargasMenu();
 if (state.tab === 'boletas') return nav + (state.boletaStudentId ? renderBoletaDetail() : renderBoletaList());
 if (state.tab === 'diplomas') return nav + renderDiplomas();
 if (state.tab === 'honor') return nav + renderCuadroHonor();
+if (state.tab === 'reconocimientos') return nav + renderReconocimientos();
+if (state.tab === 'asistencias') return nav + renderAsistencias();
 if (state.tab === 'formativo') return nav + renderFormativo('primaria');
 if (state.tab === 'sumativa') return nav + renderSumativa('primaria');
 if (state.tab === 'evaluacion') return nav + renderEvaluacionSelector('primaria');
@@ -2912,6 +2955,156 @@ ${bg ? `<label style="display:flex;gap:6px;align-items:center;font-size:0.78em;m
 <label style="display:flex;gap:6px;align-items:center;font-size:0.82em;margin-bottom:8px;"><input type="checkbox" ${state.dipAll ? 'checked' : ''} onchange="dipToggleAll(this.checked)"> Imprimir los 6 grados (18 diplomas)</label>
 <button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir diplomas (1 por hoja)</button>
 <p style="font-size:0.7em;color:#6b7280;margin-top:6px;text-align:center;">En la ventana de impresión elige Carta, Horizontal y activa «Gráficos de fondo».</p></div>`;
+  return html;
+}
+
+// ===== RECONOCIMIENTOS (infantil, esfuerzo + promedio del periodo) =====
+const REC_MEDALLAS = ['🥇', '🥈', '🥉'];
+function recInit() {
+  if (state.recGrade === undefined) state.recGrade = '1°';
+  if (state.recPeriodo === undefined) state.recPeriodo = 0;
+  if (!state.recSel) state.recSel = {};
+  if (!state.recProm) state.recProm = {};
+  if (state.recMsg === undefined) state.recMsg = '¡Sigue así, tú puedes lograrlo!';
+  if (state.recLugar === undefined) state.recLugar = true;
+  if (state.recDocente === undefined) state.recDocente = '';
+}
+function setRecGrade(g) { state.recGrade = g; render(); }
+function setRecPeriodo(p) { state.recPeriodo = p; render(); }
+function recToggle(id, v) { state.recSel[state.recGrade + '|' + state.recPeriodo + '|' + id] = !!v; render(); }
+function recSetProm(id, v) { state.recProm[state.recGrade + '|' + state.recPeriodo + '|' + id] = v.trim(); render(); }
+function recSetField(k, v) { state[k] = v; render(); }
+function recLista() {
+  const g = state.recGrade, p = state.recPeriodo;
+  const rank = state.students.filter(s => s.grade === g)
+    .map(s => ({ s, avg: studentPeriodoAvg(s, p) })).filter(x => x.avg !== null)
+    .sort((a, b) => b.avg - a.avg);
+  return rank.map((x, i) => {
+    const k = g + '|' + p + '|' + x.s.id;
+    const sel = state.recSel[k] !== undefined ? state.recSel[k] : i < 3;
+    const prom = state.recProm[k] || x.avg.toFixed(1);
+    return { s: x.s, avg: x.avg, lugar: i < 3 ? i : -1, sel, prom, k };
+  });
+}
+function recPage(r) {
+  const si = state.schoolInfo || {};
+  const nombre = (typeof dipNombre === 'function') ? dipNombre(r.s.name) : r.s.name;
+  const sz = Math.min(3.6, 80 / (Math.max(nombre.length, 1) * 0.62)).toFixed(2);
+  const lugarTxt = ['1.º', '2.º', '3.º'];
+  const badges = `<div class="rec-badges"><div class="rec-bd"><small>Mi promedio</small>${esc2(r.prom)}</div>${state.recLugar && r.lugar >= 0 ? `<div class="rec-bd rec-lug"><small>Mi lugar</small>${REC_MEDALLAS[r.lugar]} ${lugarTxt[r.lugar]}</div>` : ''}</div>`;
+  return `<div class="rec-wrap"><div class="rec-page">
+<div class="rec-f1"></div><div class="rec-f2"></div>
+<span class="rec-d" style="left:calc(var(--u) * 8.2);top:calc(var(--u) * 27.3)">⭐</span><span class="rec-d" style="left:calc(var(--u) * 87.3);top:calc(var(--u) * 30)">🌈</span><span class="rec-d" style="left:calc(var(--u) * 6.4);top:calc(var(--u) * 47.3)">🎈</span><span class="rec-d" style="left:calc(var(--u) * 88.6);top:calc(var(--u) * 47.3)">⭐</span><span class="rec-d" style="left:calc(var(--u) * 8);top:calc(var(--u) * 65)">✏️</span><span class="rec-d" style="left:calc(var(--u) * 86);top:calc(var(--u) * 65)">📚</span><span class="rec-d" style="left:calc(var(--u) * 47.3);top:calc(var(--u) * 2.7);font-size:calc(var(--u) * 2.7)">✨</span>
+<div class="rec-logo">${si.logoURL ? `<img src="${si.logoURL}">` : '🏫'}</div>
+<div class="rec-medal">${state.recLugar && r.lugar >= 0 ? REC_MEDALLAS[r.lugar] : '🏅'}</div>
+<h1 class="rec-h1">¡Reconocimiento!</h1>
+<div class="rec-escuela">${esc2(si.nombre || '')}</div>
+<div class="rec-fel">¡Felicidades a:</div>
+<div class="rec-nombre" style="font-size:${sz}em">${esc2(nombre)}</div>
+<div class="rec-txt">Por su <b>esfuerzo</b> y su excelente <b>promedio</b><br>del <b>${PERIODOS_LABEL[state.recPeriodo]} periodo</b>, ciclo escolar ${getCicloEscolar()}.<br>${esc2(state.recMsg)} 🌟</div>
+${badges}
+<div class="rec-firmas"><div><span>${esc2(state.recDocente)}</span>Maestro(a) del grupo</div><div><span>${esc2(si.autoridadNombre || '')}</span>${esc2(si.autoridadCargo || 'Director(a) escolar')}</div></div>
+<div class="rec-fecha">${esc2((typeof dipFechaTexto === 'function') ? dipFechaTexto() : '')}</div>
+</div></div>`;
+}
+function renderReconocimientos() {
+  recInit();
+  const lista = recLista(), sel = lista.filter(r => r.sel);
+  const inp = 'style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:0.85em;box-sizing:border-box;"';
+  let html = `<div class="no-print">${renderGradePills('purple', state.recGrade, 'setRecGrade')}
+<div class="periodo-pills" style="justify-content:center;">${PERIODOS_LABEL.map((l, i) => `<button class="${state.recPeriodo === i ? 'active' : ''}" onclick="setRecPeriodo(${i})">${l} periodo</button>`).join('')}</div></div>`;
+  html += `<div id="recSheet">${sel.map(recPage).join('') || '<p class="empty-note no-print">Captura calificaciones de este periodo para generar reconocimientos.</p>'}</div>`;
+  html += `<div class="card no-print" style="margin-top:12px;"><p style="font-weight:700;font-size:0.9em;">🧒 Alumnos de ${state.recGrade}</p>
+<p style="font-size:0.72em;color:#6b7280;margin:2px 0 8px;">Marca a quiénes quieres reconocer (se marcan solos los 3 mejores promedios del periodo). Puedes cambiar el promedio que sale.</p>`;
+  lista.forEach(r => {
+    html += `<div style="display:flex;align-items:center;gap:8px;border-top:1px solid #f1f5f9;padding:6px 0;font-size:0.8em;">
+<input type="checkbox" ${r.sel ? 'checked' : ''} onchange="recToggle('${r.s.id}',this.checked)">
+<span style="flex:1;min-width:0;">${r.lugar >= 0 ? REC_MEDALLAS[r.lugar] + ' ' : ''}${esc2(r.s.name)}</span>
+<input value="${esc2(r.prom).replace(/"/g, '&quot;')}" style="width:56px;text-align:center;border:1px solid #d1d5db;border-radius:8px;padding:5px;" onchange="recSetProm('${r.s.id}',this.value)"></div>`;
+  });
+  html += `</div><div class="card no-print" style="margin-top:12px;"><p style="font-weight:700;font-size:0.9em;">✏️ Textos</p>
+<label style="font-size:0.72em;color:#6b7280;display:block;margin:8px 0 2px;">Mensaje final</label><input ${inp} value="${esc2(state.recMsg).replace(/"/g, '&quot;')}" onchange="recSetField('recMsg',this.value.trim())">
+<label style="font-size:0.72em;color:#6b7280;display:block;margin:8px 0 2px;">Maestro(a) del grupo</label><input ${inp} value="${esc2(state.recDocente).replace(/"/g, '&quot;')}" onchange="recSetField('recDocente',this.value.trim())">
+<label style="display:flex;gap:6px;align-items:center;font-size:0.8em;margin-top:10px;"><input type="checkbox" ${state.recLugar ? 'checked' : ''} onchange="recSetField('recLugar',this.checked)"> Mostrar el lugar (1.º, 2.º, 3.º) a los 3 mejores</label>
+<p style="font-size:0.7em;color:#6b7280;margin-top:6px;">El lugar y fecha se toman de «Datos del diploma» (pestaña Diplomas).</p></div>
+<div class="no-print" style="margin-top:12px;"><button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir reconocimientos (1 por hoja)</button>
+<p style="font-size:0.7em;color:#6b7280;margin-top:6px;text-align:center;">En la ventana de impresión elige Carta, Horizontal y activa «Gráficos de fondo».</p></div>`;
+  return html;
+}
+
+// ===== ASISTENCIAS POR DÍA (ver y corregir) =====
+function asisInit() {
+  const y = Number(getCicloEscolar().slice(0, 4));
+  if (state.asisGrade === undefined) state.asisGrade = '1°';
+  if (!state.asisDesde) state.asisDesde = y + '-08-31';
+  if (!state.asisHasta) state.asisHasta = new Date().toISOString().slice(0, 10);
+  if (!state.asisExtra) state.asisExtra = [];
+}
+function setAsisGrade(g) { state.asisGrade = g; render(); }
+function asisSetRango(k, v) { if (v) { state[k] = v; render(); } }
+function asisAgregarDia(f) { if (f && !state.asisExtra.includes(f)) state.asisExtra.push(f); render(); }
+function asisToggle(studentId, fecha, presente) {
+  if (!checkinAttendanceRef) return;
+  if (presente) {
+    const id = 'id' + Date.now() + Math.random().toString(16).slice(2, 8);
+    const rec = { studentId, date: fecha, checkin: fecha + 'T14:00:00.000Z', manual: true };
+    state.checkinAttendance = (state.checkinAttendance || []).concat([{ id, ...rec }]);
+    checkinAttendanceRef.child(id).set(rec).catch(() => showToast('No se pudo guardar'));
+  } else {
+    const borrar = (state.checkinAttendance || []).filter(a => a.studentId === studentId && a.date === fecha);
+    state.checkinAttendance = (state.checkinAttendance || []).filter(a => !(a.studentId === studentId && a.date === fecha));
+    borrar.forEach(a => checkinAttendanceRef.child(a.id).remove().catch(() => showToast('No se pudo guardar')));
+  }
+  render();
+}
+function renderAsistencias() {
+  asisInit();
+  const g = state.asisGrade, desde = state.asisDesde, hasta = state.asisHasta;
+  const alumnos = state.students.filter(s => s.grade === g).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const att = (state.checkinAttendance || []).filter(a => a.date >= desde && a.date <= hasta);
+  const conRegistro = new Set(att.map(a => a.date));
+  const fechas = [...new Set([...conRegistro, ...state.asisExtra.filter(f => f >= desde && f <= hasta)])].sort();
+  const excl = (typeof diasExcluidosSet === 'function') ? diasExcluidosSet('primaria', g, null) : new Set();
+  const presentes = {};
+  att.forEach(a => { (presentes[a.studentId] = presentes[a.studentId] || new Set()).add(a.date); });
+  // días de lunes a viernes dentro del rango sin ningún registro
+  const sinReg = [];
+  for (let d = new Date(desde + 'T12:00:00'); d.toISOString().slice(0, 10) <= hasta; d.setDate(d.getDate() + 1)) {
+    const f = d.toISOString().slice(0, 10), w = d.getDay();
+    if (w >= 1 && w <= 5 && !conRegistro.has(f) && !state.asisExtra.includes(f)) sinReg.push(f);
+  }
+  const todos = state.checkinAttendance || [];
+  const idsPri = new Set(state.students.map(x => x.id)), idsSec = new Set((state.secStudents || []).map(x => x.id));
+  const nPri = todos.filter(x => idsPri.has(x.studentId)).length, nSec = todos.filter(x => idsSec.has(x.studentId)).length;
+  const nOrf = todos.length - nPri - nSec;
+  const fAll = todos.map(x => x.date).filter(Boolean).sort(), diasAll = new Set(fAll).size;
+  const diag = `<div class="card no-print" style="margin-top:8px;background:#f8fafc;font-size:0.72em;color:#475569;"><b>Lo que llegó de Firebase:</b> ${todos.length} registros en ${diasAll} día(s)${fAll.length ? ' (del ' + fAll[0] + ' al ' + fAll[fAll.length - 1] + ')' : ''}.<br>De alumnos de Primaria: <b>${nPri}</b> · de Secundaria: <b>${nSec}</b> · de alumnos que ya no están en tu lista: <b>${nOrf}</b>.</div>`;
+  const inp = 'style="padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:0.85em;"';
+  let html = `<div class="no-print">${renderGradePills('purple', g, 'setAsisGrade')}
+<div class="card" style="margin-top:8px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.8em;">
+Del <input type="date" ${inp} value="${desde}" onchange="asisSetRango('asisDesde',this.value)"> al <input type="date" ${inp} value="${hasta}" onchange="asisSetRango('asisHasta',this.value)"></div>
+<p style="font-size:0.72em;color:#6b7280;margin-top:8px;">${fechas.length} día(s) con asistencias registradas en este rango. Toca una celda para marcar o quitar la asistencia de ese día.</p></div>${diag}</div>`;
+  if (!alumnos.length) return html + '<p class="empty-note">No hay alumnos en este grado.</p>';
+  html += `<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72em;min-width:100%;"><thead><tr><th style="text-align:left;padding:4px 6px;position:sticky;left:0;background:#fff;">Alumno</th>`;
+  fechas.forEach(f => { html += `<th style="padding:4px 3px;white-space:nowrap;${excl.has(f) ? 'color:#9ca3af;' : ''}" title="${f}">${f.slice(8)}/${f.slice(5, 7)}</th>`; });
+  html += `<th style="padding:4px 6px;">Total</th></tr></thead><tbody>`;
+  alumnos.forEach(s => {
+    const set = presentes[s.id] || new Set();
+    const tot = fechas.filter(f => set.has(f) && !excl.has(f)).length;
+    html += `<tr style="border-top:1px solid #f1f5f9;"><td style="padding:4px 6px;white-space:nowrap;position:sticky;left:0;background:#fff;">${esc2(s.name)}</td>`;
+    fechas.forEach(f => {
+      const p = set.has(f);
+      html += `<td style="text-align:center;padding:2px;"><button onclick="asisToggle('${s.id}','${f}',${!p})" style="border:none;border-radius:6px;width:26px;height:24px;background:${p ? '#d1fae5' : '#fee2e2'};color:${p ? '#047857' : '#b91c1c'};font-weight:700;">${p ? '✔' : '·'}</button></td>`;
+    });
+    html += `<td style="text-align:center;font-weight:700;padding:4px 6px;">${tot}/${fechas.filter(f => !excl.has(f)).length}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+  if (sinReg.length) {
+    html += `<div class="card no-print" style="margin-top:12px;"><p style="font-weight:700;font-size:0.85em;">📅 Días de lunes a viernes sin ningún registro</p>
+<p style="font-size:0.72em;color:#6b7280;margin:2px 0 8px;">Si ese día sí hubo clases y no se guardó, tócalo para agregarlo como columna y marcar quién asistió. Si fue feriado o suspensión, déjalo así.</p>
+<div style="display:flex;flex-wrap:wrap;gap:6px;">${sinReg.map(f => `<button onclick="asisAgregarDia('${f}')" style="border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:8px;padding:4px 8px;font-size:0.75em;">${formatearFechaCorta(f)}</button>`).join('')}</div></div>`;
+  }
+  html += `<div class="no-print" style="margin-top:12px;"><button class="btn btn-dark" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button></div>`;
   return html;
 }
 
