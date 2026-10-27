@@ -2712,7 +2712,7 @@ html += `<div class="card boleta-sheet" id="boletaSheet">
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-bottom:8px;">
 <div><p class="label">CURP</p><p class="value">${s.curp||'—'}</p></div>
-<div><p class="label">FOLIO</p><p class="value" style="word-break:break-all;">${s.folioBoleta||folioBoleta(s)}</p></div>
+<div><p class="label">MATRÍCULA</p><p class="value">${s.matricula||'—'}</p></div>
 <div><p class="label">TURNO / GRUPO</p><p class="value">${s.turno||'—'} · ${s.grupo||'—'}</p></div>
 <div><p class="label">EDAD</p><p class="value">${edad!==null?edad+' años':'—'}</p></div>
 </div>
@@ -2739,6 +2739,7 @@ ${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MA
 <div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
 <div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
 <div class="box"><p class="l">ASISTENCIAS</p><p class="v">${(() => { const habiles = diasHabilesCicloCompleto('primaria', s.grade, s.grupo); return habiles ? diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo) : (s.asistencias || '—'); })()}</p></div>
+<div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;font-size:8px;line-height:1.2;">${s.folioBoleta||folioBoleta(s)}</p></div>
 </div>
 </div>
 <table style="margin-bottom:10px;">
