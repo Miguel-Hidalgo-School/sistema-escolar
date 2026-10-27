@@ -396,6 +396,21 @@ const digit = s.match(/\d/);
 if (digit) { const m = GRADOS.find(g => g.startsWith(digit[0])); if (m) return m; }
 return GRADOS.find(g => g === s) || null;
 }
+function folioBoleta(s) {
+// Folio propio del sistema: INICIALES-CICLO-CURP-MATRÍCULA (p. ej. MHS-2627-GOCJ-0123)
+const nombre = ((state.schoolInfo && state.schoolInfo.nombre) || '');
+const stop = ['DE','DEL','LA','LAS','LOS','Y','EL','EN'];
+let ini = nombre.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().split(/\s+/).filter(w => w && !stop.includes(w)).map(w => w[0]).filter(c => /[A-Z]/.test(c)).join('').slice(0, 4);
+if (!ini) ini = 'ESC';
+const cic = (s.cicloEscolar || getCicloEscolar()).split('-').map(x => x.slice(-2)).join('');
+const curp = String(s.curp || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const letras = curp.slice(0, 4);
+const numM = String(s.matricula || '').replace(/\D/g, '').slice(-4);
+const numC = curp.slice(4, 10).replace(/\D/g, '').slice(0, 4);
+const nums = numM || numC;
+const partes = [ini, cic, letras, nums].filter(Boolean);
+return partes.length > 2 ? partes.join('-') : '—';
+}
 function getCicloEscolar() {
 const now = new Date(); const y = now.getFullYear(); const m = now.getMonth();
 return m >= 7 ? (y + '-' + (y+1)) : ((y-1) + '-' + y);
@@ -1185,7 +1200,9 @@ const name = input.value.trim();
 if (!name) return;
 if (btn) { btn.textContent = 'Agregando...'; btn.disabled = true; }
 const id = studentsRef.push().key;
-studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra() })
+const _gr = {}; (state.students || []).filter(x => x.grade === state.selectedGrade && x.grupo).forEach(x => { _gr[x.grupo] = (_gr[x.grupo] || 0) + 1; });
+const grupoNuevo = Object.keys(_gr).sort((a, b) => _gr[b] - _gr[a])[0] || 'A';
+studentsRef.child(id).set({ name, grade: state.selectedGrade, grades: {}, observaciones: {}, ...emptyExtra(), grupo: grupoNuevo })
 .then(() => showToast('✅ Alumno agregado'))
 .catch(() => showToast('❌ Error al agregar alumno'))
 .finally(() => { if (btn) { btn.textContent = 'Agregar'; btn.disabled = false; } });
@@ -1923,7 +1940,7 @@ const expiresAt = now + 15 * 24 * 60 * 60 * 1000; // 15 días
 const snapshot = {
 nivel: 'primaria',
 name: s.name || '', grade: s.grade || '', grupo: s.grupo || '', curp: s.curp || '',
-matricula: s.matricula || '', turno: s.turno || '', folio: s.folio || '',
+matricula: s.matricula || '', turno: s.turno || '', folio: s.folio || '', folioBoleta: folioBoleta(s),
 asistencias: (() => { const h = diasHabilesCicloCompleto('primaria', s.grade, s.grupo); return h ? String(diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo)) : (s.asistencias || ''); })(), lenguaIndigena: s.lenguaIndigena || '', sexo: s.sexo || '',
 fechaNacimiento: s.fechaNacimiento || '',
 grades: s.grades || {}, observaciones: s.observaciones || {},
@@ -2693,7 +2710,7 @@ html += `<div class="card boleta-sheet" id="boletaSheet">
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin-bottom:8px;">
 <div><p class="label">CURP</p><p class="value">${s.curp||'—'}</p></div>
-<div><p class="label">MATRÍCULA</p><p class="value">${s.matricula||'—'}</p></div>
+<div><p class="label">FOLIO</p><p class="value" style="word-break:break-all;">${s.folioBoleta||folioBoleta(s)}</p></div>
 <div><p class="label">TURNO / GRUPO</p><p class="value">${s.turno||'—'} · ${s.grupo||'—'}</p></div>
 <div><p class="label">EDAD</p><p class="value">${edad!==null?edad+' años':'—'}</p></div>
 </div>
@@ -2720,7 +2737,6 @@ ${PERIODOS_LABEL.map((lbl,pi)=>`<tr><td style="font-weight:600;">${lbl}</td>${MA
 <div class="box"><p class="l">LENGUA INDÍGENA</p><p class="v">${s.lenguaIndigena||'—'}</p></div>
 <div class="box"><p class="l">PROMEDIO FINAL</p><p class="v" style="color:#2563eb;">${avg!==null?avg.toFixed(1):'—'}</p></div>
 <div class="box"><p class="l">ASISTENCIAS</p><p class="v">${(() => { const habiles = diasHabilesCicloCompleto('primaria', s.grade, s.grupo); return habiles ? diasAsistidosCicloCompleto(s.id, 'primaria', s.grade, s.grupo) : (s.asistencias || '—'); })()}</p></div>
-<div class="box"><p class="l">FOLIO</p><p class="v" style="word-break:break-all;">${s.folio||'—'}</p></div>
 </div>
 </div>
 <table style="margin-bottom:10px;">

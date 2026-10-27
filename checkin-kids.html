@@ -13167,7 +13167,7 @@ function ckFilterStudents(list, f){
     const nivel = s.nivel || 'primaria';
     if(nivel !== f.nivel) return false;
     if(f.grado && s.grade !== f.grado) return false;
-    if(f.grado && f.grupo && s.group !== f.grupo) return false;
+    if(f.grado && f.grupo && s.group && s.group !== f.grupo) return false; // sin grupo asignado: se muestra
     return true;
   });
 }
@@ -13477,7 +13477,23 @@ ckAuth.onAuthStateChanged(async user => {
   ckAjustarNivelesAlAcceso();
   ckPopulateNivelSelect('inNivel', 'primaria');
   updateNivelOptions('in');
-  ckBindRefs(ckDbBase(user.uid, isAdmin, perfilEspacioUid));
+  let ckBaseFinal = ckDbBase(user.uid, isAdmin, perfilEspacioUid);
+  if (isAdmin) {
+    // Misma lógica que index.html: espacio del Súper Admin (adminEspacio) o, si ahí no hay alumnos, la raíz antigua.
+    try {
+      const es = await ckDb.ref('adminEspacio').once('value');
+      const espUid = es.val() || user.uid;
+      const tiene = async (b) => {
+        for (const n of ['students', 'secStudents']) {
+          try { const sn = await ckDb.ref(b + '/' + n).limitToFirst(1).once('value'); if (sn.exists()) return true; } catch(e) {}
+        }
+        return false;
+      };
+      ckBaseFinal = 'usuarios/' + espUid;
+      if (!(await tiene(ckBaseFinal)) && (await tiene(CK_DB_ROOT_ADMIN))) ckBaseFinal = CK_DB_ROOT_ADMIN;
+    } catch(e) { /* se queda con la base por defecto */ }
+  }
+  ckBindRefs(ckBaseFinal);
   ckStartSync();
 });
 
