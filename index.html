@@ -408,8 +408,10 @@ const letras = curp.slice(0, 4);
 const numM = String(s.matricula || '').replace(/\D/g, '').slice(-4);
 const numC = curp.slice(4, 10).replace(/\D/g, '').slice(0, 4);
 const nums = numM || numC;
-const partes = [ini, cic, letras, nums].filter(Boolean);
-return partes.length > 2 ? partes.join('-') : '—';
+let L = letras, N = nums;
+if (!L) { L = String(s.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().split(/\s+/).filter(w => /^[A-Z]/.test(w)).map(w => w[0]).join('').slice(0, 4).padEnd(4, 'X'); }
+if (!N) { let h = 0; const k = String(s.id || s.name || ''); for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) % 10000; N = String(h).padStart(4, '0'); }
+return [ini, cic, L, N].join('-');
 }
 function getCicloEscolar() {
 const now = new Date(); const y = now.getFullYear(); const m = now.getMonth();
