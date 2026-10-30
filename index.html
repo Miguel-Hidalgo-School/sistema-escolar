@@ -1427,13 +1427,13 @@ if (!pendientes.length) { showToast('No hay nada pendiente: faltan calificacione
 const TAM = 1;
 const lotes = [];
 for (let i = 0; i < pendientes.length; i += TAM) lotes.push(pendientes.slice(i, i + TAM));
-let hechos = 0, fallidos = 0, cuota = false, ultimoError = '';
-for (let i = 0; i < lotes.length; i++) {
-state.iaProgresoGrupo = `Lote ${i + 1} de ${lotes.length}`;
-render();
-try {
-let res, data;
-for (let intento = 0; intento < 3; intento++) {
+let hechos = 0, fallidos = 0, cuota = false, ultimoError = '', terminados = 0;
+const pausa = ms => new Promise(r => setTimeout(r, ms));
+const actualizarAvance = () => { state.iaProgresoGrupo = `${terminados} de ${lotes.length} alumnos`; render(); };
+actualizarAvance();
+async function procesar(i) {
+let res = { ok: false, status: 0 }, data = {};
+for (let intento = 0; intento < 3 && !cuota; intento++) {
 const ctrl = new AbortController();
 const timer = setTimeout(() => ctrl.abort(), 120000);
 try {
@@ -1449,19 +1449,14 @@ res = { ok: false, status: 0 };
 data = { error: (e2 && e2.name === 'AbortError') ? 'el servicio tardó demasiado' : String((e2 && e2.message) || e2) };
 } finally { clearTimeout(timer); }
 if (res.ok && Array.isArray(data.resultados)) break;
-if (intento < 2) {
-state.iaProgresoGrupo = `Lote ${i + 1} de ${lotes.length} (reintentando…)`;
-render();
-await new Promise(r => setTimeout(r, res.status === 429 ? 25000 : 8000));
+if (intento < 2) await pausa(res.status === 429 ? 20000 : 3000);
 }
-}
-if (res.status === 429) { cuota = true; break; }
-if (!res.ok || !Array.isArray(data.resultados)) {
-console.error('IA lote primaria:', res.status, data);
+if (res.status === 429) { cuota = true; }
+else if (!res.ok || !Array.isArray(data.resultados)) {
+console.error('IA primaria:', res.status, data);
 ultimoError = (data.error || ('HTTP ' + res.status)) + (data.detalle ? ' — ' + String(data.detalle).slice(0, 150) : '') + (data.raw ? ' — respuesta: ' + String(data.raw).slice(0, 100) : '');
 fallidos += lotes[i].length;
-continue;
-}
+} else {
 data.resultados.forEach(r => {
 const al = lotes[i].find(a => a.id === r.id);
 if (!al || !r.observaciones) return;
@@ -1472,13 +1467,16 @@ if (typeof txt === 'string' && txt.trim()) { updateObservacionLive(al.id, c.camp
 });
 if (guardo) commitObs(al.id);
 });
-await new Promise(r => setTimeout(r, 3000));
-} catch (e) {
-console.error('IA lote primaria:', e);
-ultimoError = (e && e.name === 'AbortError') ? 'el servicio tardó demasiado' : String((e && e.message) || e);
-fallidos += lotes[i].length;
 }
+terminados++;
+actualizarAvance();
 }
+// Varios alumnos a la vez (4 en paralelo) para que sea rápido
+let siguiente = 0;
+const PARALELO = 4;
+await Promise.all(Array.from({ length: Math.min(PARALELO, lotes.length) }, async () => {
+while (siguiente < lotes.length && !cuota) { const i = siguiente++; await procesar(i); }
+}));
 state.iaProgresoGrupo = null;
 render();
 if (cuota) showToast(`⚠️ Se agotó la cuota de Gemini. Se generaron ${hechos} observaciones; el resto puedes hacerlo cuando se reinicie la cuota`);
