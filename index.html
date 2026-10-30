@@ -396,6 +396,20 @@ const digit = s.match(/\d/);
 if (digit) { const m = GRADOS.find(g => g.startsWith(digit[0])); if (m) return m; }
 return GRADOS.find(g => g === s) || null;
 }
+function primerNombre(completo) {
+// Los nombres se capturan como APELLIDO(S) NOMBRE(S). A la IA solo se le manda el primer nombre de pila.
+const part = ['DE','DEL','LA','LAS','LOS','Y','SAN','SANTA','VAN','VON','MC','MAC'];
+const toks = String(completo || '').trim().split(/\s+/).filter(Boolean);
+if (!toks.length) return 'el alumno';
+if (toks.length === 1) return toks[0];
+let i = 0, apellidos = 0;
+while (i < toks.length - 1 && apellidos < 2) {
+while (i < toks.length - 1 && part.includes(toks[i].toUpperCase())) i++;
+i++; apellidos++;
+}
+const nombre = toks[Math.min(i, toks.length - 1)];
+return nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase();
+}
 function folioBoleta(s) {
 // Folio propio del sistema: INICIALES-CICLO-CURP-MATRÍCULA (p. ej. MHS-2627-GOCJ-0123)
 const nombre = ((state.schoolInfo && state.schoolInfo.nombre) || '');
@@ -1315,7 +1329,7 @@ body: JSON.stringify({
 task: 'formativo_sugerencia',
 campo: materia,
 nivel: nivelPorCalif(actual),
-alumno: s.name,
+alumno: primerNombre(s.name),
 grado: `${s.grade || ''} ${s.grupo || ''}`.trim(),
 comentariosExistentes: previas.length ? previas.join(' | ') : undefined,
 comentarioAnterior: obs[periodo] || undefined,
@@ -1373,7 +1387,7 @@ const res = await fetch(IA_WORKER_URL, {
 signal: ctrl.signal,
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'primaria_observaciones_lote', periodo: etiquetas[periodo], alumnos: [{ id: s.id, nombre: s.name, grado: `${s.grade || ''} ${s.grupo || ''}`.trim(), campos }] })
+body: JSON.stringify({ task: 'primaria_observaciones_lote', periodo: etiquetas[periodo], alumnos: [{ id: s.id, nombre: primerNombre(s.name), grado: `${s.grade || ''} ${s.grupo || ''}`.trim(), campos }] })
 });
 clearTimeout(timer);
 const data = await res.json().catch(() => ({}));
@@ -1421,7 +1435,7 @@ const previas = [];
 for (let i = 0; i < periodo; i++) { if (obs[m] && obs[m][i]) previas.push(`${etiquetas[i]} periodo: ${obs[m][i]}`); }
 campos.push({ campo: m, calificacion: actual, nivel: nivelPorCalif(actual), previas });
 });
-if (campos.length) pendientes.push({ id: s.id, nombre: s.name, grado: `${s.grade || ''} ${s.grupo || ''}`.trim(), campos });
+if (campos.length) pendientes.push({ id: s.id, nombre: primerNombre(s.name), grado: `${s.grade || ''} ${s.grupo || ''}`.trim(), campos });
 });
 if (!pendientes.length) { showToast('No hay nada pendiente: faltan calificaciones de ese periodo o las observaciones ya están escritas'); return; }
 const TAM = 1;
@@ -2213,8 +2227,9 @@ function renderModalTerminos() {
         <button id="btnAceptarTerminos" onclick="guardarAceptoTerminos()" disabled class="btn btn-dark" style="flex:1;padding:10px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;opacity:0.5;">Aceptar y continuar</button>
       </div>
 
+      <p style="margin-top:12px;font-size:0.8em;text-align:center;"><a href="aviso-privacidad.html?escuela=${encodeURIComponent((state.schoolInfo && state.schoolInfo.nombre) || '')}" target="_blank" style="color:#4f46e5;font-weight:600;">📄 Ver el Aviso de Privacidad para familias</a></p>
       <p style="margin-top:12px;font-size:0.75em;text-align:center;color:#6b7280;font-style:italic;">
-        Documento de cumplimiento legal. <strong>Director de Primaria & Administrador:</strong> educacion@chavarria.edu.com
+        Documento de cumplimiento legal. <strong>Contacto:</strong> jose.chavarria@jaliscoedu.mx
       </p>
     </div>
   </div>
@@ -3499,7 +3514,7 @@ if (!list.length) { showToast('No hay alumnos en este grupo para resumir'); retu
 const alumnos = list.map(s => {
 const p = s[secPeriodosField()] || [null, null, null];
 const info = secStudentFinal(s);
-return { nombre: s.name, p1: p[0], p2: p[1], p3: p[2], suma: Number(info.suma.toFixed(1)), estatus: info.completo ? (info.aprobado ? 'APROBADO' : 'RIESGO') : 'EN CURSO' };
+return { nombre: primerNombre(s.name), p1: p[0], p2: p[1], p3: p[2], suma: Number(info.suma.toFixed(1)), estatus: info.completo ? (info.aprobado ? 'APROBADO' : 'RIESGO') : 'EN CURSO' };
 });
 state.iaCargando = state.iaCargando || {};
 state.iaCargando.reporteResumen = true;
@@ -3771,7 +3786,7 @@ const otros = state.formativoForm.criterios.filter((x, idx) => idx !== i && x.co
 const res = await fetch(IA_WORKER_URL, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: studentName, grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.formativoForm.contextoIA || undefined })
+body: JSON.stringify({ task: 'formativo_sugerencia', campo: c.nombre, nivel: c.nivel, alumno: primerNombre(studentName), grado: `${grade || ''} ${grupo || ''}`.trim(), comentariosExistentes: otros || undefined, comentarioAnterior: c.comentario || undefined, contexto: state.formativoForm.contextoIA || undefined })
 });
 const data = await res.json();
 if (!res.ok || !data.texto) { showToast('No se pudo generar la sugerencia'); return; }
