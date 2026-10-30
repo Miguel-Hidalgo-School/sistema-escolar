@@ -13052,6 +13052,17 @@ function loadJSON(key, fallback){
   try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
   catch(e){ return fallback; }
 }
+
+// Sincroniza SIN pisar el resto de los datos del alumno (calificaciones, observaciones, etc.):
+// actualiza solo los campos de CheckIn de cada alumno y borra únicamente a quien ya no está en la lista.
+function ckSyncLista(ref, anteriores, nuevos){
+  if(!ref) return;
+  const fallo = ()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); };
+  const ids = Object.keys(nuevos);
+  ids.forEach(id => { ref.child(id).update(nuevos[id]).catch(fallo); });
+  (anteriores || []).forEach(s => { if(!(s.id in nuevos)) ref.child(s.id).remove().catch(fallo); });
+}
+let ckAsistConocida = {};
 function saveJSON(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }
   catch(e){ showToast('No hay espacio suficiente para guardar (fotos muy pesadas). Prueba con una foto más ligera.', 'err'); return false; }
@@ -13060,24 +13071,26 @@ function saveJSON(key, val){
       // Cuenta SOLO CheckIn Kids: su lista es propia, no se reparte entre
       // Primaria/Secundaria.
       const all = {};
-      val.forEach(s => { all[s.id] = ckToFirebaseStudent(s); });
-      if (ckCheckinStudentsRef) ckCheckinStudentsRef.set(all).catch(()=>{ showToast('No se pudo sincronizar la lista de alumnos', 'err'); });
+      val.forEach(s => { all[s.id] = ckToFirebaseStudentSafe(s); });
+      ckSyncLista(ckCheckinStudentsRef, ckCheckinOwnStudents, all);
     } else {
       const pri = {}, sec = {};
       val.forEach(s => {
-        if((s.nivel||'primaria') === 'secundaria') sec[s.id] = ckToFirebaseStudent(s);
-        else pri[s.id] = ckToFirebaseStudent(s);
+        if((s.nivel||'primaria') === 'secundaria') sec[s.id] = ckToFirebaseStudentSafe(s);
+        else pri[s.id] = ckToFirebaseStudentSafe(s);
       });
-      // Solo se escribe en la rama (primaria/secundaria) a la que esta cuenta tiene
-      // acceso; si intenta registrar un alumno de un nivel que no le corresponde,
-      // las reglas de Firebase lo rechazarían de todos modos.
-      if (ckStudentsRef) ckStudentsRef.set(pri).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
-      if (ckSecStudentsRef) ckSecStudentsRef.set(sec).catch(()=>{ showToast('No se pudo sincronizar con Sistema Escolar', 'err'); });
+      // Solo se escribe en la rama a la que esta cuenta tiene acceso.
+      ckSyncLista(ckStudentsRef, ckPriStudents, pri);
+      ckSyncLista(ckSecStudentsRef, ckSecStudentsArr, sec);
     }
   } else if(ckSyncReady && key === ATTEND_KEY){
     const obj = {};
     val.forEach(a => { const { id, ...rest } = a; obj[id] = rest; });
-    ckAttendanceRef.set(obj).catch(()=>{ showToast('No se pudo sincronizar la asistencia', 'err'); });
+    // Se escribe registro por registro (sin reescribir todo el historial) y solo se borra lo que se quitó.
+    const falloA = ()=>{ showToast('No se pudo sincronizar la asistencia', 'err'); };
+    Object.keys(obj).forEach(id => { if(!ckAsistConocida[id] || JSON.stringify(ckAsistConocida[id]) !== JSON.stringify(obj[id])) ckAttendanceRef.child(id).set(obj[id]).catch(falloA); });
+    Object.keys(ckAsistConocida).forEach(id => { if(!(id in obj)) ckAttendanceRef.child(id).remove().catch(falloA); });
+    ckAsistConocida = JSON.parse(JSON.stringify(obj));
   }
   return true;
 }
@@ -13340,6 +13353,12 @@ function ckToFirebaseStudent(s){
     grades: s.grades || {}, observaciones: s.observaciones || {}
   };
 }
+// Igual que ckToFirebaseStudent pero SIN calificaciones ni observaciones: esas solo las maneja Sistema Escolar.
+function ckToFirebaseStudentSafe(s){
+  const o = ckToFirebaseStudent(s);
+  delete o.grades; delete o.observaciones;
+  return o;
+}
 // Convierte un alumno del formato compartido (o creado en Sistema Escolar) al formato de CheckIn Kids
 function ckFromFirebaseStudent(id, v, nivel){
   v = v || {};
@@ -13424,6 +13443,7 @@ function ckStartSync(){
   ckAttendanceRef.on('value', snap => {
     const val = snap.val() || {};
     attendance = Object.keys(val).map(id => ({ id, ...val[id] }));
+    ckAsistConocida = JSON.parse(JSON.stringify(val));
     renderAll();
   });
   ckMergeStudents();
