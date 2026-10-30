@@ -1367,7 +1367,7 @@ state.iaCargando[keyAll] = true;
 render();
 try {
 const ctrl = new AbortController();
-const timer = setTimeout(() => ctrl.abort(), 90000);
+const timer = setTimeout(() => ctrl.abort(), 120000);
 // UNA sola llamada para los campos de este alumno (ahorra cuota)
 const res = await fetch(IA_WORKER_URL, {
 signal: ctrl.signal,
@@ -1424,7 +1424,7 @@ campos.push({ campo: m, calificacion: actual, nivel: nivelPorCalif(actual), prev
 if (campos.length) pendientes.push({ id: s.id, nombre: s.name, grado: `${s.grade || ''} ${s.grupo || ''}`.trim(), campos });
 });
 if (!pendientes.length) { showToast('No hay nada pendiente: faltan calificaciones de ese periodo o las observaciones ya están escritas'); return; }
-const TAM = 5;
+const TAM = 2;
 const lotes = [];
 for (let i = 0; i < pendientes.length; i += TAM) lotes.push(pendientes.slice(i, i + TAM));
 let hechos = 0, fallidos = 0, cuota = false, ultimoError = '';
@@ -1433,7 +1433,7 @@ state.iaProgresoGrupo = `Lote ${i + 1} de ${lotes.length}`;
 render();
 try {
 const ctrl = new AbortController();
-const timer = setTimeout(() => ctrl.abort(), 90000);
+const timer = setTimeout(() => ctrl.abort(), 120000);
 const res = await fetch(IA_WORKER_URL, {
 signal: ctrl.signal,
 method: 'POST',
