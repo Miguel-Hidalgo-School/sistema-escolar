@@ -1349,17 +1349,57 @@ return ok;
 async function sugerirObservacionesPeriodo(studentId, periodo) {
 state.iaCargando = state.iaCargando || {};
 const keyAll = 'obs-all-' + studentId;
+if (state.iaCargando[keyAll]) return;
+const s = state.students.find(x => x.id === studentId);
+if (!s) return;
+const etiquetas = ['1er', '2do', '3er'];
+const obs = s.observaciones || {};
+const campos = [];
+MATERIAS.forEach(m => {
+const actual = ((s.grades && s.grades[m]) || [])[periodo];
+if (typeof actual !== 'number') return;
+const previas = [];
+for (let i = 0; i < periodo; i++) { if (obs[m] && obs[m][i]) previas.push(`${etiquetas[i]} periodo: ${obs[m][i]}`); }
+campos.push({ campo: m, calificacion: actual, nivel: nivelPorCalif(actual), previas });
+});
+if (!campos.length) { showToast('Faltan calificaciones de ese periodo para poder generar las observaciones'); return; }
 state.iaCargando[keyAll] = true;
 render();
-let fallos = 0;
-for (const m of MATERIAS) {
-const ok = await sugerirObservacionPrimaria(studentId, m, periodo, true);
-if (!ok) fallos++;
-render();
+try {
+const ctrl = new AbortController();
+const timer = setTimeout(() => ctrl.abort(), 90000);
+// UNA sola llamada para los campos de este alumno (ahorra cuota)
+const res = await fetch(IA_WORKER_URL, {
+signal: ctrl.signal,
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ task: 'primaria_observaciones_lote', periodo: etiquetas[periodo], alumnos: [{ id: s.id, nombre: s.name, grado: `${s.grade || ''} ${s.grupo || ''}`.trim(), campos }] })
+});
+clearTimeout(timer);
+const data = await res.json().catch(() => ({}));
+if (res.status === 429) { showToast('⚠️ Se agotó la cuota de IA. Intenta más tarde.'); return; }
+if (!res.ok || !Array.isArray(data.resultados)) {
+console.error('IA observaciones alumno:', res.status, data);
+showToast('⚠️ No se pudo generar: ' + String(data.error || ('HTTP ' + res.status)).slice(0, 160));
+return;
 }
+let hechos = 0;
+const r = data.resultados.find(x => x.id === s.id) || data.resultados[0];
+if (r && r.observaciones) {
+campos.forEach(c => {
+const txt = r.observaciones[c.campo];
+if (typeof txt === 'string' && txt.trim()) { updateObservacionLive(s.id, c.campo, periodo, txt.trim()); hechos++; }
+});
+if (hechos) commitObs(s.id);
+}
+showToast(hechos === campos.length ? '✨ Observaciones generadas y guardadas' : `⚠️ Se generaron ${hechos} de ${campos.length} observaciones`);
+} catch (e) {
+console.error('IA observaciones alumno:', e);
+showToast((e && e.name === 'AbortError') ? 'El servicio de IA tardó demasiado' : 'No se pudo generar: ' + String((e && e.message) || e).slice(0, 120));
+} finally {
 state.iaCargando[keyAll] = false;
 render();
-showToast(fallos ? `⚠️ ${fallos} observación(es) no se generaron` : '✨ Observaciones generadas y guardadas');
+}
 }
 // Genera con IA, por lotes de varios alumnos por solicitud, las observaciones VACÍAS
 // del periodo indicado para todo el grado seleccionado. Solo cubre campos que ya tienen
