@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avisos de entrada y salida — Sistema Escolar</title>
+<style>
+  :root{ --ink:#1E2A38; --paper:#FAF7F2; --sage:#5E9A78; --coral:#F06864; --marigold:#F2A93B; }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font-family:'Inter',system-ui,sans-serif; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card{ max-width:420px; width:100%; background:#fff; border-radius:20px; padding:32px 24px; box-shadow:0 10px 30px rgba(0,0,0,0.08); text-align:center; }
+  .logo{ font-size:40px; margin-bottom:8px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  p.sub{ color:#667; font-size:14px; margin:0 0 24px; }
+  .btn{ display:inline-block; width:100%; padding:14px; border:none; border-radius:12px; background:var(--sage); color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+  .btn:disabled{ opacity:0.6; cursor:default; }
+  .status{ margin-top:18px; font-size:14px; padding:12px; border-radius:10px; display:none; }
+  .status.ok{ display:block; background:#E9F5EE; color:#2E6B47; }
+  .status.err{ display:block; background:#FBEBEA; color:#B3362F; }
+  .status.info{ display:block; background:#FFF6E5; color:#8A5A00; }
+  .foot{ margin-top:22px; font-size:12px; color:#99a; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🔔</div>
+    <h1 id="titulo">Avisos de entrada y salida</h1>
+    <p class="sub" id="subtitulo">Activa las notificaciones para enterarte al instante cuando tu hijo(a) entre o salga de la escuela.</p>
+    <button class="btn" id="btnActivar" onclick="activarNotificaciones()">Activar notificaciones</button>
+    <div class="status" id="status"></div>
+    <div class="foot">Sistema Escolar · Miguel Hidalgo</div>
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+<script>
+  // ---------- Configuración ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyAFucnRd_ZB81l4rH7bAeNh3STqL4AN4R4",
+    authDomain: "sistema-escolar-a5c31.firebaseapp.com",
+    databaseURL: "https://sistema-escolar-a5c31-default-rtdb.firebaseio.com",
+    projectId: "sistema-escolar-a5c31",
+    storageBucket: "sistema-escolar-a5c31.firebasestorage.app",
+    messagingSenderId: "234198294318",
+    appId: "1:234198294318:web:a65521e9607753d68664bf"
+  };
+
+  // IMPORTANTE: pega aquí la "Web Push certificate" (VAPID key) que generas en
+  // Firebase Console -> Configuración del proyecto -> Cloud Messaging -> Web Push certificates.
+  const VAPID_KEY = "BOr93Kq18dqcdAJXNG9IOs5OVwXtXcvez51fM-w6ixRSGiXywNxZa7FcQmaSBFdfRy3V4P-bXlAr8eqyzdSZJ4U";
+
+  // URL del Worker de Cloudflare que registra los tokens (worker-notificaciones.js).
+  const WORKER_URL = "https://sistema-escolar-notificaciones.chavarria.workers.dev";
+
+  firebase.initializeApp(firebaseConfig);
+  const messaging = firebase.messaging();
+
+  function getStudentId(){
+    const params = new URLSearchParams(window.location.search);
+    return params.get('e') || '';
+  }
+
+  function showStatus(msg, type){
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = 'status ' + type;
+  }
+
+  async function activarNotificaciones(){
+    const studentId = getStudentId();
+    const btn = document.getElementById('btnActivar');
+    if(!studentId){
+      showStatus('Este enlace no es válido. Pide a la escuela que te comparta de nuevo el enlace de tu hijo(a).', 'err');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Activando...';
+    try{
+      if(!('Notification' in window) || !('serviceWorker' in navigator)){
+        showStatus('Tu navegador no admite notificaciones. Prueba desde Chrome en tu celular.', 'err');
+        btn.disabled = false; btn.textContent = 'Activar notificaciones';
+        return;
+      }
+      const permiso = await Notification.requestPermission();
+      if(permiso !== 'granted'){
+        showStatus('No se otorgó el permiso de notificaciones. Puedes volver a intentarlo cuando quieras.', 'err');
+        btn.disabled = false; btn.textContent = 'Activar notificaciones';
+        return;
+      }
+      const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+      const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
+      if(!token){
+        showStatus('No se pudo generar el registro de notificaciones. Intenta de nuevo en unos minutos.', 'err');
+        btn.disabled = false; btn.textContent = 'Activar notificaciones';
+        return;
+      }
+      const res = await fetch(WORKER_URL + '/registrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, token })
+      });
+      if(!res.ok) throw new Error('No se pudo guardar en el servidor');
+
+      showStatus('✅ Notificaciones activadas. Te avisaremos cuando tu hijo(a) entre o salga de la escuela.', 'ok');
+      btn.textContent = 'Notificaciones activadas';
+    }catch(err){
+      console.error(err);
+      showStatus('Ocurrió un error al activar las notificaciones. Intenta de nuevo.', 'err');
+      btn.disabled = false; btn.textContent = 'Activar notificaciones';
+    }
+  }
+
+  if(!getStudentId()){
+    showStatus('Este enlace no es válido. Pide a la escuela que te comparta de nuevo el enlace de tu hijo(a).', 'err');
+    document.getElementById('btnActivar').disabled = true;
+  }
+</script>
+</body>
+</html>
