@@ -18,6 +18,7 @@
   .status.ok{ display:block; background:#E9F5EE; color:#2E6B47; }
   .status.err{ display:block; background:#FBEBEA; color:#B3362F; }
   .status.info{ display:block; background:#FFF6E5; color:#8A5A00; }
+  .detalle{ margin-top:10px; font-size:11px; color:#B3362F; word-break:break-word; text-align:left; font-family:monospace; }
   .foot{ margin-top:22px; font-size:12px; color:#99a; }
 </style>
 </head>
@@ -28,6 +29,7 @@
     <p class="sub" id="subtitulo">Activa las notificaciones para enterarte al instante cuando tu hijo(a) entre o salga de la escuela.</p>
     <button class="btn" id="btnActivar" onclick="activarNotificaciones()">Activar notificaciones</button>
     <div class="status" id="status"></div>
+    <div class="detalle" id="detalle"></div>
     <div class="foot">Sistema Escolar · Miguel Hidalgo</div>
   </div>
 
@@ -45,8 +47,7 @@
     appId: "1:234198294318:web:a65521e9607753d68664bf"
   };
 
-  // IMPORTANTE: pega aquí la "Web Push certificate" (VAPID key) que generas en
-  // Firebase Console -> Configuración del proyecto -> Cloud Messaging -> Web Push certificates.
+  // VAPID key (Web Push certificate) de Firebase Console -> Cloud Messaging.
   const VAPID_KEY = "BOr93Kq18dqcdAJXNG9IOs5OVwXtXcvez51fM-w6ixRSGiXywNxZa7FcQmaSBFdfRy3V4P-bXlAr8eqyzdSZJ4U";
 
   // URL del Worker de Cloudflare que registra los tokens (worker-notificaciones.js).
@@ -69,43 +70,56 @@
   async function activarNotificaciones(){
     const studentId = getStudentId();
     const btn = document.getElementById('btnActivar');
+    const detalle = document.getElementById('detalle');
+    detalle.textContent = '';
     if(!studentId){
       showStatus('Este enlace no es válido. Pide a la escuela que te comparta de nuevo el enlace de tu hijo(a).', 'err');
       return;
     }
     btn.disabled = true;
     btn.textContent = 'Activando...';
+    let paso = 'inicio';
     try{
       if(!('Notification' in window) || !('serviceWorker' in navigator)){
         showStatus('Tu navegador no admite notificaciones. Prueba desde Chrome en tu celular.', 'err');
         btn.disabled = false; btn.textContent = 'Activar notificaciones';
         return;
       }
+      paso = '1-permiso';
       const permiso = await Notification.requestPermission();
       if(permiso !== 'granted'){
         showStatus('No se otorgó el permiso de notificaciones. Puedes volver a intentarlo cuando quieras.', 'err');
         btn.disabled = false; btn.textContent = 'Activar notificaciones';
         return;
       }
+      paso = '2-service-worker';
       const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+      await navigator.serviceWorker.ready;
+      paso = '3-token-firebase';
       const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
       if(!token){
         showStatus('No se pudo generar el registro de notificaciones. Intenta de nuevo en unos minutos.', 'err');
         btn.disabled = false; btn.textContent = 'Activar notificaciones';
         return;
       }
+      paso = '4-guardar-en-worker';
       const res = await fetch(WORKER_URL + '/registrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ studentId, token })
       });
-      if(!res.ok) throw new Error('No se pudo guardar en el servidor');
+      if(!res.ok){
+        const txt = await res.text().catch(()=> '');
+        throw new Error('Worker respondió ' + res.status + ' ' + txt.slice(0,120));
+      }
 
       showStatus('✅ Notificaciones activadas. Te avisaremos cuando tu hijo(a) entre o salga de la escuela.', 'ok');
       btn.textContent = 'Notificaciones activadas';
     }catch(err){
       console.error(err);
       showStatus('Ocurrió un error al activar las notificaciones. Intenta de nuevo.', 'err');
+      // DIAGNÓSTICO: quitar esta línea cuando ya funcione.
+      detalle.textContent = 'Paso ' + paso + ' | ' + (err.code || err.name || '') + ' | ' + (err.message || err);
       btn.disabled = false; btn.textContent = 'Activar notificaciones';
     }
   }
