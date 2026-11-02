@@ -516,6 +516,7 @@
         <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('editFileInput').click()">Subir foto</button>
         <input type="file" id="editFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(event,'edit')">
         <button type="button" class="btn btn-ghost btn-sm" onclick="openFaceEnroll()">😊 <span id="faceEnrollBtnLabel">Registrar rostro</span></button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="copiarEnlaceFamilia()">🔔 Copiar enlace para la familia</button>
       </div>
     </div>
     <div class="grid3">
@@ -14250,6 +14251,39 @@ function processCode(rawText){
 // Registra entrada/salida para un alumno ya identificado (por QR, folio, o
 // reconocimiento facial de respaldo). Compartida por los tres métodos para
 // que el historial y las notificaciones funcionen exactamente igual.
+/* ---------- Aviso push a la familia (Worker de Cloudflare) ----------
+   Nunca interrumpe el registro: si falla o no hay Internet, se ignora en silencio. */
+const PUSH_WORKER_URL = 'https://sistema-escolar-notificaciones.chavarria.workers.dev';
+function notificarFamiliaPush(student, evento){
+  try{
+    if(!student || !student.id || !navigator.onLine) return;
+    fetch(PUSH_WORKER_URL + '/notificar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: String(student.id), studentName: student.name || '', evento: evento }),
+      keepalive: true
+    }).then(r => r.json().catch(()=>null)).then(d => {
+      try{ console.log('[push]', evento, student.name, d); }catch(_){}
+    }).catch(()=>{});
+  }catch(_){}
+}
+
+// Enlace que se manda a la familia para activar los avisos (familia.html vive junto a CheckIn Kids).
+function copiarEnlaceFamilia(){
+  try{
+    const id = document.getElementById('editStudentId').value;
+    if(!id){ showToast('Primero guarda al alumno', 'err'); return; }
+    const link = new URL('familia.html', window.location.href);
+    link.search = '?e=' + encodeURIComponent(id);
+    link.hash = '';
+    const url = link.toString();
+    const fallback = () => { prompt('Copia este enlace y mándalo a la familia:', url); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(()=>showToast('Enlace copiado. Pégalo en el WhatsApp de la familia.', 'ok'), fallback);
+    } else fallback();
+  }catch(e){ showToast('No se pudo generar el enlace', 'err'); }
+}
+
 function registrarAsistenciaAlumno(student){
   const today = todayStr();
   let openEntry = attendance.find(a => a.studentId===student.id && a.date===today && !a.checkout);
@@ -14257,11 +14291,13 @@ function registrarAsistenciaAlumno(student){
   if(openEntry){
     openEntry.checkout = new Date().toISOString();
     saveJSON(ATTEND_KEY, attendance);
+    notificarFamiliaPush(student, 'salida');
     return {ok:true, msg:`${student.name} — salida registrada`, action:'out', student};
   } else {
     const entry = { id: uid(), studentId: student.id, date: today, checkin: new Date().toISOString(), checkout: null };
     attendance.unshift(entry);
     saveJSON(ATTEND_KEY, attendance);
+    notificarFamiliaPush(student, 'entrada');
     return {ok:true, msg:`${student.name} — entrada registrada`, action:'in', student};
   }
 }
@@ -14845,6 +14881,7 @@ function manualCheckout(entryId){
   showToast('Salida registrada', 'ok');
   renderAll();
   const s = students.find(x=>x.id===e.studentId);
+  if(s) notificarFamiliaPush(s, 'salida');
   if(s) maybeOfferNotify({ok:true, action:'out', student:s});
 }
 
